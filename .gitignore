@@ -4,3 +4,11 @@
 *.ptx
 *.cubin
 *.fatbin
+*.dat
+*.cmake
+*.pyc
+bin/
+cubin/
+/misc/
+.vscode/
+

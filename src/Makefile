@@ -1,0 +1,18 @@
+# Simple makefile for all test problems for 1D Swept Rule
+# -maxrregcount=73
+
+CUDAFLAGS = -gencode arch=compute_35,code=sm_35 -lm -restrict -O3 -Xcompiler -fopenmp --ptxas-options=-v
+CUDAFLAGSDOUBLE := $(CUDAFLAGS) -DREAL=double -DREALtwo=double2 -DREALthree=double3 -DREALfour=double4
+
+# It will put the compiled programs in the bin subdirectory within the directory
+# containing the makefile
+PROJECT_DIR = $(shell pwd)
+OUT_DIR := $(PROJECT_DIR)/bin
+
+default:	$(OUT_DIR)/EulerSingleOut $(OUT_DIR)/EulerDoubleOut
+
+$(OUT_DIR)/EulerSingleOut:	Euler1D_SweptShared.cu
+	nvcc -o $@ $< $(CUDAFLAGS)
+
+$(OUT_DIR)/EulerDoubleOut:	Euler1D_SweptShared.cu
+	nvcc -o $@ $< $(CUDAFLAGSDOUBLE)

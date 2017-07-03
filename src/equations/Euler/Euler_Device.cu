@@ -1,6 +1,5 @@
 #include "Euler_Device.cuh"
 
-
 // This file uses vector types to hold the dependent variables so fundamental operations on those types are defined as macros to accommodate different data types.  Also, keeping types consistent for common constants (0, 1, 2, etc) used in computation has an appreciable positive effect on performance.
 #ifndef REAL
     #define REAL            float
@@ -138,6 +137,7 @@ writeOutLeft(REALthree *temp, REALthree *rights, REALthree *lefts, int td, int g
     @param current  The state variables at current node
     @return Pressure at subject node
 */
+
 __device__ __host__
 __forceinline__
 REAL

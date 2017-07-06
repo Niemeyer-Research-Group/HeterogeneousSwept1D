@@ -5,7 +5,10 @@
 #ifndef EULERGLOBALS_H
 #define EULERGLOBALS_H
 
-
+#include "../../utilities/myVectorTypes.h"
+#include <cuda.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #ifndef REAL
     #define REAL            float
@@ -55,11 +58,44 @@ struct states{
 	============================================================
 */
 
-#ifdef __CUDA_ARCH__
+// #ifdef __CUDA_ARCH__
+//     __constant__ REALthree dBound[2];
+//     __constant__ dimensions dDimens;
+// #else
+//     REALthree hBound[2];
+//     dimensions hDimens;
+// #endif
 
-    __constant__ REAL *dBound[2];
-    __constant__ dimensions dimens;
+typedef void (*eqFunc) (states *, int);
 
-#else
+/*
+	============================================================
+	EQUATION SPECIFIC FUNCTIONS
+	============================================================
+*/
+
+__host__ __device__ REAL pressure(REALthree qH);
+
+__host__ __device__ void pressureRatio1(states *state, int tr);
+
+__host__ __device__ void pressureRatio2(states *state, int tr);
+
+__host__ __device__ REALthree limitor(REALthree qH, REALthree qN, REAL pR);
+
+__host__ __device__ REALthree eulerFlux(REALthree qL, REALthree qR);
+
+__host__ __device__ REALthree eulerSpectral(REALthree qL, REALthree qR);
+
+__host__ __device__ void eulerHalfStep(states *state, int tr);
+
+__host__ __device__ void eulerFullStep(states *state, int tr);
+
+/*
+    The function array 
+*/
+
+__device__ eqFunc dFunc[4]; 
+
+eqFunc hFunc[4];
 
 #endif

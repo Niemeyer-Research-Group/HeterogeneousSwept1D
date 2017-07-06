@@ -264,7 +264,7 @@ eulerSpectral(REALthree cvLeft, REALthree cvRight)
 */
 __device__ __host__
 REALthree
-eulerStutterStep(REALthree *state, int tr, char flagLeft, char flagRight)
+eulerHalfStep(REALthree *state, int tr, char flagLeft, char flagRight)
 {
     //P1-P0
     REAL pLL = (flagLeft) ? ZERO : (TWO * state[tr-1].x * state[tr-2].x * (state[tr-1].z - state[tr-2].z) +
@@ -310,7 +310,7 @@ eulerStutterStep(REALthree *state, int tr, char flagLeft, char flagRight)
 //Same thing as the predictor step, but this final step adds the result to the original state variables to advance to the next timestep while using the predictor variables to find the flux.
 __device__ __host__
 REALthree
-eulerFinalStep(REALthree *state, int tr, char flagLeft, char flagRight)
+eulerFullStep(REALthree *state, int tr, char flagLeft, char flagRight)
 {
 
     REAL pLL = (flagLeft) ? ZERO : (TWO * state[tr-1].x * state[tr-2].x * (state[tr-1].z - state[tr-2].z) +

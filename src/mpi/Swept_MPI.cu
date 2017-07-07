@@ -21,8 +21,6 @@
     #define SQUAREROOT(x)   sqrt(x)
 #endif
 
-
-
 /**
     Builds an upright triangle using the swept rule.
 
@@ -238,102 +236,7 @@ wholeDiamond(const REALthree *inRight, const REALthree *inLeft, REALthree *outRi
     }
 }
 
-
-//Split one is always first.
-__global__
-void
-splitDiamond(REALthree *inRight, REALthree *inLeft, REALthree *outRight, REALthree *outLeft)
-{
-    extern __shared__ REALthree temper[];
-
-    //Same as upTriangle
-    int gid = blockDim.x * blockIdx.x + threadIdx.x;
-    int tididx = threadIdx.x + 2;
-    int tidxTop = tididx + dimens.base;
-    int k = dimens.hts[2];
-
-	readIn(temper, inRight, inLeft, threadIdx.x, gid);
-
-    const char4 truth = {gid == dimens.hts[0], gid == dimens.hts[1], gid == dimens.hts[2], gid == dimens.hts[3]};
-
-    __syncthreads();
-
-    if (truth.z)
-    {
-        temper[tididx] = dbd[0];
-        temper[tidxTop] = dbd[0];
-    }
-    if (truth.y)
-    {
-        temper[tididx] = dbd[1];
-        temper[tidxTop] = dbd[1];
-    }
-
-    __syncthreads();
-
-    while(k>0)
-    {
-
-        if (!truth.y && !truth.z && tididx < (dimens.base-k) && tididx >= k)
-        {
-            temper[tidxTop] = eulerStutterStep(temper, tididx, truth.w, truth.x);
-        }
-
-        k -= 2;
-        __syncthreads();
-
-        if (!truth.y && !truth.z && tididx < (dimens.base-k) && tididx >= k)
-        {
-            temper[tididx] += eulerFinalStep(temper, tidxTop, truth.w, truth.x);
-        }
-
-        k -= 2;
-        __syncthreads();
-    }
-
-    if (!truth.y && !truth.z && threadIdx.x > 1 && threadIdx.x <(blockDim.x-2))
-	{
-        temper[tidxTop] = eulerStutterStep(temper, tididx, truth.w, truth.x);
-	}
-
-	__syncthreads();
-    k=4;
-
-    //The initial conditions are timslice 0 so start k at 1.
-    while(k<dimens.hts[2])
-    {
-        if (!truth.y && !truth.z && threadIdx.x < (blockDim.x-k) && threadIdx.x >= k)
-        {
-            temper[tididx] += eulerFinalStep(temper, tidxTop, truth.w, truth.x);
-
-        }
-
-        k+=2;
-        __syncthreads();
-
-        if (!truth.y && !truth.z && threadIdx.x < (blockDim.x-k) && threadIdx.x >= k)
-        {
-            temper[tidxTop] = eulerStutterStep(temper, tididx, truth.w, truth.x);
-        }
-        k+=2;
-        __syncthreads();
-
-    }
-
-	writeOutLeft(temper, outRight, outLeft, threadIdx.x, gid, blockDim.x);
-}
-
-
 using namespace std;
-
-__host__
-__forceinline__
-REAL
-energy(REALthree subj)
-{
-    REAL u = subj.y/subj.x;
-    return subj.z/subj.x - HALF*u*u;
-}
 
 // This  is part of the MPI routine now kinda.
 __host__

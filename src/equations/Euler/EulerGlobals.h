@@ -1,5 +1,5 @@
 /**
-	Global variables that are specific to the equations being solved.
+	The equations specific global variables and function prototypes.
 */
 
 #ifndef EULERGLOBALS_H
@@ -31,18 +31,26 @@
     #define SQUAREROOT(x)   sqrt(x)
 #endif
 
+#define NSTEPS              4
+
+// Since anyone would need to write a header and functions file, why not just hardwire this.  If the user's number of steps isn't a power of 2 use the other one.
+
+#define MODULA(x)           x & (NSTEPS-1)              
+
+// #define MODULA(x)           x % NSTEPS  
+
 /*
 	============================================================
 	DATA STRUCTURE PROTOTYPE
 	============================================================
 */
 
+// We don't need the grid data anymore because the node shapes are much simpler.  And do not affect the discretization implementation, only the decomposition.  Well the structs aren't accessible like arrays so shit.
+
 struct dimensions {
     REAL gam; // Heat capacity ratio
     REAL mgam; // 1- Heat capacity ratio
     REAL dt_dx; // deltat/deltax
-    int base; // Length of node + stencils at end (4)
-    int idxend; // Last index (number of spatial points - 1)
 };
 
 struct states{
@@ -57,16 +65,14 @@ struct states{
 	CUDA GLOBAL VARIABLES
 	============================================================
 */
+// The boundary points can't be on the device so there's no boundary device array.
 
-// #ifdef __CUDA_ARCH__
-//     __constant__ REALthree dBound[2];
-//     __constant__ dimensions dDimens;
-// #else
-//     REALthree hBound[2];
-//     dimensions hDimens;
-// #endif
-
-typedef void (*eqFunc) (states *, int);
+#ifdef __CUDA_ARCH__
+    __constant__ dimensions dDimens; 
+#else
+    REALthree hBound[2];
+    dimensions hDimens;
+#endif
 
 /*
 	============================================================
@@ -76,26 +82,26 @@ typedef void (*eqFunc) (states *, int);
 
 __host__ __device__ REAL pressure(REALthree qH);
 
-__host__ __device__ void pressureRatio1(states *state, int tr);
+__host__ __device__ REAL pressureRoe(REALthree qH);
 
-__host__ __device__ void pressureRatio2(states *state, int tr);
+__host__ __device__ void pressureRatio(states *state, int idx, int tstep);
 
-__host__ __device__ REALthree limitor(REALthree qH, REALthree qN, REAL pR);
+// __host__ __device__ void pressureRatio2(states *state, int idx);
+
+__host__ __device__ REALthree limitor(REALthree qH, REALthree qN, REAL pRatio);
 
 __host__ __device__ REALthree eulerFlux(REALthree qL, REALthree qR);
 
 __host__ __device__ REALthree eulerSpectral(REALthree qL, REALthree qR);
 
-__host__ __device__ void eulerHalfStep(states *state, int tr);
+// __host__ __device__ void eulerHalfStep(states *state, int idx);
 
-__host__ __device__ void eulerFullStep(states *state, int tr);
+__host__ __device__ void eulerStep(states *state, int idx, int tstep);
 
-/*
-    The function array 
-*/
+__host__ __device__ void stepUpdate(states *state, int idx, int tstep);
 
-__device__ eqFunc dFunc[4]; 
+__host__ REAL energy(REALthree subj);
 
-eqFunc hFunc[4];
+// AND Now use nvstd::functional to assign stepUpdate to the kernel AND MPI function.
 
 #endif

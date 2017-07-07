@@ -1,27 +1,98 @@
+/**
+    This file uses vector types to hold the dependent variables so fundamental operations on those types are defined as macros to accommodate different data types.  Also, keeping types consistent for common constants (0, 1, 2, etc) used in computation has an appreciable positive effect on performance.
+*/
 
-// This file uses vector types to hold the dependent variables so fundamental operations on those types are defined as macros to accommodate different data types.  Also, keeping types consistent for common constants (0, 1, 2, etc) used in computation has an appreciable positive effect on performance.
-#ifndef REAL
-    #define REAL            float
-    #define REALtwo         float2
-    #define REALthree       float3
-    #define SQUAREROOT(x)   sqrtf(x)
+/*
+    How to separate the equation specific EulerGlobals.h and compile the swept and MPI routines as a library?
 
-    #define ZERO            0.0f
-    #define QUARTER         0.25f
-    #define HALF            0.5f
-    #define ONE             1.f
-    #define TWO             2.f
-#else
+    Remember you need to carry extra values the two edges.
 
-    #define ZERO            0.0
-    #define QUARTER         0.25
-    #define HALF            0.5
-    #define ONE             1.0
-    #define TWO             2.0
-    #define SQUAREROOT(x)   sqrt(x)
-#endif
+    Is it possible to do this without constant memory in this file.  That is, preprocessor and launch bounds only.
+*/
 
+#include "Swept_Core.h"
+#include "../equations/Euler/EulerGlobals.h"
 
+/**
+    Takes the passed the right and left arrays from previous cycle and inserts them into new SHARED memory working array.  
+    
+    Called at start of kernel/ function.  The passed arrays have already been passed readIn only finds the correct index and inserts the values and flips the indices to seed the working array for the cycle.
+    @param rights  The array for the right side of the triangle.
+    @param lefts  The array for the left side.
+    @param td  The thread block array id.
+    @param gd  The thread global array id.
+    @param temp  The working array in shared memory
+*/
+__host__ __device__
+__forceinline__
+void
+readIn(REALthree *temp, const REALthree *rights, const REALthree *lefts, int td, int gd)
+{
+    // The index in the SHARED memory working array to place the corresponding member of right or left.
+    #ifdef __CUDA_ARCH__  // Accesses the correct structure in constant memory.
+	int leftidx = dimens.hts[4] + (((td>>2) & 1) * dimens.base) + (td & 3) - (4 + ((td>>2)<<1));
+	int rightidx = dimens.hts[4] + (((td>>2) & 1) * dimens.base) + ((td>>2)<<1) + (td & 3);
+    #else
+    int leftidx = dimz.hts[4] + (((td>>2) & 1) * dimz.base) + (td & 3) - (4 + ((td>>2)<<1));
+    int rightidx = dimz.hts[4] + (((td>>2) & 1) * dimz.base) + ((td>>2)<<1) + (td & 3);
+    #endif
+
+	temp[leftidx] = rights[gd];
+	temp[rightidx] = lefts[gd];
+}
+
+/**
+    Write out the right and left arrays at the end of a kernel when passing right.  
+    
+    Called at end of the kernel/ function.  The values of the working array are collected in the right and left arrays.  As they are collected, the passed edge (right) is inserted at an offset. This function is never called from the host so it doesn't need the preprocessor CUDA flags.'
+    @param temp  The working array in shared memory
+    @param rights  The array for the right side of the triangle.
+    @param lefts  The array for the left side.
+    @param td  The thread block array id.
+    @param gd  The thread global array id.
+    @param bd  The number of threads in a block (spatial points in a node).
+*/
+__device__
+__forceinline__
+void
+writeOutRight(REALthree *temp, REALthree *rights, REALthree *lefts, int td, int gd, int bd)
+{
+    int gdskew = (gd + bd) & dimens.idxend; //The offset for the right array.
+    int leftidx = (((td>>2) & 1)  * dimens.base) + ((td>>2)<<1) + (td & 3) + 2; 
+    int rightidx = (dimens.base-6) + (((td>>2) & 1)  * dimens.base) + (td & 3) - ((td>>2)<<1); 
+	rights[gdskew] = temp[rightidx];
+	lefts[gd] = temp[leftidx];
+}
+
+/**
+    Write out the right and left arrays at the end of a kernel when passing left.  
+    
+    Called at end of the kernel/ function.  The values of the working array are collected in the right and left arrays.  As they are collected, the passed edge (left) is inserted at an offset. 
+    @param temp  The working array in shared memory
+    @param rights  The array for the right side of the triangle.
+    @param lefts  The array for the left side.
+    @param td  The thread block array id.
+    @param gd  The thread global array id.
+    @param bd  The number of threads in a block (spatial points in a node).
+*/
+__host__ __device__
+__forceinline__
+void
+writeOutLeft(REALthree *temp, REALthree *rights, REALthree *lefts, int td, int gd, int bd)
+{
+    #ifdef __CUDA_ARCH__
+    int gdskew = (gd - bd) & dimens.idxend; //The offset for the right array.
+    int leftidx = (((td>>2) & 1)  * dimens.base) + ((td>>2)<<1) + (td & 3) + 2;
+    int rightidx = (dimens.base-6) + (((td>>2) & 1)  * dimens.base) + (td & 3) - ((td>>2)<<1); 
+    #else
+    int gdskew = gd;
+    int leftidx = (((td>>2) & 1)  * dimz.base) + ((td>>2)<<1) + (td & 3) + 2;
+    int rightidx = (dimz.base-6) + (((td>>2) & 1)  * dimz.base) + (td & 3) - ((td>>2)<<1);
+    #endif
+
+    rights[gd] = temp[rightidx];
+    lefts[gdskew] = temp[leftidx];
+}
 
 /**
     Builds an upright triangle using the swept rule.
@@ -34,13 +105,13 @@
 */
 __global__
 void
-upTriangle(const REALthree *IC, REALthree *outRight, REALthree *outLeft)
+upTriangle(states *initial)
 {
 	extern __shared__ REALthree temper[];
 
 	int gid = blockDim.x * blockIdx.x + threadIdx.x; //Global Thread ID
-	int tididx = threadIdx.x + 2; //Block Thread ID
-    int tidxTop = tididx + dimens.base; //
+	int tididx = threadIdx.x; //Block Thread ID
+    int tidxTop = tididx;
     int k=4;
 
     //Assign the initial values to the first row in temper, each block
@@ -235,171 +306,6 @@ wholeDiamond(const REALthree *inRight, const REALthree *inLeft, REALthree *outRi
     else
     {
         writeOutRight(temper, outRight, outLeft, threadIdx.x, gid, blockDim.x);
-    }
-}
-
-
-//Split one is always first.
-__global__
-void
-splitDiamond(REALthree *inRight, REALthree *inLeft, REALthree *outRight, REALthree *outLeft)
-{
-    extern __shared__ REALthree temper[];
-
-    //Same as upTriangle
-    int gid = blockDim.x * blockIdx.x + threadIdx.x;
-    int tididx = threadIdx.x + 2;
-    int tidxTop = tididx + dimens.base;
-    int k = dimens.hts[2];
-
-	readIn(temper, inRight, inLeft, threadIdx.x, gid);
-
-    const char4 truth = {gid == dimens.hts[0], gid == dimens.hts[1], gid == dimens.hts[2], gid == dimens.hts[3]};
-
-    __syncthreads();
-
-    if (truth.z)
-    {
-        temper[tididx] = dbd[0];
-        temper[tidxTop] = dbd[0];
-    }
-    if (truth.y)
-    {
-        temper[tididx] = dbd[1];
-        temper[tidxTop] = dbd[1];
-    }
-
-    __syncthreads();
-
-    while(k>0)
-    {
-
-        if (!truth.y && !truth.z && tididx < (dimens.base-k) && tididx >= k)
-        {
-            temper[tidxTop] = eulerStutterStep(temper, tididx, truth.w, truth.x);
-        }
-
-        k -= 2;
-        __syncthreads();
-
-        if (!truth.y && !truth.z && tididx < (dimens.base-k) && tididx >= k)
-        {
-            temper[tididx] += eulerFinalStep(temper, tidxTop, truth.w, truth.x);
-        }
-
-        k -= 2;
-        __syncthreads();
-    }
-
-    if (!truth.y && !truth.z && threadIdx.x > 1 && threadIdx.x <(blockDim.x-2))
-	{
-        temper[tidxTop] = eulerStutterStep(temper, tididx, truth.w, truth.x);
-	}
-
-	__syncthreads();
-    k=4;
-
-    //The initial conditions are timslice 0 so start k at 1.
-    while(k<dimens.hts[2])
-    {
-        if (!truth.y && !truth.z && threadIdx.x < (blockDim.x-k) && threadIdx.x >= k)
-        {
-            temper[tididx] += eulerFinalStep(temper, tidxTop, truth.w, truth.x);
-
-        }
-
-        k+=2;
-        __syncthreads();
-
-        if (!truth.y && !truth.z && threadIdx.x < (blockDim.x-k) && threadIdx.x >= k)
-        {
-            temper[tidxTop] = eulerStutterStep(temper, tididx, truth.w, truth.x);
-        }
-        k+=2;
-        __syncthreads();
-
-    }
-
-	writeOutLeft(temper, outRight, outLeft, threadIdx.x, gid, blockDim.x);
-}
-
-
-using namespace std;
-
-__host__
-__forceinline__
-REAL
-energy(REALthree subj)
-{
-    REAL u = subj.y/subj.x;
-    return subj.z/subj.x - HALF*u*u;
-}
-
-// This  is part of the MPI routine now kinda.
-__host__
-void
-CPU_diamond(REALthree *temper, int htcpu[5])
-{
-
-    omp_set_num_threads(8);
-
-    temper[htcpu[2]] = bd[0];
-    temper[htcpu[2]+dimz.base] = bd[0];
-
-    temper[htcpu[1]] = bd[1];
-    temper[htcpu[1]+dimz.base] = bd[1];
-
-    //Splitting it is the whole point!
-    for (int k = htcpu[0]; k>0; k-=4)
-    {
-        #pragma omp parallel for
-        for(int n = k; n<(dimz.base-k); n++)
-        {
-            if (n!=htcpu[1] && n!=htcpu[2])
-            {
-                temper[n+dimz.base] = eulerStutterStep(temper, n, (n==htcpu[3]),(n==htcpu[0]));
-            }
-        }
-
-        #pragma omp parallel for
-        for(int n = k-2; n<(dimz.base-(k-2)); n++)
-        {
-            if (n!=htcpu[1] && n!=htcpu[2])
-            {
-                temper[n] += eulerFinalStep(temper, n+dimz.base, n==htcpu[3],(n==htcpu[0]));
-            }
-        }
-    }
-
-    #pragma omp parallel for
-    for(int n = 4; n < (dimz.base-4); n++)
-    {
-        if (n!=htcpu[1] && n!=htcpu[2])
-        {
-            temper[n+dimz.base] = eulerStutterStep(temper, n, (n==htcpu[3]),(n==htcpu[0]));
-        }
-    }
-
-    //Top part.
-    for (int k = 6; k<htcpu[2]; k+=4)
-    {
-        #pragma omp parallel
-        for(int n = k; n<(dimz.base-k); n++)
-        {
-            if (n!=htcpu[1] && n!=htcpu[2])
-            {
-                temper[n] += eulerFinalStep(temper, n + dimz.base, (n==htcpu[3]), (n==htcpu[0]));
-            }
-        }
-
-        #pragma omp parallel for
-        for(int n = (k+2); n<(dimz.base-(k+2)); n++)
-        {
-            if (n!=htcpu[1] && n!=htcpu[2])
-            {
-                temper[n+dimz.base] = eulerStutterStep(temper, n, (n==htcpu[3]),(n==htcpu[0]));
-            }
-        }
     }
 }
 

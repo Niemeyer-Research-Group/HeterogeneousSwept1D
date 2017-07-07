@@ -35,9 +35,10 @@
 
 // Since anyone would need to write a header and functions file, why not just hardwire this.  If the user's number of steps isn't a power of 2 use the other one.
 
-#define MODULA(x)           x & (NSTEPS-1)              
-
+// #define MODULA(x)           x & (NSTEPS-1)  
 // #define MODULA(x)           x % NSTEPS  
+
+#define DIVMOD(x)           (x & (NSTEPS-1)) >> 1   
 
 /*
 	============================================================
@@ -54,10 +55,8 @@ struct dimensions {
 };
 
 struct states{
-    REALthree Q; // Full Step state variables
-    REAL Pr; // First step Pressure ratio
-	REALthree Qmid; // Midpoint state variables
-	REAL Prmid;
+    REALthree Q[2]; // Full Step, Midpoint step state variables
+    REAL Pr; // Pressure ratio
 };
 
 /*
@@ -67,12 +66,9 @@ struct states{
 */
 // The boundary points can't be on the device so there's no boundary device array.
 
-#ifdef __CUDA_ARCH__
-    __constant__ dimensions dDimens; 
-#else
-    REALthree hBound[2];
-    dimensions hDimens;
-#endif
+__constant__ dimensions dDimens; 
+REALthree hBound[2];
+dimensions hDimens;
 
 /*
 	============================================================
@@ -86,15 +82,11 @@ __host__ __device__ REAL pressureRoe(REALthree qH);
 
 __host__ __device__ void pressureRatio(states *state, int idx, int tstep);
 
-// __host__ __device__ void pressureRatio2(states *state, int idx);
-
 __host__ __device__ REALthree limitor(REALthree qH, REALthree qN, REAL pRatio);
 
 __host__ __device__ REALthree eulerFlux(REALthree qL, REALthree qR);
 
 __host__ __device__ REALthree eulerSpectral(REALthree qL, REALthree qR);
-
-// __host__ __device__ void eulerHalfStep(states *state, int idx);
 
 __host__ __device__ void eulerStep(states *state, int idx, int tstep);
 
@@ -102,6 +94,6 @@ __host__ __device__ void stepUpdate(states *state, int idx, int tstep);
 
 __host__ REAL energy(REALthree subj);
 
-// AND Now use nvstd::functional to assign stepUpdate to the kernel AND MPI function.
+// AND Now use nvstd::functional to assign stepUpdate to the kernel AND MPI function!  BUT HOW TO EFFECTIVELY CHOOSE THE 
 
 #endif

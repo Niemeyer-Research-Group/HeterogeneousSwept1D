@@ -9,30 +9,11 @@
 */
 __global__
 void
-classicEuler(REALthree *euler_in, REALthree *euler_out, const bool finalstep)
+classicEuler(states *state, int tstep)
 {
     int gid = blockDim.x * blockIdx.x + threadIdx.x; //Global Thread ID
-    const char4 truth = {gid == 0, gid == 1, gid == dimens.idxend_1, gid == dimens.idxend};
 
-    if (truth.x)
-    {
-        euler_out[gid] = dbd[0];
-        return;
-    }
-    else if (truth.w)
-    {
-        euler_out[gid] = dbd[1];
-        return;
-    }
-
-    if (finalstep)
-    {
-        euler_out[gid] += eulerFinalStep(euler_in, gid, truth.y, truth.z);
-    }
-    else
-    {
-        euler_out[gid] = eulerStutterStep(euler_in, gid, truth.y, truth.z);
-    }
+    stepUpdate(state, gid, tstep)
 }
 
 

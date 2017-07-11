@@ -5,31 +5,44 @@
 #ifndef EULERGLOBALS_H
 #define EULERGLOBALS_H
 
-#include "../../utilities/myVectorTypes.h"
 #include <cuda.h>
+#include "mpi.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include "myVectorTypes.h"
 
-#ifndef REAL
-    #define REAL            float
-    #define REALtwo         float2
-    #define REALthree       float3
-    #define SQUAREROOT(x)   sqrtf(x)
+// We're just going to assume doubles
+#define REAL            double
+#define REALtwo         double2
+#define REALthree       double3
+#define MPI_R           MPI_DOUBLE    
+#define ZERO            0.0
+#define QUARTER         0.25
+#define HALF            0.5
+#define ONE             1.0
+#define TWO             2.0
+#define SQUAREROOT(x)   sqrt(x)
 
-    #define ZERO            0.0f
-    #define QUARTER         0.25f
-    #define HALF            0.5f
-    #define ONE             1.f
-    #define TWO             2.f
-#else
+// #ifndef REAL
+//     #define REAL            float
+//     #define REALtwo         float2
+//     #define REALthree       float3
+//     #define SQUAREROOT(x)   sqrtf(x)
 
-    #define ZERO            0.0
-    #define QUARTER         0.25
-    #define HALF            0.5
-    #define ONE             1.0
-    #define TWO             2.0
-    #define SQUAREROOT(x)   sqrt(x)
-#endif
+//     #define ZERO            0.0f
+//     #define QUARTER         0.25f
+//     #define HALF            0.5f
+//     #define ONE             1.f
+//     #define TWO             2.f
+// #else
+
+//     #define ZERO            0.0
+//     #define QUARTER         0.25
+//     #define HALF            0.5
+//     #define ONE             1.0
+//     #define TWO             2.0
+//     #define SQUAREROOT(x)   sqrt(x)
+// #endif
 
 #define NSTEPS              4
 
@@ -76,6 +89,10 @@ dimensions hDimens;
 	============================================================
 */
 
+__host__ REAL energy(REALthree subj);
+
+__host__ void mpi_type(MPI_Datatype *dtype);
+
 __host__ __device__ REAL pressure(REALthree qH);
 
 __host__ __device__ REAL pressureRoe(REALthree qH);
@@ -92,7 +109,6 @@ __host__ __device__ void eulerStep(states *state, int idx, int tstep);
 
 __host__ __device__ void stepUpdate(states *state, int idx, int tstep);
 
-__host__ REAL energy(REALthree subj);
 
 // AND Now use nvstd::functional to assign stepUpdate to the kernel AND MPI function!  BUT HOW TO EFFECTIVELY CHOOSE THE 
 

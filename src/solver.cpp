@@ -37,6 +37,9 @@
 #include <cmath>
 #include <fstream>
 #include <omp.h>
+#include <yaml.h>
+
+
 
 int main( int argc, char *argv[] )
 {
@@ -47,6 +50,10 @@ int main( int argc, char *argv[] )
         cout << "Algorithm type, Variable Output File, Timing Output File (optional)" << endl;
 		exit(-1);
 	}
+
+    MPI_Datatype struct_type;
+    mpi_type(&struct_type);
+    
     cout.precision(10);
 
 	// Choose the GPGPU.  This is device 0 in my machine which has 2 devices.

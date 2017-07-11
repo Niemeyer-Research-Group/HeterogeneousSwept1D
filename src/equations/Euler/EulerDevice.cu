@@ -11,12 +11,40 @@
     @param current  The state variables at current node
     @return Pressure at subject node
 */
-
 #ifdef __CUDA_ARCH__
     #define DIMS    dDimens
 #else
     #define DIMS    hDimens
 #endif
+
+__host__ void mpi_type(MPI_Datatype *dtype)
+{ 
+    //double 3 type
+    MPI_Datatype vtype;
+    MPI_Datatype typs[3] = {MPI_R, MPI_R, MPI_R};
+    int n[3] = {1};
+    MPI_Aint disp[3] = {0, sizeof(REAL), 2*sizeof(REAL)};
+
+    MPI_Type_struct(3, n, disp, typs, &vtype);
+    MPI_Type_commit(&vtype);
+
+    typs[0] = vtype;
+    typs[2] = vtype;
+    disp[1] = 3*sizeof(vtype);
+    disp[2] = 4*sizeof(REAL);
+
+    MPI_Type_struct(3, n, disp, typs, dtype);
+    MPI_Type_commit(dtype);
+
+    MPI_Type_free(&vtype);
+}
+
+
+__host__ REAL energy(REALthree subj)
+{
+    REAL u = subj.y/subj.x;
+    return subj.z/subj.x - HALF*u*u;
+}
 
 __device__ __host__ REAL pressure(REALthree qH)
 {
@@ -141,10 +169,6 @@ __host__ __device__ void stepUpdate(states *state, int idx, int tstep)
     }
 }
 
-__host__ REAL energy(REALthree subj)
-{
-    REAL u = subj.y/subj.x;
-    return subj.z/subj.x - HALF*u*u;
-}
+
 
 

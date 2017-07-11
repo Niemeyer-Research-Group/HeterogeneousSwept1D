@@ -6,33 +6,7 @@
 #define GLOBALS_H
 
 #include <mpi.h>
-#include <cuda.h>
-#include "Euler_Device.cuh"
-#include "../../../cuda/myVectorTypes.h"
-
-/*
-	============================================================
-	DATA STRUCTURE PROTOTYPE
-	============================================================
-*/
-
-typedef REAL double;
-typedef REALthree double3;
-
-struct dimensions {
-    REAL gam; // Heat capacity ratio
-    REAL mgam; // 1- Heat capacity ratio
-    REAL dt_dx; // deltat/deltax
-    int base; // Length of node + stencils at end (4)
-    int idxend; // Last index (number of spatial points - 1)
-};
-
-struct states{
-    REALthree Q; // Full Step state variables
-    REAL Pr; // First step Pressure ratio
-	REALthree Qmid; // Midpoint state variables
-	REAL Prmid;
-};
+#include <stdio.h>
 
 /*
 	============================================================

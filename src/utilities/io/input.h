@@ -5,5 +5,6 @@
 #include <ostream>
 #include <yaml.h>
 
+eCheckIn void (int dv, int tpb, int argc);
 
 #endif

@@ -1,17 +1,25 @@
 /**
-    Classic kernel for simple decomposition of spatial domain.
+    The Classic Functions for the stencil operation
+*/
 
-    Uses dependent variable values in euler_in to calculate euler out.  If it's the predictor step, finalstep is false.  If it is the final step the result is added to the previous euler_out value because this is RK2.
+#include <cuda.h>
+#include "Classic_Core.h"
+#include "io/printer.h"
+#include <mpi.h>
 
-    @param euler_in The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretization.
-    @param euler_out The working array from the kernel call before last which either stores the predictor values or the full step values after the RHS is added into the solution.
+/** Classic kernel for simple decomposition of spatial domain.
+
+    Uses dependent variable values in States_in to calculate States out.  If it's the predictor step, finalstep is false.  If it is the final step the result is added to the previous States_out value because this is RK2.
+
+    @param States_in The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretizatio
+    @param States_out The working array from the kernel call before last which either stores the predictor values or the full step values after the RHS is added into the solution.
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
 __global__
 void
-classicEuler(states *state, int tstep)
+classicDecomp(states *state, int tstep)
 {
-    int gid = blockDim.x * blockIdx.x + threadIdx.x; //Global Thread ID
+    int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
 
     stepUpdate(state, gid, tstep)
 }
@@ -19,56 +27,38 @@ classicEuler(states *state, int tstep)
 
 //Classic Discretization wrapper.
 double
-classicWrapper(const int bks, int tpb, const int dv, const double dt, const double t_end,
-    REALthree *IC, REALthree *T_f, const double freq, ofstream &fwr)
+classicWrapper(const int bks, int tpb, const int dv, const double dt, const double t_end, states *state)
 {
-    REALthree *dEuler_in, *dEuler_out;
+    states *dState;
 
-    cudaMalloc((void **)&dEuler_in, sizeof(REALthree)*dv);
-    cudaMalloc((void **)&dEuler_out, sizeof(REALthree)*dv);
+    cudaMalloc((void **)&dStates, sizeof(states)*dv);
 
     // Copy the initial conditions to the device array.
-    cudaMemcpy(dEuler_in,IC,sizeof(REALthree)*dv,cudaMemcpyHostToDevice);
+    cudaMemcpy(dStates_in,IC,sizeof(REALthree)*dv,cudaMemcpyHostToDevice);
 
     cout << "Classic scheme" << endl;
 
     double t_eq = 0.0;
+    int tstep = 0;
     double twrite = freq - QUARTER*dt;
 
     while (t_eq < t_end)
     {
-        classicEuler <<< bks,tpb >>> (dEuler_in, dEuler_out, false);
-        classicEuler <<< bks,tpb >>> (dEuler_out, dEuler_in, true);
+        classicDecomp <<< bks,tpb >>> (dStates_in, tstep);
+        //And swap!
         t_eq += dt;
 
         if (t_eq > twrite)
         {
-            cudaMemcpy(T_f, dEuler_in, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
-
-            fwr << "Density " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << T_f[k].x << " ";
-            fwr << endl;
-
-            fwr << "Velocity " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << T_f[k].y/T_f[k].x << " ";
-            fwr << endl;
-
-            fwr << "Energy " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << energy(T_f[k]) << " ";
-            fwr << endl;
-
-            fwr << "Pressure " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << pressure(T_f[k]) << " ";
-            fwr << endl;
+            cudaMemcpy(T_f, dStates_in, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
 
             twrite += freq;
         }
     }
 
-    cudaMemcpy(T_f, dEuler_in, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
+    cudaMemcpy(T_f, dStates, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
 
-    cudaFree(dEuler_in);
-    cudaFree(dEuler_out);
+    cudaFree(dStates);
 
     return t_eq;
 

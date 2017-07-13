@@ -7,7 +7,7 @@ NVCC=$(PREP) nvcc
 
 # It will put the compiled programs in the bin subdirectory within the directory
 # containing the makefile
-PROJECTDIR := $(shell pwd)
+PROJECTDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 OUTDIR := $(PROJECTDIR)/bin
 EQDIR := $(PROJECTDIR)/equations
 
@@ -15,14 +15,19 @@ EQDIR := $(PROJECTDIR)/equations
 # CUDACFLAGS=-I${CUDA_INSTALL_PATH}/include
 
 GENCODE := -gencode arch=compute_35,code=sm_35
-PARALLELLIB := -lmpi
-NATLIB := -lm -restrict -O3 -dc -rdc=true
-CROSSLIB := -Xcompiler --ptxas-options=-v
-INC = -I$(PROJECTDIR)/utilities -I/usr/include/mpi
+PARALLELLIB := -lmpi -Xcompiler -fopenmp
+NATLIB := -lm -restrict -O3 -dc
+CROSSLIB := -Xptxas=-v
+INC := -I$(PROJECTDIR)/utilities -I/usr/include/mpi
 
-CUDAFLAGS = $(GENCODE) $(NATLIB) $(INC) $(PARALLELLIB) 
+CUDAFLAGS := $(GENCODE) $(NATLIB) $(INC) $(CROSSLIB) $(PARALLELLIB) 
+LIBOBJ := $(OUTDIR)/swept.o $(OUTDIR)/classic.o 
+APPOBJ := $(OUTDIR)/sweptsolver
+EQOBJ = $(OUTDIR)/euler.o
 
-default:	$(OUTDIR)/euler.o
+all: $(EQOBJ)
+
+#RULE FOR FINAL APPLICATION USE -dlink
 
 $(OUTDIR)/euler.o:	$(EQDIR)/Euler/EulerDevice.cu
 	$(NVCC) -o $@ $< $(CUDAFLAGS)

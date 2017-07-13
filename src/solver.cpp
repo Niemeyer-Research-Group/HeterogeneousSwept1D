@@ -19,11 +19,6 @@
     This file is distribued under the MIT License.  See LICENSE at top level of directory or: <https://opensource.org/licenses/MIT>.
 */
 
-// To compile this program alone from the command line:
-// nvcc -o ./bin/EulerOut Euler1D_SweptShared.cu -gencode arch=compute_35,code=sm_35 -lm -restrict -Xcompiler -fopenmp
-// Use whatever compute_xx, sm_xx applies to the GPU you are using.
-// Add -Xptxas=-v to the end of the compile line to inspect register usage.
-
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <cuda_runtime.h>
@@ -40,24 +35,13 @@
 #include <yaml.h>
 
 
-
 int main( int argc, char *argv[] )
 {
-    //That is, there are less than 8 arguments.
-    if (argc < 8)
-	{
-		cout << "The Program takes 8 inputs, #Divisions, #Threads/block, deltat, finish time, output frequency..." << endl;
-        cout << "Algorithm type, Variable Output File, Timing Output File (optional)" << endl;
-		exit(-1);
-	}
 
     MPI_Datatype struct_type;
     mpi_type(&struct_type);
     
-    cout.precision(10);
-
-	// Choose the GPGPU.  This is device 0 in my machine which has 2 devices.
-	cudaSetDevice(0);
+    // Set shared memory banks to double if REAL is double.
     if (sizeof(REAL)>6) cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
 
     dimz.gam = 1.4;
@@ -69,7 +53,6 @@ int main( int argc, char *argv[] )
     bd[1].y = ZERO;
     bd[0].z = ONE/dimz.mgam; //Energy
     bd[1].z = 0.1/dimz.mgam;
-
 
     const int dv = atoi(argv[1]); //Number of spatial points
 	const int tpb = atoi(argv[2]); //Threads per Block
@@ -89,18 +72,10 @@ int main( int argc, char *argv[] )
     dimz.idxend_1 = dv-2;
 
     for (int k=-2; k<3; k++) dimz.hts[k+2] = (tpb/2) + k;
-
+        cout <<
     cout << "Euler --- #Blocks: " << bks << " | Length: " << lx << " | Precision: " << prec << " | dt/dx: " << dimz.dt_dx << endl;
 
-	//Conditions for main input.
-	//dv and tpb must be powers of two.  dv must be larger than tpb and divisible by tpb.
-
-	if ((dv & (tpb-1) !=0) || (tpb&31) != 0)
-    {
-        cout << "INVALID NUMERIC INPUT!! "<< endl;
-        cout << "2nd ARGUMENT MUST BE A POWER OF TWO >= 32 AND FIRST ARGUMENT MUST BE DIVISIBLE BY SECOND" << endl;
-        exit(-1);
-    }
+    eCheckIn(dv, tpb, argc); //Initial error checking.
 
     if (dimz.dt_dx > .21)
     {

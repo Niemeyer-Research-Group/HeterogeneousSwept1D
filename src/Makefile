@@ -1,5 +1,5 @@
 # Simple makefile for all test problems for 1D Swept Rule
-# -maxrregcount=73
+# -maxrregcount=73  869932658
 
 MPICC=$(PREP) mpicc
 MPILD=$(PREP) mpic++

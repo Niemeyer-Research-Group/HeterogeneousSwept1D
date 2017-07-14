@@ -11,8 +11,7 @@
 
     Uses dependent variable values in States_in to calculate States out.  If it's the predictor step, finalstep is false.  If it is the final step the result is added to the previous States_out value because this is RK2.
 
-    @param States_in The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretizatio
-    @param States_out The working array from the kernel call before last which either stores the predictor values or the full step values after the RHS is added into the solution.
+    @param States The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretization
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
 __global__
@@ -24,6 +23,36 @@ classicDecomp(states *state, int tstep)
     stepUpdate(state, gid, tstep)
 }
 
+void 
+classicDecomp(states *state, int tstep, int tpb)
+{
+    for (int k=1; k<tpb+1; k++)
+    {
+        stepUpdate(state, k, tstep)
+    }
+}
+
+void classicPass(states *state, int tpb, int rank, bool dr)
+{
+    if (dr) //True for pass right __ something something cudamemcpy
+    {
+        MPI_recv_send();
+    }
+    else
+    {
+        MPI_recv_send();
+    }
+}
+
+void topology(int *devcnt)
+{
+    cudaGetDeviceCount(devcnt);
+    if (devcnt)
+    {
+        
+    }
+    //Check the node characteristics like whether it has a GPU
+}
 
 //Classic Discretization wrapper.
 double
@@ -34,7 +63,7 @@ classicWrapper(const int bks, int tpb, const int dv, const double dt, const doub
     cudaMalloc((void **)&dStates, sizeof(states)*dv);
 
     // Copy the initial conditions to the device array.
-    cudaMemcpy(dStates_in,IC,sizeof(REALthree)*dv,cudaMemcpyHostToDevice);
+    cudaMemcpy(dState, state, sizeof(REALthree)*dv,cudaMemcpyHostToDevice);
 
     cout << "Classic scheme" << endl;
 
@@ -44,21 +73,21 @@ classicWrapper(const int bks, int tpb, const int dv, const double dt, const doub
 
     while (t_eq < t_end)
     {
-        classicDecomp <<< bks,tpb >>> (dStates_in, tstep);
+        classicDecomp <<< bks,tpb >>> (dState, tstep);
         //And swap!
         t_eq += dt;
 
         if (t_eq > twrite)
         {
-            cudaMemcpy(T_f, dStates_in, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
+            cudaMemcpy(T_f, dState, sizeof(states)*dv, cudaMemcpyDeviceToHost);
 
             twrite += freq;
         }
     }
 
-    cudaMemcpy(T_f, dStates, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
+    cudaMemcpy(T_f, dState, sizeof(states)*dv, cudaMemcpyDeviceToHost);
 
-    cudaFree(dStates);
+    cudaFree(dState);
 
     return t_eq;
 

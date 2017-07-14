@@ -1,9 +1,8 @@
-#include "output.h"
+/*
+    Functions to handle output to json files.
+*/
 
-void outInitial()
-{
-	fwr << lx << " " << (dv-2) << " " << dx << " " << endl;
-}
+#include "output.h"
 
 void solutionOutput(char *outfile, REALthree outvector)
 {

@@ -44,6 +44,8 @@ int main( int argc, char *argv[] )
     // Set shared memory banks to double if REAL is double.
     if (sizeof(REAL)>6) cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
 
+    makeMPI(int argc, char* argv[]);
+
     dimz.gam = 1.4;
     dimz.mgam = 0.4;
 
@@ -72,7 +74,7 @@ int main( int argc, char *argv[] )
     dimz.idxend_1 = dv-2;
 
     for (int k=-2; k<3; k++) dimz.hts[k+2] = (tpb/2) + k;
-        cout <<
+        
     cout << "Euler --- #Blocks: " << bks << " | Length: " << lx << " | Precision: " << prec << " | dt/dx: " << dimz.dt_dx << endl;
 
     eCheckIn(dv, tpb, argc); //Initial error checking.

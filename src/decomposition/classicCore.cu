@@ -2,10 +2,7 @@
     The Classic Functions for the stencil operation
 */
 
-#include <cuda.h>
-#include "Classic_Core.h"
-#include "io/printer.h"
-#include <mpi.h>
+#include "classicCore.h"
 
 /** Classic kernel for simple decomposition of spatial domain.
 
@@ -14,17 +11,15 @@
     @param States The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretization
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
-__global__
-void
-classicDecomp(states *state, int tstep)
+__global__ void classicStep(states *state, int tstep)
 {
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
 
     stepUpdate(state, gid, tstep)
 }
 
-void 
-classicDecomp(states *state, int tstep, int tpb)
+void
+classicStepCPU(states *state, int tstep, int tpb)
 {
     for (int k=1; k<tpb+1; k++)
     {
@@ -33,7 +28,7 @@ classicDecomp(states *state, int tstep, int tpb)
 }
 
 void classicPass(states *state, int tpb, int rank, bool dr)
-{
+{ 
     if (dr) //True for pass right __ something something cudamemcpy
     {
         MPI_recv_send();
@@ -42,16 +37,6 @@ void classicPass(states *state, int tpb, int rank, bool dr)
     {
         MPI_recv_send();
     }
-}
-
-void topology(int *devcnt)
-{
-    cudaGetDeviceCount(devcnt);
-    if (devcnt)
-    {
-        
-    }
-    //Check the node characteristics like whether it has a GPU
 }
 
 //Classic Discretization wrapper.

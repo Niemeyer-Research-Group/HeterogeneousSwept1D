@@ -2,11 +2,11 @@
 	The equations specific global variables and function prototypes.
 */
 
-#ifndef EULERGLOBALS_H
-#define EULERGLOBALS_H
+#ifndef EULERCOMPRESSIBLEFLOW_H
+#define EULERCOMPRESSIBLEFLOW_H
 
 #include <cuda.h>
-#include "mpi.h"
+#include <mpi.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "myVectorTypes.h"
@@ -22,27 +22,6 @@
 #define ONE             1.0
 #define TWO             2.0
 #define SQUAREROOT(x)   sqrt(x)
-
-// #ifndef REAL
-//     #define REAL            float
-//     #define REALtwo         float2
-//     #define REALthree       float3
-//     #define SQUAREROOT(x)   sqrtf(x)
-
-//     #define ZERO            0.0f
-//     #define QUARTER         0.25f
-//     #define HALF            0.5f
-//     #define ONE             1.f
-//     #define TWO             2.f
-// #else
-
-//     #define ZERO            0.0
-//     #define QUARTER         0.25
-//     #define HALF            0.5
-//     #define ONE             1.0
-//     #define TWO             2.0
-//     #define SQUAREROOT(x)   sqrt(x)
-// #endif
 
 #define NSTEPS              4
 
@@ -89,9 +68,15 @@ dimensions hDimens;
 	============================================================
 */
 
+__host__ void mpi_type(MPI_Datatype *dtype);
+
+__host__ REAL density(REALthree subj);
+
+__host__ REAL velocity(REALthree subj);
+
 __host__ REAL energy(REALthree subj);
 
-__host__ void mpi_type(MPI_Datatype *dtype);
+__host__ REALthree initialconditions();  // How to generalize this so the same inputs are valid for all equations.
 
 __host__ __device__ REAL pressure(REALthree qH);
 
@@ -110,6 +95,27 @@ __host__ __device__ void eulerStep(states *state, int idx, int tstep);
 __host__ __device__ void stepUpdate(states *state, int idx, int tstep);
 
 
-// AND Now use nvstd::functional to assign stepUpdate to the kernel AND MPI function!  BUT HOW TO EFFECTIVELY CHOOSE THE 
+// PERHAPS: Now use nvstd::functional to assign stepUpdate to the kernel AND MPI function!  
+
+// #ifndef REAL
+//     #define REAL            float
+//     #define REALtwo         float2
+//     #define REALthree       float3
+//     #define SQUAREROOT(x)   sqrtf(x)
+
+//     #define ZERO            0.0f
+//     #define QUARTER         0.25f
+//     #define HALF            0.5f
+//     #define ONE             1.f
+//     #define TWO             2.f
+// #else
+
+//     #define ZERO            0.0
+//     #define QUARTER         0.25
+//     #define HALF            0.5
+//     #define ONE             1.0
+//     #define TWO             2.0
+//     #define SQUAREROOT(x)   sqrt(x)
+// #endif
 
 #endif

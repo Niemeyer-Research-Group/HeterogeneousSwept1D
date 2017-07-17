@@ -11,8 +11,7 @@
     Is it possible to do this without constant memory in this file.  That is, preprocessor and launch bounds only.   YEP
 */
 
-#include "Swept_Core.h"
-#include "../equations/Euler/EulerGlobals.h"
+#include "sweptCore.h"
 
 /**
     Builds an upright triangle using the swept rule.
@@ -55,7 +54,6 @@ upTriangle(states *state, int tstep)
 
     @param IC Full solution at some timestep.
     @param inRight Array of right edges seeding solution vector.
-    @param inLeft Array of left edges seeding solution vector.
 */
 __global__
 void
@@ -94,9 +92,6 @@ downTriangle(states *state, int tstep)
 
     @param inRight Array of right edges seeding solution vector.
     @param inLeft Array of left edges seeding solution vector.
-    @param outRight Array to store the right sides of the triangles to be passed.
-    @param outLeft Array to store the left sides of the triangles to be passed.
-    @param Full True if there is not a node run on the CPU, false otherwise.
 */
 __global__
 void
@@ -136,6 +131,61 @@ wholeDiamond(states *state, int tstep)
 	}
     state[gid + 1] = temper[tidx]
 }
+
+
+void upTriangleCPU(states *state)
+{
+    for (int k=1; k<ht[1]; k++)
+    {
+        for (int n=k, n<bsae-k, n++)
+        {
+            stepUpdate(state, n, tstep);
+        }
+    }
+}
+
+
+void downTriangleCPU(states *state)
+{
+
+}
+
+void wholeDiamondCPU(states *state)
+{
+    for (int k=1; k<ht[1]; k++)
+        for ()
+
+    for (int k=1; k<ht[1]; k++)
+    {
+        for (int n=k, n<bsae-k, n++)
+        {
+            stepUpdate(state, n, tstep);
+        }
+        tstep++;
+    }
+}
+
+void splitDiamondCPU(states *state)
+{
+    for (int k=1; k<ht[1]; k++)
+        for ()
+
+    for (int k=1; k<ht[1]; k++)
+    {
+        for (int n=k, n<bsae-k, n++)
+        {
+            stepUpdate(state, n, tstep);
+        }
+        tstep++;
+    }
+}
+
+
+void passSwept(states *state, int tpb, int rank, bool dr)
+{
+
+}
+
 
 //The wrapper that calls the routine functions.
 double
@@ -242,22 +292,6 @@ sweptWrapper(const int bks, int tpb, const int dv, const double dt, const double
             downTriangle <<<bks, tpb, smem>>> (d_IC, d2_right, d2_left);
 
             cudaMemcpy(T_f, d_IC, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
-
-            fwr << "Density " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << T_f[k].x << " ";
-            fwr << endl;
-
-            fwr << "Velocity " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << (T_f[k].y/T_f[k].x) << " ";
-            fwr << endl;
-
-            fwr << "Energy " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << energy(T_f[k]) << " ";
-            fwr << endl;
-
-            fwr << "Pressure " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << pressure(T_f[k]) << " ";
-            fwr << endl;
 
             upTriangle <<<bks, tpb, smem>>> (d_IC, d0_right, d0_left);
 

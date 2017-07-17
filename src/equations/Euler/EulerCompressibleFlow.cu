@@ -2,7 +2,7 @@
     The equation specific functions.
 */
 
-#include "EulerGlobals.h"
+#include "EulerCompressibleFlow.h"
 
 /**
     Calculates the pressure at the current spatial point with the (x,y,z) rho, u * rho, e *rho state variables.
@@ -39,6 +39,15 @@ __host__ void mpi_type(MPI_Datatype *dtype)
     MPI_Type_free(&vtype);
 }
 
+__host__ REAL density(REALthree subj)
+{
+    return subj.x;
+}
+
+__host__ REAL velocity(REALthree subj)
+{
+    return subj.y/subj.x;
+}
 
 __host__ REAL energy(REALthree subj)
 {
@@ -46,7 +55,9 @@ __host__ REAL energy(REALthree subj)
     return subj.z/subj.x - HALF*u*u;
 }
 
-__device__ __host__ REAL pressure(REALthree qH)
+__device__ __host__ 
+__forceinline__
+REAL pressure(REALthree qH)
 {
     return DIMS.mgam * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }

@@ -2,7 +2,7 @@
     The equation specific functions.
 */
 
-#include "EulerCompressibleFlow.h"
+#include "EulerCF.h"
 
 /**
     Calculates the pressure at the current spatial point with the (x,y,z) rho, u * rho, e *rho state variables.

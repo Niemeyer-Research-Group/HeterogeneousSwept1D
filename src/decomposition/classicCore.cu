@@ -11,32 +11,34 @@
     @param States The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretization
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
-__global__ void classicStep(states *state, int tstep)
+__global__ void classicStep(states *state, int ts)
 {
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
 
-    stepUpdate(state, gid, tstep)
+    stepUpdate(state, gid, ts)
 }
 
-void
-classicStepCPU(states *state, int tstep, int tpb)
+void classicStepCPU(states *state)
 {
     for (int k=1; k<tpb+1; k++)
     {
         stepUpdate(state, k, tstep)
     }
+    tstep++;
 }
 
-void classicPass(states *state, int tpb, int rank, bool dr)
+void classicPass(states *state)
 { 
-    if (dr) //True for pass right __ something something cudamemcpy
-    {
-        MPI_recv_send();
-    }
-    else
-    {
-        MPI_recv_send();
-    }
+    // Doesn't handle the CUDA case yet because tpb: make new array, four
+    // pointers or indices based on number of points per node including GPU>
+    // (pass 1->last element)
+    if (!rank[1]) MPI_Sendrecv(&state[1], szState, struct_type, ranks[0], 1, 
+                                &state[tpbp], szState, struct_type, ranks[1], 1,
+                                MPI_COMM_WORLD, &status); 
+    // Pass second to last element -> first element.
+    if (rank[1] < lastproc) MPI_Sendrecv(&state[tpb], szState, struct_type, ranks[2], 1, 
+                                &state, szState, struct_type, ranks[0], 1,
+                                MPI_COMM_WORLD, &status); 
 }
 
 //Classic Discretization wrapper.
@@ -53,8 +55,12 @@ classicWrapper(const int bks, int tpb, const int dv, const double dt, const doub
     cout << "Classic scheme" << endl;
 
     double t_eq = 0.0;
-    int tstep = 0;
+    int tstep = 1; //Starts at 1 (Initial condition is 0)
     double twrite = freq - QUARTER*dt;
+
+    //They also need private sections of the array!
+
+    classicStepCPU(state);
 
     while (t_eq < t_end)
     {

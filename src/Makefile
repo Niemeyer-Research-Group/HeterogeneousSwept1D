@@ -8,8 +8,8 @@ NVCC=$(PREP) nvcc
 # It will put the compiled programs in the bin subdirectory within the directory
 # containing the makefile
 PROJECTDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-OUTDIR := $(PROJECTDIR)/bin
-EQDIR := $(PROJECTDIR)/equations
+OUTDIR := $(PROJECTDIR)bin
+EQDIR := $(PROJECTDIR)equations
 
 # MPICFLAGS=-I${MPI_HOME}/include
 # CUDACFLAGS=-I${CUDA_INSTALL_PATH}/include
@@ -25,12 +25,17 @@ LIBOBJ := $(OUTDIR)/swept.o $(OUTDIR)/classic.o
 APPOBJ := $(OUTDIR)/sweptsolver
 EQOBJ = $(OUTDIR)/euler.o
 
-all: $(EQOBJ)
+EQDIRS := ${sort ${dir ${wildcard ${EQDIR}/*/}}}
+	
+.PHONY: print_vars
 
-#RULE FOR FINAL APPLICATION USE -dlink
+print_vars:
+	@echo $(EQDIRS)*h
 
-$(OUTDIR)/euler.o:	$(EQDIR)/Euler/EulerDevice.cu
-	$(NVCC) -o $@ $< $(CUDAFLAGS)
+# all: $(EQOBJ)
+
+# $(OUTDIR)/euler.o:	$(EQDIR)/Euler/EulerDevice.cu
+#	$(NVCC) -o $@ $< $(CUDAFLAGS)
 
 # CUDAFLAGS = -gencode arch=compute_35,code=sm_35 -lm -restrict -O3 -Xcompiler -fopenmp --ptxas-options=-v
 # CUDAFLAGSDOUBLE := $(CUDAFLAGS) -DREAL=double -DREALtwo=double2 -DREALthree=double3 -DREALfour=double4

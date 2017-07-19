@@ -2,8 +2,8 @@
 	The equations specific global variables and function prototypes.
 */
 
-#ifndef EULERCOMPRESSIBLEFLOW_H
-#define EULERCOMPRESSIBLEFLOW_H
+#ifndef EULERCF_H
+#define EULERCF_H
 
 #include <cuda.h>
 #include <mpi.h>
@@ -62,6 +62,7 @@ __constant__ dimensions dDimens;
 REALthree hBound[2];
 dimensions hDimens;
 
+ using json = nlohmann::json;
 /*
 	============================================================
 	EQUATION SPECIFIC FUNCTIONS

@@ -5,13 +5,22 @@
 
 #include "decompCore.h"
 
+//Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
 {
+    mpi_type(&struct_type)
+    // read_json();  Perhaps?
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
-	ranks[0] = (ranks[1] > 0) ? nprocs-1 : ranks[1]-1; 
-    ranks[2] = (ranks[1] == nprocs) ? 0 : ranks[1]+1; 
+    lastproc = nprocs-1;
+    szState = sizeof(states);
+    base = tpb+2;
+    tpbp = tpb+1;
+    ht = tpb/2;
+    htm = ht-1;
+	ranks[0] = (ranks[1]) ? ranks[1]-1 : lastproc; 
+    ranks[2] = (ranks[1] == nprocs) ? 0 : ranks[1]+1;
 }
 
 void topology()
@@ -22,11 +31,11 @@ void topology()
     {
         cudaGetDeviceProp(&props);
     }
-
+    
     nthreads = omp_get_num_procs();
 }
 
-eCheckIn void (int dv, int tpb, int argc)
+void eCheckIn (int dv, int tpb, int argc)
 {
     if (argc < 8)
 	{

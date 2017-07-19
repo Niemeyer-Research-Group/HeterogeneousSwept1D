@@ -36,11 +36,7 @@
 
 
 int main( int argc, char *argv[] )
-{
-
-    MPI_Datatype struct_type;
-    mpi_type(&struct_type);
-    
+{   
     // Set shared memory banks to double if REAL is double.
     if (sizeof(REAL)>6) cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
 

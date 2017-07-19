@@ -1,21 +1,28 @@
-#ifndef EULERGLOBALS_H
-#define EULERGLOBALS_H
+#ifndef DECOMPCORE_H
+#define DECOMPCORE_H
 
 #include <mpi.h>
 #include <omp.h>
 #include "json.hpp"
 
+// MPI process properties
+MPI_Status status;
+MPI_Datatype struct_type;
 int ranks[3];
 int nprocs;
+int lastproc;
+
+// Topology
 int devcnt;
 int nthreads;
-int tstep;
 
-struct geometry{
-    int tpb;
-    int ht[3];
-    int base;
-};
+// Geometry
+int tpb, tpbp, base;
+int ht, htm, htp;
+int szState;
+
+// Iterator
+int tstep;
 
 // Cuda Device Prop props;
 
@@ -26,14 +33,14 @@ void makeMPI(int argc, char* argv[]);
 
 void topology();
 
-void endMPI();
-
-void eCheckIn (int dv, int tpb, int argc);
+void eCheckIn(int dv, int argc);
 
 void initializeOutStreams();
 
 void solutionOutput();
 
 void timingOutput();
+
+void endMPI();
 
 #endif

@@ -9,6 +9,7 @@
 #include <mpi.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string>
 #include "myVectorTypes.h"
 
 // We're just going to assume doubles
@@ -51,7 +52,7 @@ struct states{
     REAL Pr; // Pressure ratio
 };
 
-const string outVars = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}
+std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"};
 
 /*
 	============================================================

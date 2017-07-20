@@ -32,8 +32,8 @@
 #include <cmath>
 #include <fstream>
 #include <omp.h>
-#include <yaml.h>
-
+#include "decomposition/classicCore.h"
+#include "decomposition/sweptCore.h"
 
 int main( int argc, char *argv[] )
 {   

@@ -4,6 +4,7 @@
 #include <mpi.h>
 #include <omp.h>
 #include "json.hpp"
+#include "dummyheader.h"
 
 // YES THESE SHOULD BE GLOBAL and state should not because state can't be allocated on the stack.
 

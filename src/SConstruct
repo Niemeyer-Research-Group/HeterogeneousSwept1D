@@ -1,0 +1,31 @@
+import os
+import sys
+import os.path as op
+
+# Preliminaries:  Path Stuff
+
+projpath = op.abspath(op.dirname(__file__))
+os.chdir(thispath)
+outpath = op.join(thispath, 'bin')
+mainpath = op.join(thispath, 'decomposition')
+utilpath = op.join(thispath, 'utilities')
+eqpath = op.join(thispath, 'equations')
+
+eqdirs = [x for x in os.listdir(eqpath) if op.isdir(x)]
+xeq = [op.join(outpath, x) for x in eqdirs]
+
+# create a SCons environment
+
+env = Environment()
+
+# direct SCons to the 
+
+env.Tool('nvcc')
+
+env.Append(CPPFLAGS = '-gencode arch=compute_35,code=sm_35 -std=c++11 -restrict -O3 ')
+env.Append(CPPPATH = [utilpath, eqpath , '/usr/include/mpi'])
+env.Append(LIBS = 'openmp m mpi')
+# now create the simpleGL program
+
+for x in xeq:
+    env.Program(x, 'solver.cu')

@@ -51,6 +51,8 @@ struct states{
     REAL Pr; // Pressure ratio
 };
 
+const string outVars = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}
+
 /*
 	============================================================
 	CUDA GLOBAL VARIABLES
@@ -62,14 +64,11 @@ __constant__ dimensions dDimens;
 REALthree hBound[2];
 dimensions hDimens;
 
- using json = nlohmann::json;
 /*
 	============================================================
 	EQUATION SPECIFIC FUNCTIONS
 	============================================================
 */
-
-__host__ void mpi_type(MPI_Datatype *dtype);
 
 __host__ REAL density(REALthree subj);
 
@@ -77,9 +76,13 @@ __host__ REAL velocity(REALthree subj);
 
 __host__ REAL energy(REALthree subj);
 
-__host__ REALthree initialconditions();  // How to generalize this so the same inputs are valid for all equations.
-
 __host__ __device__ REAL pressure(REALthree qH);
+
+__host__ void printout(const int i, REALthree subj);
+
+__host__ void mpi_type(MPI_Datatype *dtype);
+
+__host__ REALthree initialconditions();  // How to generalize this so the same inputs are valid for all equations.
 
 __host__ __device__ REAL pressureRoe(REALthree qH);
 
@@ -94,6 +97,7 @@ __host__ __device__ REALthree eulerSpectral(REALthree qL, REALthree qR);
 __host__ __device__ void eulerStep(states *state, int idx, int tstep);
 
 __host__ __device__ void stepUpdate(states *state, int idx, int tstep);
+
 
 
 // PERHAPS: Now use nvstd::functional to assign stepUpdate to the kernel AND MPI function!  

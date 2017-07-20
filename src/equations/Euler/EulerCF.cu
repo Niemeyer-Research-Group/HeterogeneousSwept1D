@@ -17,6 +17,41 @@
     #define DIMS    hDimens
 #endif
 
+__host__ REAL density(REALthree subj)
+{
+    return subj.x;
+}
+
+__host__ REAL velocity(REALthree subj)
+{
+    return subj.y/subj.x;
+}
+
+__host__ REAL energy(REALthree subj)
+{
+    REAL u = subj.y/subj.x;
+    return subj.z/subj.x - HALF*u*u;
+}
+
+__device__ __host__ 
+__forceinline__
+REAL pressure(REALthree qH)
+{
+    return DIMS.mgam * (qH.z - (HALF * qH.y * qH.y/qH.x));
+}
+
+__host__ 
+REAL printout(const int i, REALthree subj)
+{
+    switch(i)
+    {
+        case 0: return density(subj);
+        case 1: return velocity(subj):
+        case 2: return energy(subj);
+        case 3: return pressure(subj);
+    } 
+}
+
 __host__ void mpi_type(MPI_Datatype *dtype)
 { 
     //double 3 type
@@ -39,27 +74,10 @@ __host__ void mpi_type(MPI_Datatype *dtype)
     MPI_Type_free(&vtype);
 }
 
-__host__ REAL density(REALthree subj)
+__host__ REALthree initialconditions()
 {
-    return subj.x;
-}
 
-__host__ REAL velocity(REALthree subj)
-{
-    return subj.y/subj.x;
-}
 
-__host__ REAL energy(REALthree subj)
-{
-    REAL u = subj.y/subj.x;
-    return subj.z/subj.x - HALF*u*u;
-}
-
-__device__ __host__ 
-__forceinline__
-REAL pressure(REALthree qH)
-{
-    return DIMS.mgam * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }
 
 __host__ __device__ REAL pressureRoe(REALthree qH)
@@ -179,7 +197,3 @@ __host__ __device__ void stepUpdate(states *state, int idx, int tstep)
         eulerStep(state, idx, DIVMOD(tstep));
     }
 }
-
-
-
-

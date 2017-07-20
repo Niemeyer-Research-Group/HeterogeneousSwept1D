@@ -35,7 +35,7 @@ void topology()
     nthreads = omp_get_num_procs();
 }
 
-void eCheckIn (int dv, int tpb, int argc)
+void eCheckIn (int argc)
 {
     if (argc < 8)
 	{
@@ -54,26 +54,22 @@ void eCheckIn (int dv, int tpb, int argc)
 
 }
 
-void solutionOutput(char *outfile, REALthree outvector)
+// THIS IS GREAT BUT YOU CAN'T PASS IT BACK BECAUSE TYPES!
+void solutionOutput(REALthree outVec, REAL tstamp, REAL xpt)
 {
-
-    fwr << "Density " << 0 << " ";
-    for (int k = 1; k<(dv-1); k++) fwr << IC[k].x << " ";
-    fwr << std::endl;
-
-    fwr << "Velocity " << 0 << " ";
-    for (int k = 1; k<(dv-1); k++) fwr << IC[k].y << " ";
-    fwr << std::endl;
-
-    fwr << "Energy " << 0 << " ";
-    for (int k = 1; k<(dv-1); k++) fwr << IC[k].z/IC[k].x << " ";
-    fwr << std::endl;
-
-    fwr << "Pressure " << 0 << " ";
-    for (int k = 1; k<(dv-1); k++) fwr << pressure(IC[k]) << " ";
-    fwr << std::endl;
-
+    for (int k=0; k<NVARS; k++)
+    {
+        solution[outVars[k]][tstamp][xpt] = printout(k, outVec); 
+    }
 }
+
+// THIS IS OK BECAUSE WE'RE NOT GOING TO DO IT IN AN MPI PROCESS.
+void timingOutput(REAL timer, FILE *timeOut)
+{
+    //READ json first.
+    timing[dv] = timer;
+}
+
 
 void endMPI()
 {

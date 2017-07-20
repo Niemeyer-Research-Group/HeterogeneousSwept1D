@@ -10,29 +10,30 @@ NVCC=$(PREP) nvcc
 PROJECTDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 OUTDIR := $(PROJECTDIR)bin
 EQDIR := $(PROJECTDIR)equations
+EQDIRS := ${sort ${dir ${wildcard ${EQDIR}/*/}}}
+EQHEAD := $(EQDIRS)/*.h
+APPOBJ := $(OUTDIR)/${lastword ${subst /, ,$(EQDIRS)}}
 
 # MPICFLAGS=-I${MPI_HOME}/include
 # CUDACFLAGS=-I${CUDA_INSTALL_PATH}/include
 
 GENCODE := -gencode arch=compute_35,code=sm_35
-PARALLELLIB := -lmpi -Xcompiler -fopenmp
-NATLIB := -lm -restrict -O3 -dc
-CROSSLIB := -Xptxas=-v
+PARALLELLIB := -lmpi -Xcompiler -fopenmp 
+NATLIB := -lm -restrict -O3 -include$(EQHEAD)
+CROSSLIB := -Xptxas=-v 
 INC := -I$(PROJECTDIR)/utilities -I/usr/include/mpi
 
 CUDAFLAGS := $(GENCODE) $(NATLIB) $(INC) $(CROSSLIB) $(PARALLELLIB) 
-LIBOBJ := $(OUTDIR)/swept.o $(OUTDIR)/classic.o 
-APPOBJ := $(OUTDIR)/sweptsolver
-EQOBJ = $(OUTDIR)/euler.o
 
-EQDIRS := ${sort ${dir ${wildcard ${EQDIR}/*/}}}
-	
-.PHONY: print_vars
+.PHONY: printvar
 
-print_vars:
-	@echo $(EQDIRS)*h
+printvar:
+	@echo $(APPOBJ)
 
-# all: $(EQOBJ)
+all: $(APPOBJ)
+
+$(APPOBJ): $(PROJECTDIR)/solver.cpp
+	$(NVCC) -o $@ $< $(CUDAFLAGS)
 
 # $(OUTDIR)/euler.o:	$(EQDIR)/Euler/EulerDevice.cu
 #	$(NVCC) -o $@ $< $(CUDAFLAGS)

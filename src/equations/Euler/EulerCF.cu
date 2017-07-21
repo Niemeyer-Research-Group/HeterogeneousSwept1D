@@ -12,9 +12,9 @@
     @return Pressure at subject node
 */
 #ifdef __CUDA_ARCH__
-    #define DIMS    dDimens
+    #define DIMS    deqConsts
 #else
-    #define DIMS    hDimens
+    #define DIMS    heqConsts
 #endif
 
 __host__ REAL density(REALthree subj)
@@ -80,7 +80,9 @@ __host__ void mpi_type(MPI_Datatype *dtype)
     MPI_Type_free(&vtype);
 }
 
-__host__ __device__ REAL pressureRoe(REALthree qH)
+__device__ __host__ 
+__forceinline__
+REAL pressureRoe(REALthree qH)
 {
     return DIMS.mgam * (qH.z - HALF * qH.y * qH.y);
 }
@@ -88,7 +90,9 @@ __host__ __device__ REAL pressureRoe(REALthree qH)
 /**
     Ratio
 */
-__host__ __device__ void pressureRatio(states *state, int idx, int tstep)
+__device__ __host__ 
+__forceinline__
+void pressureRatio(states *state, int idx, int tstep)
 {
     state[idx].Pr = (pressure(state[idx+1]->Q[tstep]) - pressure(state[idx]->Q[tstep]))/(pressure(state[idx]->Q[tstep]) - pressure(state[idx-1]->Q[tstep]));
 }   
@@ -101,7 +105,9 @@ __host__ __device__ void pressureRatio(states *state, int idx, int tstep)
     @param pRatio  The pressure ratio Pr-Pc/(Pc-Pl).
     @return The reconstructed value at the current side of the interface.
 */
-__host__ __device__ REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
+__device__ __host__ 
+__forceinline__
+REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
 {   
     return (isnan(pRatio) || pRatio<0) ? qH :  (qH + HALF * min(pRatio, ONE) * (qN - qH));
 }
@@ -113,7 +119,8 @@ __host__ __device__ REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
     @param qR  Reconstructed value at the left side of the interface.
     @return  The combined flux from the function.
 */
-__host__ __device__ REALthree eulerFlux(REALthree qL, REALthree qR)
+__device__ __host__ 
+__forceinline__ REALthree eulerFlux(REALthree qL, REALthree qR)
 {
     REAL uLeft = qL.y/qL.x;
     REAL uRight = qR.y/qR.x;
@@ -136,7 +143,8 @@ __host__ __device__ REALthree eulerFlux(REALthree qL, REALthree qR)
     @param qR  Reconstructed value at the left side of the interface.
     @return  The spectral radius multiplied by the difference of the reconstructed values
 */
-__host__ __device__ REALthree eulerSpectral(REALthree qL, REALthree qR)
+__device__ __host__ 
+__forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR)
 {
     REALthree halfState;
     REAL rhoLeftsqrt = SQUAREROOT(qL.x);
@@ -184,7 +192,8 @@ __device__ __host__ void eulerStep(states *state, int idx, int tstep)
     state[idx].Q[tstep] = state[idx].Q[0] + ((QUARTER * (tstep+1)) * DIMS.dt_dx * flux);
 }
 
-__host__ __device__ void stepUpdate(states *state, int idx, int tstep)
+__device__ __host__ 
+__forceinline__ void stepUpdate(states *state, int idx, int tstep)
 {
     if (tstep & 1) //Odd 0 for even numbers
     {

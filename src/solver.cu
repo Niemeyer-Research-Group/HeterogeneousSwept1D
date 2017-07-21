@@ -11,6 +11,8 @@
     This file is distribued under the MIT License.  See LICENSE at top level of directory or: <https://opensource.org/licenses/MIT>.
 */
 
+// Two primary strategies used in this code: global variables and templating using structures.
+
 #include "decomposition/classicCore.h"
 #include "decomposition/sweptCore.h"
 
@@ -44,6 +46,10 @@ int main( int argc, char *argv[] )
         
     eCheckIn(dv, tpb, argc); //Initial error checking.
 
+    //Transfer constants involved in equation to GPU constant memory
+    //This is at least the CFL number or dx/dt.
+	cudaMemcpyToSymbol(deqConsts,&heqConsts,sizeof(eqConsts));
+
     if (dimz.dt_dx > .21)
     {
         cout << "The value of dt/dx (" << dimz.dt_dx << ") is too high.  In general it must be <=.21 for stability." << endl;
@@ -54,11 +60,6 @@ int main( int argc, char *argv[] )
 	ofstream fwr;
 	fwr.open(argv[7],ios::trunc);
     fwr.precision(10);
-
-    //Transfer data to GPU.
-	// This puts the Fourier number in constant memory.
-	cudaMemcpyToSymbol(dimens,&dimz,sizeof(dimensions));
-    cudaMemcpyToSymbol(dbd,&bd,2*sizeof(REALthree));
 
     // Start the counter and start the clock.
     cudaEvent_t start, stop;

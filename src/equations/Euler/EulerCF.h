@@ -16,6 +16,7 @@
 #include <cstdio>
 
 #include "myVectorTypes.h"
+#include "json.hpp"
 
 // We're just going to assume doubles
 #define REAL            double
@@ -31,7 +32,8 @@
 
 #define NSTEPS              4
 
-// Since anyone would need to write a header and functions file, why not just hardwire this.  If the user's number of steps isn't a power of 2 use the other one.
+// Since anyone would need to write a header and functions file, why not just hardwire this.  
+// If the user's number of steps isn't a power of 2 use the other one.
 
 // #define MODULA(x)           x & (NSTEPS-1)  
 // #define MODULA(x)           x % NSTEPS  
@@ -44,20 +46,32 @@
 	============================================================
 */
 
-// We don't need the grid data anymore because the node shapes are much simpler.  And do not affect the discretization implementation, only the decomposition.  Well the structs aren't accessible like arrays so shit.
+/*
+ We don't need the grid data anymore because the node shapes are much simpler.  
+ And do not affect the discretization implementation, only the decomposition.  
+ Well the structs aren't accessible like arrays so shit.
+*/
 
-struct dimensions {
+//---------------// 
+struct eqConsts {
     REAL gam; // Heat capacity ratio
     REAL mgam; // 1- Heat capacity ratio
     REAL dt_dx; // deltat/deltax
 };
 
+//---------------// 
 struct states{
     REALthree Q[2]; // Full Step, Midpoint step state variables
     REAL Pr; // Pressure ratio
 };
 
-std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"};
+//---------------// 
+// So the main part can make this struct and pass it
+struct eqic{
+	REAL lx, xa, rho, v, 
+};
+
+std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------// 
 
 /*
 	============================================================
@@ -66,8 +80,8 @@ std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"};
 */
 // The boundary points can't be on the device so there's no boundary device array.
 
-__constant__ dimensions dDimens; 
-dimensions hDimens;
+__constant__ eqConsts deqConsts;  //---------------// 
+dimensions heqConsts; //---------------// 
 REALthree hBound[2]; // Boundary Conditions
 double lx; // Length of domain.
 
@@ -77,37 +91,48 @@ double lx; // Length of domain.
 	============================================================
 */
 
+/*
+//---------------// 
+Means this functions is called from the primary program and therefore must be included BY NAME 
+in any equation discretization handled by the software.
+*/
+
 __host__ REAL density(REALthree subj);
 
 __host__ REAL velocity(REALthree subj);
 
 __host__ REAL energy(REALthree subj);
 
-__host__ __device__ REAL pressure(REALthree qH);
+__device__ __host__ 
+__forceinline__ REAL pressure(REALthree qH);
 
-__host__ void printout(const int i, REALthree subj);
+__host__ void printout(const int i, REALthree subj); //---------------//
 
-__host__ void initialState(states *state);
+__host__ void initialState(states *state); //---------------//
 
-__host__ void mpi_type(MPI_Datatype *dtype);
+__host__ void mpi_type(MPI_Datatype *dtype); //---------------//
 
-__host__ __device__ REAL pressureRoe(REALthree qH);
+__device__ __host__ 
+__forceinline__ REAL pressureRoe(REALthree qH);
 
-__host__ __device__ void pressureRatio(states *state, int idx, int tstep);
+__device__ __host__ 
+__forceinline__ void pressureRatio(states *state, int idx, int tstep);
 
-__host__ __device__ REALthree limitor(REALthree qH, REALthree qN, REAL pRatio);
+__device__ __host__ 
+__forceinline__ REALthree limitor(REALthree qH, REALthree qN, REAL pRatio);
 
-__host__ __device__ REALthree eulerFlux(REALthree qL, REALthree qR);
+__device__ __host__ 
+__forceinline__ REALthree eulerFlux(REALthree qL, REALthree qR);
 
-__host__ __device__ REALthree eulerSpectral(REALthree qL, REALthree qR);
+__device__ __host__ 
+__forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR);
 
-__host__ __device__ void eulerStep(states *state, int idx, int tstep);
+__device__ __host__ 
+__forceinline__ void eulerStep(states *state, int idx, int tstep);
 
-__host__ __device__ void stepUpdate(states *state, int idx, int tstep);
+__device__ __host__ 
+__forceinline__ void stepUpdate(states *state, int idx, int tstep); //---------------//
 
-
-
-// PERHAPS: Now use nvstd::functional to assign stepUpdate to the kernel AND MPI function!  
 
 // #ifndef REAL
 //     #define REAL            float

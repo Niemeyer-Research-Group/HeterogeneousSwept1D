@@ -3,12 +3,11 @@
 
 #include <mpi.h>
 #include <omp.h>
-#include <functional>
 #include "json.hpp"
 #include "dummyheader.h"
 
-// YES THESE SHOULD BE GLOBAL 
-// and state should not because state can't be allocated on the stack.
+// YES THESE SHOULD BE GLOBAL.  I STAND BY IT!
+using json = nlohmann::json;
 
 // MPI process properties
 MPI_Status status;
@@ -16,12 +15,10 @@ MPI_Datatype struct_type;
 int ranks[3];
 int nprocs;
 int lastproc;
-int ppnC, ppnG;
 
 // Topology
 int devcnt;
 int nthreads;
-double gpuAffinity;
 
 // Geometry
 int tpb, tpbp, base;
@@ -30,14 +27,16 @@ int ht, htm, htp;
 int szState;
 
 // Iterator
-int tstep;
+int tstep=1;
+
+// devicepointers
+states *dStateBase;
+states *dState[4];
 
 // Cuda Device Prop props;
 
-// ppnC = dv/(nprocs + devcnt*gpuAffinity)
-// ppnG = gpu*ppnC;  
-// THEN ROUND ppnG TO THE NEAREST MULTIPLE OF 32 AND RECALCULATE.
-// I
+json solution;
+json timing;
 
 void makeMPI(int argc, char* argv[]);
 
@@ -45,7 +44,7 @@ void topology();
 
 void eCheckIn(int argc);
 
-void solutionOutput(REALthree outState, REAL tstamp, REAL* xpt);
+void solutionOutput(REALthree outVec, REAL tstamp, REAL xpt);
 
 void timingOutput(REAL timer, FILE *timeOut);
 

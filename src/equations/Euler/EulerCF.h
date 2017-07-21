@@ -7,9 +7,14 @@
 
 #include <cuda.h>
 #include <mpi.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <cuda_runtime_api.h>
+#include <cuda_runtime.h>
+#include <device_functions.h>
+
 #include <string>
+#include <cstdlib>
+#include <cstdio>
+
 #include "myVectorTypes.h"
 
 // We're just going to assume doubles
@@ -62,8 +67,9 @@ std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"};
 // The boundary points can't be on the device so there's no boundary device array.
 
 __constant__ dimensions dDimens; 
-REALthree hBound[2];
 dimensions hDimens;
+REALthree hBound[2]; // Boundary Conditions
+double lx; // Length of domain.
 
 /*
 	============================================================
@@ -81,9 +87,9 @@ __host__ __device__ REAL pressure(REALthree qH);
 
 __host__ void printout(const int i, REALthree subj);
 
-__host__ void mpi_type(MPI_Datatype *dtype);
+__host__ void initialState(states *state);
 
-__host__ REALthree initialconditions();  // How to generalize this so the same inputs are valid for all equations.
+__host__ void mpi_type(MPI_Datatype *dtype);
 
 __host__ __device__ REAL pressureRoe(REALthree qH);
 

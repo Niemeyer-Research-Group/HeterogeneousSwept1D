@@ -40,8 +40,7 @@ REAL pressure(REALthree qH)
     return DIMS.mgam * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }
 
-__host__ 
-REAL printout(const int i, REALthree subj)
+__host__ REAL printout(const int i, REALthree subj)
 {
     switch(i)
     {
@@ -50,6 +49,13 @@ REAL printout(const int i, REALthree subj)
         case 2: return energy(subj);
         case 3: return pressure(subj);
     } 
+}
+
+// One of the main uses of global variables is the fact that you don't need to pass
+// anything so you don't need variable args.
+__host__ void initialState(states *state)
+{
+    
 }
 
 __host__ void mpi_type(MPI_Datatype *dtype)
@@ -74,12 +80,6 @@ __host__ void mpi_type(MPI_Datatype *dtype)
     MPI_Type_free(&vtype);
 }
 
-__host__ REALthree initialconditions()
-{
-
-
-}
-
 __host__ __device__ REAL pressureRoe(REALthree qH)
 {
     return DIMS.mgam * (qH.z - HALF * qH.y * qH.y);
@@ -90,7 +90,7 @@ __host__ __device__ REAL pressureRoe(REALthree qH)
 */
 __host__ __device__ void pressureRatio(states *state, int idx, int tstep)
 {
-    state[idx].Pr = (pressure(state[idx+1].Q[tstep]) - pressure(state[idx].Q[tstep]))/(pressure(state[idx].Q[tstep]) - pressure(state[idx-1].Q[tstep]));
+    state[idx].Pr = (pressure(state[idx+1]->Q[tstep]) - pressure(state[idx]->Q[tstep]))/(pressure(state[idx]->Q[tstep]) - pressure(state[idx-1]->Q[tstep]));
 }   
 
 /**
@@ -138,8 +138,6 @@ __host__ __device__ REALthree eulerFlux(REALthree qL, REALthree qR)
 */
 __host__ __device__ REALthree eulerSpectral(REALthree qL, REALthree qR)
 {
-
-
     REALthree halfState;
     REAL rhoLeftsqrt = SQUAREROOT(qL.x);
     REAL rhoRightsqrt = SQUAREROOT(qR.x);

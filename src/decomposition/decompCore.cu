@@ -8,7 +8,7 @@
 //Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
 {
-    mpi_type(&struct_type)
+    mpi_type(&struct_type);
     // read_json();  Perhaps?
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
@@ -55,7 +55,7 @@ void eCheckIn (int argc)
 }
 
 // THIS IS GREAT BUT YOU CAN'T PASS IT BACK BECAUSE TYPES!
-void solutionOutput(REALthree outVec, REAL tstamp, REAL xpt)
+void solutionOutput(REALthree outState, REAL tstamp, REAL* xpt)
 {
     for (int k=0; k<NVARS; k++)
     {

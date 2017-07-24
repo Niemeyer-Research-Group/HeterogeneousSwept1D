@@ -5,6 +5,22 @@
 
 #include "decompCore.h"
 
+void preSetDevice()
+{
+	char * localRankStr = NULL;
+	int rank = 0, devCount = 0;
+
+	// We extract the local rank initialization using an environment variable
+	if ((localRankStr = getenv(ENV_LOCAL_RANK)) != NULL)
+	{
+		rank = atoi(localRankStr);		
+	}
+
+	cudaGetDeviceCount(&devCount);
+    int mdev = rank % devCount;
+	cudaSetDevice(mdev);
+}
+
 //Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
 {
@@ -35,6 +51,51 @@ void topology()
     nthreads = omp_get_num_procs();
 }
 
+
+
+void parseArgs(json inJ, int argc, char *argv[]);
+{
+    // Will include div, tpb, type (classic vs swept), and file outputs.)
+    // The numbers aren't right yet.
+
+    if (argc>6)
+    {
+        for (int k=6; k<argc; k+=2)
+        {
+            inJ[argv[k]] = argv[k+1];
+        }
+    }
+}
+// // Topology
+// int devcnt;
+// int nthreads;
+
+// // Geometry
+// int tpb, tpbp, base;
+// int dv, bk;
+// int ht, htm, htp;
+// int szState;
+
+// // Iterator
+// int tstep=1;
+
+// // devicepointers
+// states *dStateBase;
+// states *dState[4];
+
+void initArgs(json inJ);
+{
+    // Make Eq constants, states initial and hbound
+    equationSpecificArgs(json inJ); 
+    tpb = inJ["tpb"];
+    tpb
+
+
+
+
+}
+
+
 void eCheckIn (int argc)
 {
     if (argc < 8)
@@ -49,6 +110,13 @@ void eCheckIn (int argc)
     {
         std::cout << "INVALID NUMERIC INPUT!! "<< std::endl;
         std::cout << "2nd ARGUMENT MUST BE A POWER OF TWO >= 32 AND FIRST ARGUMENT MUST BE DIVISIBLE BY SECOND" << std::endl;
+        exit(-1);
+    }
+
+
+    if (dimz.dt_dx > .21)
+    {
+        cout << "The value of dt/dx (" << dimz.dt_dx << ") is too high.  In general it must be <=.21 for stability." << endl;
         exit(-1);
     }
 

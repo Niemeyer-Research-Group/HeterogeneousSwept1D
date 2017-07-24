@@ -6,14 +6,16 @@
 #define EULERCF_H
 
 #include <cuda.h>
-#include <mpi.h>
-#include <cuda_runtime_api.h>
 #include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
 #include <device_functions.h>
+#include <mpi.h>
 
 #include <string>
-#include <cstdlib>
-#include <cstdio>
+#include <fstream>
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "myVectorTypes.h"
 #include "json.hpp"
@@ -56,8 +58,8 @@ using json = nlohmann::json;
 
 //---------------// 
 struct eqConsts {
-    REAL gam; // Heat capacity ratio
-    REAL mgam; // 1- Heat capacity ratio
+    REAL gammma; // Heat capacity ratio
+    REAL mgammma; // 1- Heat capacity ratio
     REAL dt_dx; // deltat/deltax
 };
 
@@ -77,7 +79,7 @@ std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //------
 // The boundary points can't be on the device so there's no boundary device array.
 
 __constant__ eqConsts deqConsts;  //---------------// 
-dimensions heqConsts; //---------------// 
+eqConsts heqConsts; //---------------// 
 REALthree hBound[2]; // Boundary Conditions
 double lx; // Length of domain.
 
@@ -103,6 +105,8 @@ __device__ __host__
 __forceinline__ REAL pressure(REALthree qH);
 
 __host__ void printout(const int i, REALthree subj); //---------------//
+
+_host__ void equationSpecificArgs(json inJ) //---------------//
 
 __host__ states initialState(json icMaker); //---------------//
 

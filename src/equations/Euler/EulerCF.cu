@@ -51,6 +51,23 @@ __host__ REAL printout(const int i, REALthree subj)
     } 
 }
 
+/*
+dimensions heqConsts; //---------------// 
+REALthree hBound[2]; // Boundary Conditions
+double lx; // Length of domain.
+*/
+
+_host__ void equationSpecificArgs(json inJ)
+{
+    lx = inJ["lx"];
+    heqConsts.gammma = inJ["gamma"];
+    heqConsts.mgammma = heqConsts.gammma - 1;
+    // Here's a significant problem.  I don't know what dx will be because
+    // div is flexible because it needs to make sense!!
+
+    cuda
+}
+
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.

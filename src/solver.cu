@@ -16,10 +16,17 @@
 #include "decomposition/classicCore.h"
 #include "decomposition/sweptCore.h"
 
-int main( int argc, char *argv[] )
+int main(int argc, char *argv[])
 {   
+    preSetDevice();
+
+    makeMPI(argc, &argv);
+
     // Set shared memory banks to double if REAL is double.
-    if (sizeof(REAL)>6) cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+    if (sizeof(REAL)>6 && gpuYes) 
+    {
+        cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+    }
 
     states *state;
     double *xpts;
@@ -27,8 +34,10 @@ int main( int argc, char *argv[] )
     std::ifstream injson(argv[1]);
     json inJ;
     injson >> inJ;
+    injson.close();
 
-    makeMPI(int argc, char* argv[]);
+    parseArgs(json inJ, argc, &argv);
+    initArgs(json inJ);
 
     hBound[0] = {};
     hBound[1] = {};
@@ -46,32 +55,15 @@ int main( int argc, char *argv[] )
     char const *prec;
     prec = (sizeof(REAL)<6) ? "Single": "Double";
 
-    dimz.dt_dx = dt/dx; // dt/dx
-    dimz.base = tpb+4;
-    dimz.idxend = dv-1;
-    dimz.idxend_1 = dv-2;
-
-    for (int k=-2; k<3; k++) dimz.hts[k+2] = (tpb/2) + k;
-        
     eCheckIn(dv, tpb, argc); //Initial error checking.
 
     // We always know that there's some eqConsts struct that we need to 
     // to put into constant memory.
     // PROBABLY NEED TO CHECK TO MAKE SURE THERE"S A GPU FIRST.
-	cudaMemcpyToSymbol(deqConsts,&heqConsts,sizeof(eqConsts));
-
-    if (dimz.dt_dx > .21)
-    {
-        cout << "The value of dt/dx (" << dimz.dt_dx << ") is too high.  In general it must be <=.21 for stability." << endl;
-        exit(-1);
-    }
-
-	// Call out the file before the loop and write out the initial condition.
-	ofstream fwr;
-	fwr.open(argv[7],ios::trunc);
-    fwr.precision(10);
+    if (gpuYes) cudaMemcpyToSymbol(deqConsts,&heqConsts,sizeof(eqConsts));
 
     // Start the counter and start the clock.
+    MPI_Barrier(MPI_COMM_WORLD);
     cudaEvent_t start, stop;
 	float timed;
 	cudaEventCreate( &start );
@@ -89,6 +81,8 @@ int main( int argc, char *argv[] )
     {
         tfm = classicWrapper(bks, tpb, dv, dt, tf, IC, T_final, freq, fwr);
     }
+
+    endMPI();
 
 	// Show the time and write out the final condition.
 	cudaEventRecord(stop, 0);
@@ -125,6 +119,10 @@ int main( int argc, char *argv[] )
 	cudaEventDestroy( start );
 	cudaEventDestroy( stop );
     cudaDeviceReset();
+
+
+
+    if (rank == 0) system("json-merge path/to/jsons/*.json")
 
 	return 0;
 }

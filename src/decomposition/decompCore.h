@@ -38,9 +38,17 @@ states *dState[4];
 json solution;
 json timing;
 
+void preSetDevice();
+
 void makeMPI(int argc, char* argv[]);
 
 void topology();
+
+// All additional options overwrite inJ default values.
+void parseArgs(json inJ, int argc, char *argv[]);
+
+// Now inJ gives values to variables.
+void initArgs(json inJ);
 
 void eCheckIn(int argc);
 

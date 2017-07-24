@@ -52,6 +52,8 @@
  Well the structs aren't accessible like arrays so shit.
 */
 
+using json = nlohmann::json;
+
 //---------------// 
 struct eqConsts {
     REAL gam; // Heat capacity ratio
@@ -63,12 +65,6 @@ struct eqConsts {
 struct states{
     REALthree Q[2]; // Full Step, Midpoint step state variables
     REAL Pr; // Pressure ratio
-};
-
-//---------------// 
-// So the main part can make this struct and pass it
-struct eqic{
-	REAL lx, xa, rho, v, 
 };
 
 std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------// 
@@ -108,7 +104,7 @@ __forceinline__ REAL pressure(REALthree qH);
 
 __host__ void printout(const int i, REALthree subj); //---------------//
 
-__host__ void initialState(states *state); //---------------//
+__host__ states initialState(json icMaker); //---------------//
 
 __host__ void mpi_type(MPI_Datatype *dtype); //---------------//
 

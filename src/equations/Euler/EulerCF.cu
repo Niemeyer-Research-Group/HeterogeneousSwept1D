@@ -53,9 +53,14 @@ __host__ REAL printout(const int i, REALthree subj)
 
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
-__host__ void initialState(states *state)
+// lxh is half the domain length assuming starting at 0.
+__host__ void initialState(REALthree *intl, double xpt)
 {
-    
+    if (ic == "PARTITION")
+    {
+        int side = (xpt < HALF*lx);
+        intl = hBound[side];
+    }
 }
 
 __host__ void mpi_type(MPI_Datatype *dtype)

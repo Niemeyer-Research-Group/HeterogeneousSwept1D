@@ -24,7 +24,16 @@ int main( int argc, char *argv[] )
     states *state;
     double *xpts;
 
+    std::ifstream injson(argv[1]);
+    json inJ;
+    injson >> inJ;
+
     makeMPI(int argc, char* argv[]);
+
+    hBound[0] = {};
+    hBound[1] = {};
+
+    for (int k=0; k<dv; k++) initialState(inJ, &state[k]->Q[0]);
 
     const int dv = atoi(argv[1]); //Number of spatial points
 	const int tpb = atoi(argv[2]); //Threads per Block
@@ -46,8 +55,9 @@ int main( int argc, char *argv[] )
         
     eCheckIn(dv, tpb, argc); //Initial error checking.
 
-    //Transfer constants involved in equation to GPU constant memory
-    //This is at least the CFL number or dx/dt.
+    // We always know that there's some eqConsts struct that we need to 
+    // to put into constant memory.
+    // PROBABLY NEED TO CHECK TO MAKE SURE THERE"S A GPU FIRST.
 	cudaMemcpyToSymbol(deqConsts,&heqConsts,sizeof(eqConsts));
 
     if (dimz.dt_dx > .21)

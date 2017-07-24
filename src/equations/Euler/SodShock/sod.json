@@ -1,1 +1,22 @@
-# Settings for the Yaml file Sod shock tube
+{
+    "rhoL" : 1.0, 
+    "rhoR" : 0.125,
+    "vL" : 0.0, 
+    "vR" : 0.0,
+    "pL" : 1.0,
+    "pR" : 0.1,
+    "gamma" : 1.4,
+    "geometry" : {
+        "dt" : 0.00001,
+        "lx" : 1.0
+    },
+    "launchbounds" : {
+        "dv" : 65536,
+        "tpb" : 128,
+        "frequency" : 2,
+        "gpuAffinity" : 0.4
+    },
+    "algorithm" : "CLASSIC",
+    "BC" : "DIRICHLET",
+    "IC" : "PARTITION"
+}

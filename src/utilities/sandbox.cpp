@@ -4,31 +4,65 @@
 
 // Compile IT:  nvcc -o sandbx sandbox.cu -lm -restrict -gencode arch=compute_35,code=sm_35
 
-//nvcc -o sandbx sandbox.cu ../equations/Euler/Euler_Device.cu -lm -rdc=true -gencode arch=compute_35,code=sm_35 
-// gcc -I/usr/include/mpi -lmpi -o sndbx sandbox.cu -O3 -lm -gencode arch=compute_35,code=sm_35 --std=c++11
+//nvcc -o sandbx sandbox.cu ../equations/Euler/Euler_Device.cu -lm -gencode arch=compute_35,code=sm_35 
+// gcc -o sndbx sandbox.cpp -O3 -lm --std=c++11
+// Yeah it works with g++ though (5.4)
+// You also need a dummy variable when you use the value.
 
-#include "json.hpp"
 #include <iostream>
 #include <fstream>
+#include <mpi.h>
+#include <omp.h>
+#include "json.hpp"
 
-using json = nlohmann::json;
+using jsons = nlohmann::json;
 
-int main(int argc, char *argv[])
+
+// "MV2_COMM_WORLD_LOCAL_RANK"
+#define ENV_LOCAL_RANK		"OMPI_COMM_WORLD_LOCAL_RANK"
+
+void SetDeviceBeforeInit()
 {
-    std::ifstream imzep("test.json", std::ifstream::in);
-    json myJ;
-    imzep >> myJ;
-    std::cout << myJ.dump(4) << std::endl;
+	char * localRankStr = NULL;
+	int rank = 0, devCount = 0;
 
-    imzep.close();
-    return 0;
+	// We extract the local rank initialization using an environment variable
+	if ((localRankStr = getenv(ENV_LOCAL_RANK)) != NULL)
+	{
+		rank = atoi(localRankStr);		
+	}
 
-    // int rank, devcnt;
-    // cout << argc << endl;
-    // MPI_Init(&argc, &argv);
-    // MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    // cudaGetDeviceCount(&devcnt);
-    // cout << rank << " " << devcnt << endl;
-    // MPI_Barrier(MPI_COMM_WORLD);
-	// MPI_Finalize();
+	cudaGetDeviceCount(&devCount);
+    int mdev = rank % devCount;
+	cudaSetDevice(mdev);
+    cout << "Before Init: Process " << rank << " has device " << mdev << endl;
+}
+
+// Test json
+// int main(int argc, char *argv[])
+// {
+//     std::ifstream imzep("test.json", std::ifstream::in);
+//     jsons myJ;
+//     imzep >> myJ;
+//     std::cout << myJ.dump(4) << std::endl;
+
+//     int dt = myJ["dt"]; 
+//     imzep.close();
+
+//     std::cout << dt*5 << std::endl;
+//     return 0;
+// }
+
+
+// Test device sight.
+int mainint argc, char *argv[])
+{
+    int rank, mydev;
+    cout << argc << endl;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    cudaGetDevice(&mydev);
+    cout << "After Init: Process " << rank << " has device " << mydev << endl;
+    MPI_Barrier(MPI_COMM_WORLD);
+	MPI_Finalize();
 }

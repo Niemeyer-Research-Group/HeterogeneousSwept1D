@@ -43,6 +43,9 @@ void SetDeviceBeforeInit()
     int mdev = rank % devCount;
 	cudaSetDevice(mdev);
     std::cout << "Before Init: Process " << rank << " has device " << mdev << std::endl;
+    // On the CPU side
+    int nthreads = omp_get_num_procs();
+    std::cout << "Rank:  " << rank << " has CPU threads visible " << nthreads << std::endl;
 }
 
 // Test json
@@ -58,6 +61,7 @@ int main(int argc, char *argv[])
     imzep.close();
 
     std::cout << dt*5 << std::endl;
+    SetDeviceBeforeInit();
     return 0;
 }
 

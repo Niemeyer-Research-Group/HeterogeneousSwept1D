@@ -18,15 +18,9 @@
 
 int main(int argc, char *argv[])
 {   
-    preSetDevice();
-
     makeMPI(argc, &argv);
 
-    // Set shared memory banks to double if REAL is double.
-    if (sizeof(REAL)>6 && gpuYes) 
-    {
-        cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
-    }
+    getDeviceInformation();
 
     states *state;
     double *xpts;
@@ -36,11 +30,13 @@ int main(int argc, char *argv[])
     injson >> inJ;
     injson.close();
 
-    parseArgs(json inJ, argc, &argv);
-    initArgs(json inJ);
+    parseArgs(inJ, argc, &argv);
+    initArgs(inJ);
 
     hBound[0] = {};
     hBound[1] = {};
+    
+    delegateDomain(double *xpts, states *state);
 
     for (int k=0; k<dv; k++) initialState(inJ, &state[k]->Q[0]);
 

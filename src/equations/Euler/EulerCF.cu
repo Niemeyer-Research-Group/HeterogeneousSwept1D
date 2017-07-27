@@ -64,8 +64,6 @@ _host__ void equationSpecificArgs(json inJ)
     heqConsts.mgammma = heqConsts.gammma - 1;
     // Here's a significant problem.  I don't know what dx will be because
     // div is flexible because it needs to make sense!!
-
-    cuda
 }
 
 // One of the main uses of global variables is the fact that you don't need to pass

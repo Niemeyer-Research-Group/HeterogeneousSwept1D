@@ -5,27 +5,10 @@
 
 #include "decompCore.h"
 
-void preSetDevice()
-{
-	char * localRankStr = NULL;
-	int rank = 0, devCount = 0;
-
-	// We extract the local rank initialization using an environment variable
-	if ((localRankStr = getenv(ENV_LOCAL_RANK)) != NULL)
-	{
-		rank = atoi(localRankStr);		
-	}
-
-	cudaGetDeviceCount(&devCount);
-    int mdev = rank % devCount;
-	cudaSetDevice(mdev);
-}
-
 //Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
 {
     mpi_type(&struct_type);
-    // read_json();  Perhaps?
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
@@ -39,7 +22,7 @@ void makeMPI(int argc, char* argv[])
     ranks[2] = (ranks[1] == nprocs) ? 0 : ranks[1]+1;
 }
 
-void topology()
+void getDeviceInformation();
 {
     cudaGetDeviceCount(devcnt);
 
@@ -51,7 +34,14 @@ void topology()
     nthreads = omp_get_num_procs();
 }
 
-
+void delegateDomain()
+{
+    // Set shared memory banks to double if REAL is double.
+    if (sizeof(REAL)>6 && gpuYes) 
+    {
+        cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+    }
+}
 
 void parseArgs(json inJ, int argc, char *argv[]);
 {

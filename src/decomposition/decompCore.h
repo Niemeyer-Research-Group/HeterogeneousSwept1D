@@ -6,8 +6,7 @@
 #include "json.hpp"
 #include "dummyheader.h"
 
-// YES THESE SHOULD BE GLOBAL.  I STAND BY IT!
-using json = nlohmann::json;
+#define TAGS(x) x & 32767
 
 // MPI process properties
 MPI_Status status;
@@ -17,32 +16,28 @@ int nprocs;
 int lastproc;
 
 // Topology
-int devcnt;
-int nthreads;
+int nthreads, xgpu, xcpu;
 
 // Geometry
 int tpb, tpbp, base;
-int dv, bk;
 int ht, htm, htp;
 int szState;
 
 // Iterator
+double t_end, freq, dt;
 int tstep=1;
-
-// devicepointers
-states *dStateBase;
-states *dState[4];
 
 // Cuda Device Prop props;
 
 json solution;
 json timing;
 
-void preSetDevice();
 
 void makeMPI(int argc, char* argv[]);
 
-void topology();
+void getDeviceInformation();
+
+void delegateDomain(double *xpts, states *state);
 
 // All additional options overwrite inJ default values.
 void parseArgs(json inJ, int argc, char *argv[]);

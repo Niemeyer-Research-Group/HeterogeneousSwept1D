@@ -14,7 +14,7 @@
 // Two primary strategies used in this code: global variables and templating using structures.
 
 #include "decomposition/classicCore.h"
-#include "decomposition/sweptCore.h"
+// #include "decomposition/sweptCore.h"
 
 int main(int argc, char *argv[])
 {   

@@ -24,7 +24,6 @@ void classicStepCPU(states *state, int numx)
     {
         stepUpdate(state, k, tstep)
     }
-    tstep++;
 }
 
 void classicPassLeft(states *state, int idxend)
@@ -62,29 +61,42 @@ double classicWrapper(states *state, double *xpts)
         int bks = xgpu/tpb;
         int gpui = xcpu/2;
         int gpuf = gpui + xgpu + 2; 
-        states *state1 = &state;
+        int idxend = gpui + 1;
+
+        states *state1 = &state[0];
         states *state2 = &state[gpuf];
-        int gpubytes = sizeof(states)*(xgpu + 2));
+        int gpubytes =  szState * (xgpu + 2));
+
+    // Four streams for four transfers to and from cpu.
+        cudaStream_t st1, st2, st3, st4);
+        cudaStreamCreate(&st1);
+        cudaStreamCreate(&st2);
+        cudaStreamCreate(&st3);
+        cudaStreamCreate(&st4);
 
         states *dState, *hState;
 
-        cudaHostAlloc((void **)&dState, gpubytes);
-
+        cudaHostAlloc((void **)&hState, gpubytes);
         cudaMalloc((void **)&dState, gpubytes);
 
         // Copy the initial conditions to the device array.
         cudaMemcpy(dState, &state[gpui], gpubytes, cudaMemcpyHostToDevice);
-        //They also need private sections of the array!
-
-        classicStepCPU(state1, gpui+1);
-        classicStepCPU(state2, gpui+1);
 
         while (t_eq < t_end)
         {
+            classicStepCPU(state1, idxend);
+            classicStepCPU(state2, idxend);
+
             classicDecomp <<< bks,tpb >>> (dState, tstep);
 
-            classicPassRight(state2, gpui+1);
-            classicPassLeft(state1, gpui+1);
+            // Host to device first.  Fills the 0 and end members of array
+            cudaMemcpyAsync(dState, &state1, szState, cudaMemcpyHostToDevice, st1);
+            cudaMemcpyAsync(dState, state2, szState, cudaMemcpyHostToDevice, st2);
+            cudaMemcpyAsync(state1, dState, szState, cudaMemcpyDeviceToHost, st3);
+            cudaMemcpyAsync(state2, dState, szState, cudaMemcpyDeviceToHost, st4);
+
+            classicPassRight(state2, idxend);
+            classicPassLeft(state1, idxend);
             
             // Increment Counter and timestep
             if (MODULA(tstep)) t_eq += dt;
@@ -92,13 +104,13 @@ double classicWrapper(states *state, double *xpts)
 
             if (t_eq > twrite)
             {
-                cudaMemcpy(&hState, dState, sizeof(states)*xgpu, cudaMemcpyDeviceToHost);
+                cudaMemcpy(&hState, dState, gpubytes, cudaMemcpyDeviceToHost);
 
                 #pragma omp parallel for
-                for (int k=1; k<gpui; k++) solutionOutput(state1[k]->Q[0], xpts[k], t_eq);
+                for (int k=1; k<idxend; k++) solutionOutput(state1[k]->Q[0], xpts[k], t_eq);
                 
                 #pragma omp parallel for
-                for (int k=1; k<gpui; k++) solutionOutput(state2[k]->Q[0], xpts[k+gpuf], t_eq);
+                for (int k=1; k<idxend; k++) solutionOutput(state2[k]->Q[0], xpts[k+gpuf], t_eq);
 
                 #pragma omp parallel for
                 for (int k=1; k<xgpu; k++) solutionOutput(hState[k]->Q[0], xpts[k+gpui], t_eq);
@@ -107,19 +119,25 @@ double classicWrapper(states *state, double *xpts)
             }
         }
 
-        cudaMemcpy(&hState[gpui], dState, sizeof(states)*xgpu, cudaMemcpyDeviceToHost);
+        cudaMemcpy(&hState[gpui], dState, gpubytes, cudaMemcpyDeviceToHost);
+
+        cudaStreamDestroy(st1);
+        cudaStreamDestroy(st2);
+        cudaStreamDestroy(st3);
+        cudaStreamDestroy(st4);
 
         #pragma omp parallel for
-        for (int k=1; k<gpui; k++) solutionOutput(state1[k]->Q[0], xpts[k], t_eq);
+        for (int k=1; k<idxend; k++) solutionOutput(state1[k]->Q[0], xpts[k], t_eq);
         
         #pragma omp parallel for
-        for (int k=1; k<gpui; k++) solutionOutput(state2[k]->Q[0], xpts[k+gpuf], t_eq);
+        for (int k=1; k<idxend; k++) solutionOutput(state2[k]->Q[0], xpts[k+gpuf], t_eq);
 
         #pragma omp parallel for
         for (int k=1; k<xgpu; k++) solutionOutput(hState[k]->Q[0], xpts[k+gpui], t_eq);
 
         cudaFree(dState);
         cudaFreeHost(hState);
+
     }
     else
     {

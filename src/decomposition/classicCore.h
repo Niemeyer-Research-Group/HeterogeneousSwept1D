@@ -5,10 +5,14 @@
 
 __global__ void classicStep(states *state, int tstep);
 
-void classicStepCPU(states *state, int tstep, int tpb);
+void classicStepCPU(states *state, int numx);
 
-void classicPass(states *state, int tpb, int rank, bool dr);
+void classicPassLeft(states *state, int idxend);
 
-classicWrapper(const int bks, int tpb, const int dv, const double dt, const double t_end, states *state);
+void classicPassRight(states *state, int idxend);
+
+void classicPass(states *state, int idxend);
+
+classicWrapper(states *state, double *xpts);
 
 #endif

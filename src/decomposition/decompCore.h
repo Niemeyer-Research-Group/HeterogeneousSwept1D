@@ -16,7 +16,7 @@ int nprocs;
 int lastproc;
 
 // Topology
-int nthreads, xgpu, xcpu;
+int nthreads, xgpu, xcpu, xlen;
 
 // Geometry
 int tpb, tpbp, base;
@@ -30,6 +30,8 @@ int tstep=1;
 // Cuda Device Prop props;
 
 json solution;
+json timing;
+
 
 void makeMPI(int argc, char* argv[]);
 
@@ -45,7 +47,9 @@ void initArgs(json inJ);
 
 void eCheckIn(int argc);
 
-void solutionOutput(REALthree outVec, REAL xpt,  REAL tstamp);
+void solutionOutput(REALthree *outVec, double tstamp, double xpt1);
+
+void timingOutput(REAL timer, FILE *timeOut);
 
 void endMPI();
 

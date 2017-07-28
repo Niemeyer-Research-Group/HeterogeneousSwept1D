@@ -30,8 +30,6 @@ int tstep=1;
 // Cuda Device Prop props;
 
 json solution;
-json timing;
-
 
 void makeMPI(int argc, char* argv[]);
 
@@ -47,9 +45,7 @@ void initArgs(json inJ);
 
 void eCheckIn(int argc);
 
-void solutionOutput(REALthree outVec, REAL tstamp, REAL xpt);
-
-void timingOutput(REAL timer, FILE *timeOut);
+void solutionOutput(REALthree outVec, REAL xpt,  REAL tstamp);
 
 void endMPI();
 

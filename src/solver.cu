@@ -75,7 +75,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        tfm = classicWrapper(bks, tpb, dv, dt, tf, IC, T_final, freq, fwr);
+        tfm = classicWrapper(state, xpts);
     }
 
     endMPI();
@@ -93,30 +93,37 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    timed *= 1.e3;
+    std::ofstream soljson(argv[2]);
+    soljson << solution;
 
-    double n_timesteps = tfm/dt;
-
-    double per_ts = timed/n_timesteps;
-
-    cout << n_timesteps << " timesteps" << endl;
-	cout << "Averaged " << per_ts << " microseconds (us) per timestep" << endl;
-
-    if (argc>7)
+    if (rank == 0)
     {
-        ofstream ftime;
-        ftime.open(argv[8],ios::app);
-    	ftime << dv << "\t" << tpb << "\t" << per_ts << endl;
-    	ftime.close();
+        //READ OUT JSONS
+        
+        timed *= 1.e3;
+
+        double n_timesteps = tfm/dt;
+
+        double per_ts = timed/n_timesteps;
+
+        cout << n_timesteps << " timesteps" << endl;
+        cout << "Averaged " << per_ts << " microseconds (us) per timestep" << endl;
+
+        json timing;
+        timing[dv][tpb][gpuA] = per_ts;
+
+        std::ofstream timejson(argv[2]);
+        timejson << timing;
     }
 
-    cudaDeviceSynchronize();
+    if (xgpu)
+    {
+        cudaDeviceSynchronize();
 
-	cudaEventDestroy( start );
-	cudaEventDestroy( stop );
-    cudaDeviceReset();
-
-
+        cudaEventDestroy( start );
+        cudaEventDestroy( stop );
+        cudaDeviceReset();
+    }
 
     if (rank == 0) system("json-merge path/to/jsons/*.json")
 

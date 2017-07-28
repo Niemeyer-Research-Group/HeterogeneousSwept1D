@@ -37,10 +37,10 @@
 // Since anyone would need to write a header and functions file, why not just hardwire this.  
 // If the user's number of steps isn't a power of 2 use the other one.
 
-// #define MODULA(x)           x & (NSTEPS-1)  
+#define MODULA(x)           x & (NSTEPS-1)  
 // #define MODULA(x)           x % NSTEPS  
 
-#define DIVMOD(x)           (x & (NSTEPS-1)) >> 1   
+#define DIVMOD(x)           (MODULA(x)) >> 1   
 
 /*
 	============================================================

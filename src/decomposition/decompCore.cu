@@ -81,53 +81,52 @@ void initArgs(json inJ);
     tpb
 
 
-
-
 }
 
 
 void eCheckIn (int argc)
 {
-    if (argc < 8)
+    if (argc < 6)
 	{
+        if (rank == 0)
+        {
         std::cout << "NOT ENOUGH ARGUMENTS:" << std::endl;
 		std::cout << "The Program takes 8 inputs, #Divisions, #Threads/block, deltat, finish time, output frequency..." << std::endl;
         std::cout << "Algorithm type, Variable Output File, Timing Output File (optional)" << std::endl;
-		exit(-1);
+        }
+        exit(-1);
 	}
 
 	if ((dv & (tpb-1) != 0) || (tpb&31) != 0)
     {
+        if (rank == 0)
+        {
         std::cout << "INVALID NUMERIC INPUT!! "<< std::endl;
         std::cout << "2nd ARGUMENT MUST BE A POWER OF TWO >= 32 AND FIRST ARGUMENT MUST BE DIVISIBLE BY SECOND" << std::endl;
+        }
         exit(-1);
     }
 
 
     if (dimz.dt_dx > .21)
     {
+        if (rank == 0)
+        {
         cout << "The value of dt/dx (" << dimz.dt_dx << ") is too high.  In general it must be <=.21 for stability." << endl;
+        }
         exit(-1);
     }
 
 }
 
 // THIS IS GREAT BUT YOU CAN'T PASS IT BACK BECAUSE TYPES!
-void solutionOutput(REALthree outState, REAL tstamp, REAL* xpt)
+void solutionOutput(REALthree outState, REAL tstamp, REAL xpt)
 {
     for (int k=0; k<NVARS; k++)
     {
         solution[outVars[k]][tstamp][xpt] = printout(k, outVec); 
     }
 }
-
-// THIS IS OK BECAUSE WE'RE NOT GOING TO DO IT IN AN MPI PROCESS.
-void timingOutput(REAL timer, FILE *timeOut)
-{
-    //READ json first.
-    timing[dv] = timer;
-}
-
 
 void endMPI()
 {

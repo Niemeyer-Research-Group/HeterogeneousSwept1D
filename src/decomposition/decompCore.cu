@@ -75,17 +75,38 @@ void parseArgs(json inJ, int argc, char *argv[]);
 
 void initArgs(json inJ);
 {
-    // Make Eq constants, states initial and hbound
-    equationSpecificArgs(json inJ); 
+    try{
+        equationSpecificArgs(json inJ); 
+    }
+    except
+    {
+        echeckIn(0, "Your input json is missing a key element.");
+    }
+
+
     tpb = inJ["tpb"];
-    tpb
+    tpb = inJ[]
+    enum
+    {
+        // If BCTYPE == "Dirichlet"
+        if (!rank) bCond[0] = false;
+        if (rank == lastproc) bCond[1] = false;
+        // If BCTYPE == "Periodic"
+            // Don't do anything.
+    }
 
 
 }
 
 
-void eCheckIn (int argc)
+void eCheckIn (type typer , char *string)// int argc?
 {
+    // 0 type error, error string is input.
+    if (!typer)
+    {
+        if (!rank) std::cout << string << std::endl;
+        exit(-1);
+    }
     if (argc < 6)
 	{
         if (rank == 0)

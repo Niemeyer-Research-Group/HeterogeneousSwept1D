@@ -16,7 +16,7 @@ int nprocs;
 int lastproc;
 
 // Topology
-int nthreads, xgpu, xcpu, xlen;
+int nthreads, xgpu, xcpu;
 
 // Geometry
 int tpb, tpbp, base;
@@ -26,6 +26,7 @@ int szState;
 // Iterator
 double t_end, freq, dt;
 int tstep=1;
+bool bCond[2] = {true, true}; // Initialize passing both sides.
 
 // Cuda Device Prop props;
 

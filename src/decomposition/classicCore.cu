@@ -26,25 +26,26 @@ void classicStepCPU(states *state, int numx)
     }
 }
 
+
+//No I kinda fucked this up.  What if you're passing from cpu to cpu/gpu process huh, what then!
 void classicPassLeft(states *state, int idxend)
 {
-    MPI_Sendrecv(&state[1], szState, struct_type, ranks[0], TAGS(tstep), 
-                                    &state[idxend-1], szState, struct_type, ranks[1], TAGS(tstep),
-                                    MPI_COMM_WORLD, &status); 
+    if (bCond[0])
+    {
+        MPI_Isend(&state[1], 1, struct_type, ranks[0], TAGS(tstep),
+                MPI_COMM_WORLD, &status);
+
+        MPI_recv(&state[idxend-1], 1, struct_type, TAGS(tstep), 
+                MPI_COMM_WORLD, &status);
+    }
+                                     
 }
 
 void classicPassRight(states *state, int idxend)
 {
-    MPI_Sendrecv(&state[idxend], szState, struct_type, ranks[2],
+    if (bCond[1]) MPI_Sendrecv(&state[idxend], szState, struct_type, ranks[2],
                                 TAGS(tstep), &state, szState, struct_type, ranks[0], TAGS(tstep),
                                 MPI_COMM_WORLD, &status); 
-}
-
-void classicPass(states *state, int idxend)
-{
-    if (!ranks[1]) classicPassLeft(states *state, int idxend); 
-
-    if (ranks[1] < lastproc) classicPassRight(states *state, int idxend);
 }
 
 //Classic Discretization wrapper.
@@ -52,23 +53,25 @@ double classicWrapper(states *state, double *xpts)
 {
     cout << "Classic Decomposition" << endl;
 
+    tstep = 1; 
     double t_eq = 0.0;
-    int tstep = 1; //Starts at 1 (Initial condition is 0)
     double twrite = freq - QUARTER*dt;
 
-    if (xgpu) // If there's no gpu assigned to the process this is 0.
+    if (xg) // If there's no gpu assigned to the process this is 0.
     {
-        int bks = xgpu/tpb;
-        int gpui = xcpu/2;
-        int gpuf = gpui + xgpu + 2; 
-        int idxend = gpui + 1;
+        int xc = xcpu/2, xcp = xc+1, xcpp = xc+2;
+        int xgp = xg+1, xgpp = xg+2;
+        int gpusize =  szState * xgpp;
+        int cpuzise = szState * xcpp;
 
-        states *state1 = &state[0];
-        states *state2 = &state[gpuf];
-        int gpubytes =  szState * (xgpu + 2));
+        states *state1, *state2;
+        cudaHostAlloc((void **)&state1, cpusize);
+        cudaHostAlloc((void **)&state2, cpusize);
+        memcpy(state1, state, cpusize)
+        memcpy(state1, state + xg + xc, cpusize)
 
-    // Four streams for four transfers to and from cpu.
-        cudaStream_t st1, st2, st3, st4);
+        // Four streams for four transfers to and from cpu.
+        cudaStream_t st1, st2, st3, st4;
         cudaStreamCreate(&st1);
         cudaStreamCreate(&st2);
         cudaStreamCreate(&st3);
@@ -76,27 +79,26 @@ double classicWrapper(states *state, double *xpts)
 
         states *dState, *hState;
 
-        cudaHostAlloc((void **)&hState, gpubytes);
-        cudaMalloc((void **)&dState, gpubytes);
+        cudaHostAlloc((void **)&hState, gpusize);
+        cudaMalloc((void **)&dState, gpusize;
 
         // Copy the initial conditions to the device array.
-        cudaMemcpy(dState, &state[gpui], gpubytes, cudaMemcpyHostToDevice);
+        cudaMemcpy(dState, state + xc, gpusize, cudaMemcpyHostToDevice);
 
         while (t_eq < t_end)
         {
-            classicStepCPU(state1, idxend);
-            classicStepCPU(state2, idxend);
-
+            classicStepCPU(state1, xcp);
+            classicStepCPU(state2, xcp);
             classicDecomp <<< bks,tpb >>> (dState, tstep);
 
-            // Host to device first.  Fills the 0 and end members of array
-            cudaMemcpyAsync(dState, &state1, szState, cudaMemcpyHostToDevice, st1);
-            cudaMemcpyAsync(dState, state2, szState, cudaMemcpyHostToDevice, st2);
-            cudaMemcpyAsync(state1, dState, szState, cudaMemcpyDeviceToHost, st3);
-            cudaMemcpyAsync(state2, dState, szState, cudaMemcpyDeviceToHost, st4);
+            // Host to device first.
+            cudaMemcpyAsync(dState, state1 + xc, szState, cudaMemcpyHostToDevice, st1);
+            cudaMemcpyAsync(dState + xgp, state2 + 1, szState, cudaMemcpyHostToDevice, st2);
+            cudaMemcpyAsync(state1 + xcp, dState + 1, szState, cudaMemcpyDeviceToHost, st3);
+            cudaMemcpyAsync(state2, dState + xg, szState, cudaMemcpyDeviceToHost, st4);
 
-            classicPassRight(state2, idxend);
-            classicPassLeft(state1, idxend);
+            classicPassRight(state2, xcp);
+            classicPassLeft(state1, xcp);
             
             // Increment Counter and timestep
             if (MODULA(tstep)) t_eq += dt;
@@ -107,19 +109,19 @@ double classicWrapper(states *state, double *xpts)
                 cudaMemcpy(&hState, dState, gpubytes, cudaMemcpyDeviceToHost);
 
                 #pragma omp parallel for
-                for (int k=1; k<idxend; k++) solutionOutput(state1[k]->Q[0], xpts[k], t_eq);
+                for (int k=1; k<xcp; k++) solutionOutput(state1[k]->Q[0], xpts[k], t_eq);
                 
                 #pragma omp parallel for
-                for (int k=1; k<idxend; k++) solutionOutput(state2[k]->Q[0], xpts[k+gpuf], t_eq);
+                for (int k=1; k<xcp; k++) solutionOutput(state2[k]->Q[0], xpts[k+xc+xg], t_eq);
 
                 #pragma omp parallel for
-                for (int k=1; k<xgpu; k++) solutionOutput(hState[k]->Q[0], xpts[k+gpui], t_eq);
+                for (int k=1; k<xgp; k++) solutionOutput(hState[k]->Q[0], xpts[k+xc], t_eq);
 
                 twrite += freq;
             }
         }
 
-        cudaMemcpy(&hState[gpui], dState, gpubytes, cudaMemcpyDeviceToHost);
+        cudaMemcpy(&hState, dState, gpubytes, cudaMemcpyDeviceToHost);
 
         cudaStreamDestroy(st1);
         cudaStreamDestroy(st2);
@@ -127,41 +129,44 @@ double classicWrapper(states *state, double *xpts)
         cudaStreamDestroy(st4);
 
         #pragma omp parallel for
-        for (int k=1; k<idxend; k++) solutionOutput(state1[k]->Q[0], xpts[k], t_eq);
+        for (int k=1; k<xcp; k++) solutionOutput(state1[k]->Q[0], xpts[k], t_eq);
         
         #pragma omp parallel for
-        for (int k=1; k<idxend; k++) solutionOutput(state2[k]->Q[0], xpts[k+gpuf], t_eq);
+        for (int k=1; k<xcp; k++) solutionOutput(state2[k]->Q[0], xpts[k+xc+xg], t_eq);
 
         #pragma omp parallel for
-        for (int k=1; k<xgpu; k++) solutionOutput(hState[k]->Q[0], xpts[k+gpui], t_eq);
+        for (int k=1; k<xgp; k++) solutionOutput(hState[k]->Q[0], xpts[k+xc], t_eq);
 
         cudaFree(dState);
         cudaFreeHost(hState);
-
+        cudaFreeHost(state1);
+        cudaFreeHost(state2);
     }
     else
     {
-
         while (t_eq < t_end)
         {
+            int xcp = xcpu + 1;
 
-            classicStepCPU(state, xcpu + 1);
+            classicStepCPU(state, xcp);
             if (MODULA(tstep)) t_eq += dt;
             tstep++
-            classicPass(state, xcpu + 1);
+
+            classicPassRight(state, xcp);
+            classicPassLeft(state, xcp);)
 
             if (t_eq > twrite)
             {
 
                 #pragma omp parallel for
-                for (int k=1; k<xcpu+1; k++) solutionOutput(state[k]->Q[0], xpts[k], t_eq);
+                for (int k=1; k<xcp; k++) solutionOutput(state[k]->Q[0], xpts[k], t_eq);
 
                 twrite += freq;
             }
             
         }
         #pragma omp parallel for
-        for (int k=1; k<xcpu+1; k++) solutionOutput(state[k]->Q[0], xpts[k], t_eq);
+        for (int k=1; k<xcp; k++) solutionOutput(state[k]->Q[0], xpts[k], t_eq);
     }
     return t_eq;
 }

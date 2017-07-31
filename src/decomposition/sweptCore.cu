@@ -226,10 +226,11 @@ sweptWrapper(const int bks, int tpb, const int dv, const double dt, const double
 
     t_eq = t_fullstep;
 
-    cudaStream_t st1, st2, st3;
+    cudaStream_t st1, st2, st3 st4;
     cudaStreamCreate(&st1);
     cudaStreamCreate(&st2);
     cudaStreamCreate(&st3);
+    cudaStreamCreate(&st4);
 
     //Split Diamond Begin------
 

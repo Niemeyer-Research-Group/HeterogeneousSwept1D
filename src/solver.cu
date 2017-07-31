@@ -16,9 +16,16 @@
 #include "decomposition/classicCore.h"
 // #include "decomposition/sweptCore.h"
 
+void exitMerge()
+{
+    system("json-merge path/to/jsons/*.json")
+}
+
 int main(int argc, char *argv[])
 {   
     makeMPI(argc, &argv);
+
+    if (!rank[1]) atexit(exitMerge);
 
     getDeviceInformation();
 
@@ -124,8 +131,6 @@ int main(int argc, char *argv[])
         cudaEventDestroy( stop );
         cudaDeviceReset();
     }
-
-    if (rank == 0) system("json-merge path/to/jsons/*.json")
 
 	return 0;
 }

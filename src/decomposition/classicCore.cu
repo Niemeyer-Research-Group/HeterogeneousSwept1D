@@ -27,15 +27,14 @@ void classicStepCPU(states *state, int numx)
 }
 
 
-//No I kinda fucked this up.  What if you're passing from cpu to cpu/gpu process huh, what then!
 void classicPassLeft(states *state, int idxend)
 {
     if (bCond[0])
     {
-        MPI_Isend(&state[1], 1, struct_type, ranks[0], TAGS(tstep),
-                MPI_COMM_WORLD, &status);
+        MPI_Bsend(&state[1], 1, struct_type, ranks[0], TAGS(tstep),
+                MPI_COMM_WORLD);
 
-        MPI_recv(&state[idxend-1], 1, struct_type, TAGS(tstep), 
+        MPI_recv(&state[0], 1, struct_type, ranks[0], TAGS(tstep*2), 
                 MPI_COMM_WORLD, &status);
     }
                                      
@@ -43,15 +42,22 @@ void classicPassLeft(states *state, int idxend)
 
 void classicPassRight(states *state, int idxend)
 {
-    if (bCond[1]) MPI_Sendrecv(&state[idxend], szState, struct_type, ranks[2],
-                                TAGS(tstep), &state, szState, struct_type, ranks[0], TAGS(tstep),
-                                MPI_COMM_WORLD, &status); 
+    if (bCond[1]) 
+    {
+        MPI_Bsend(&state[idxend-1], 1, struct_type, ranks[2], TAGS(tstep*2),
+                MPI_COMM_WORLD);
+
+        MPI_recv(&state[idxend], 1, struct_type, ranks[2], TAGS(tstep), 
+                MPI_COMM_WORLD, &status);
+    }
 }
 
 //Classic Discretization wrapper.
 double classicWrapper(states *state, double *xpts)
 {
     cout << "Classic Decomposition" << endl;
+    int *bpt, bsize = 50*szState;
+    MPI_Buffer_attach(malloc(bsize), bsize);
 
     tstep = 1; 
     double t_eq = 0.0;
@@ -68,7 +74,7 @@ double classicWrapper(states *state, double *xpts)
         cudaHostAlloc((void **)&state1, cpusize);
         cudaHostAlloc((void **)&state2, cpusize);
         memcpy(state1, state, cpusize)
-        memcpy(state1, state + xg + xc, cpusize)
+        memcpy(state2, state + xg + xc, cpusize)
 
         // Four streams for four transfers to and from cpu.
         cudaStream_t st1, st2, st3, st4;
@@ -157,10 +163,8 @@ double classicWrapper(states *state, double *xpts)
 
             if (t_eq > twrite)
             {
-
                 #pragma omp parallel for
                 for (int k=1; k<xcp; k++) solutionOutput(state[k]->Q[0], xpts[k], t_eq);
-
                 twrite += freq;
             }
             

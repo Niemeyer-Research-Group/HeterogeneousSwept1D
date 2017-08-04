@@ -16,6 +16,7 @@
 #include "decomposition/classicCore.h"
 // #include "decomposition/sweptCore.h"
 
+// This feels like a bad idea.
 void exitMerge()
 {
     system("json-merge path/to/jsons/*.json")
@@ -39,31 +40,17 @@ int main(int argc, char *argv[])
 
     parseArgs(inJ, argc, &argv);
     initArgs(inJ);
-
-    hBound[0] = {};
-    hBound[1] = {};
     
     delegateDomain(double *xpts, states *state);
 
     for (int k=0; k<dv; k++) initialState(inJ, &state[k]->Q[0]);
 
-    const int dv = atoi(argv[1]); //Number of spatial points
-	const int tpb = atoi(argv[2]); //Threads per Block
-    const double dt = atof(argv[3]);
-	const double tf = atof(argv[4]) - QUARTER*dt; //Finish time
-    const double freq = atof(argv[5]);
-    const int scheme = atoi(argv[6]); //2 for Alternate, 1 for GPUShared, 0 for Classic
     const int bks = dv/tpb; //The number of blocks
-    const double dx = lx/((REAL)dv-TWO);
-    char const *prec;
-    prec = (sizeof(REAL)<6) ? "Single": "Double";
-
-    eCheckIn(dv, tpb, argc); //Initial error checking.
 
     // We always know that there's some eqConsts struct that we need to 
     // to put into constant memory.
     // PROBABLY NEED TO CHECK TO MAKE SURE THERE"S A GPU FIRST.
-    if (gpuYes) cudaMemcpyToSymbol(deqConsts,&heqConsts,sizeof(eqConsts));
+    if (xgpu) cudaMemcpyToSymbol(deqConsts,&heqConsts,sizeof(eqConsts));
 
     // Start the counter and start the clock.
     MPI_Barrier(MPI_COMM_WORLD);
@@ -76,6 +63,7 @@ int main(int argc, char *argv[])
     // Call the correct function with the correct algorithm.
     cout << scheme << " " ;
     double tfm;
+
     if (scheme)
     {
         tfm = sweptWrapper(bks, tpb, dv, dt, tf, scheme-1, IC, T_final, freq, fwr);
@@ -90,7 +78,7 @@ int main(int argc, char *argv[])
 	// Show the time and write out the final condition.
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
-	cudaEventElapsedTime( &timed, start, stop);
+	cudaEventElapsedTime(&timed, start, stop);
 
     cudaError_t error = cudaGetLastError();
     if(error != cudaSuccess)
@@ -120,7 +108,7 @@ int main(int argc, char *argv[])
         timing[dv][tpb][gpuA] = per_ts;
 
         std::ofstream timejson(argv[2]);
-        timejson << timing;
+        timejson << std::setw(4) << timing << std::endl;
     }
 
     if (xgpu)

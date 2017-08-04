@@ -137,7 +137,7 @@ void upTriangleCPU(states *state)
 {
     for (int k=1; k<ht[1]; k++)
     {
-        for (int n=k, n<bsae-k, n++)
+        for (int n=k, n<base-k, n++)
         {
             stepUpdate(state, n, tstep);
         }
@@ -147,7 +147,8 @@ void upTriangleCPU(states *state)
 
 void downTriangleCPU(states *state)
 {
-
+    for (int k=1; k<ht[1]; k++)
+        for ()
 }
 
 void wholeDiamondCPU(states *state)
@@ -157,7 +158,7 @@ void wholeDiamondCPU(states *state)
 
     for (int k=1; k<ht[1]; k++)
     {
-        for (int n=k, n<bsae-k, n++)
+        for (int n=k, n<base-k, n++)
         {
             stepUpdate(state, n, tstep);
         }
@@ -172,7 +173,7 @@ void splitDiamondCPU(states *state)
 
     for (int k=1; k<ht[1]; k++)
     {
-        for (int n=k, n<bsae-k, n++)
+        for (int n=k, n<base-k, n++)
         {
             stepUpdate(state, n, tstep);
         }
@@ -183,6 +184,13 @@ void splitDiamondCPU(states *state)
 
 void passSwept(states *state, int tpb, int rank, bool dr)
 {
+
+    int kr = (tstep/2 & 1); //Probably unnecessary.
+    MPI_Isend(&state[idxend-1], tpbp struct_type, ranks[2], TAGS(tstep),
+            MPI_COMM_WORLD, &req[kr]);
+
+    MPI_recv(&state[idxend], tpbp, struct_type, ranks[2], TAGS(tstep), 
+            MPI_COMM_WORLD, &status);
 
 }
 

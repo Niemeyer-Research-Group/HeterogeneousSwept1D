@@ -28,13 +28,13 @@ void classicStepCPU(states *state, int numx)
 
 
 void classicPassLeft(states *state, int idxend)
-{
+{   
     if (bCond[0])
     {
-        MPI_Bsend(&state[1], 1, struct_type, ranks[0], TAGS(tstep),
-                MPI_COMM_WORLD);
+        MPI_Isend(&state[1], 1, struct_type, ranks[0], TAGS(tstep),
+                MPI_COMM_WORLD, &req[0]);
 
-        MPI_recv(&state[0], 1, struct_type, ranks[0], TAGS(tstep*2), 
+        MPI_recv(&state[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
                 MPI_COMM_WORLD, &status);
     }
                                      
@@ -44,8 +44,8 @@ void classicPassRight(states *state, int idxend)
 {
     if (bCond[1]) 
     {
-        MPI_Bsend(&state[idxend-1], 1, struct_type, ranks[2], TAGS(tstep*2),
-                MPI_COMM_WORLD);
+        MPI_Isend(&state[idxend-1], 1, struct_type, ranks[2], TAGS(tstep+100),
+                MPI_COMM_WORLD, &req[1]);
 
         MPI_recv(&state[idxend], 1, struct_type, ranks[2], TAGS(tstep), 
                 MPI_COMM_WORLD, &status);
@@ -57,7 +57,7 @@ double classicWrapper(states *state, double *xpts)
 {
     cout << "Classic Decomposition" << endl;
     int *bpt, bsize = 50*szState;
-    MPI_Buffer_attach(malloc(bsize), bsize);
+    // MPI_Buffer_attach(malloc(bsize), bsize);
 
     tstep = 1; 
     double t_eq = 0.0;
@@ -93,18 +93,30 @@ double classicWrapper(states *state, double *xpts)
 
         while (t_eq < t_end)
         {
+            classicDecomp <<< bks,tpb >>> (dState, tstep);
             classicStepCPU(state1, xcp);
             classicStepCPU(state2, xcp);
-            classicDecomp <<< bks,tpb >>> (dState, tstep);
 
             // Host to device first.
-            cudaMemcpyAsync(dState, state1 + xc, szState, cudaMemcpyHostToDevice, st1);
-            cudaMemcpyAsync(dState + xgp, state2 + 1, szState, cudaMemcpyHostToDevice, st2);
-            cudaMemcpyAsync(state1 + xcp, dState + 1, szState, cudaMemcpyDeviceToHost, st3);
-            cudaMemcpyAsync(state2, dState + xg, szState, cudaMemcpyDeviceToHost, st4);
+            # pragma omp parallel sections num_threads(3)
+            {
+                #pragma omp section
+                {
+                    cudaMemcpyAsync(dState, state1 + xc, szState, cudaMemcpyHostToDevice, st1);
+                    cudaMemcpyAsync(dState + xgp, state2 + 1, szState, cudaMemcpyHostToDevice, st2);
+                    cudaMemcpyAsync(state1 + xcp, dState + 1, szState, cudaMemcpyDeviceToHost, st3);
+                    cudaMemcpyAsync(state2, dState + xg, szState, cudaMemcpyDeviceToHost, st4);
+                }
+                #pragma omp section
+                {
+                    classicPassRight(state2, xcp);
+                }
+                #pragma omp section
+                {
+                    classicPassLeft(state1, xcp);
+                }
+            }
 
-            classicPassRight(state2, xcp);
-            classicPassLeft(state1, xcp);
             
             // Increment Counter and timestep
             if (MODULA(tstep)) t_eq += dt;
@@ -114,7 +126,7 @@ double classicWrapper(states *state, double *xpts)
             {
                 cudaMemcpy(&hState, dState, gpubytes, cudaMemcpyDeviceToHost);
 
-                #pragma omp parallel for
+                #pragma omp parallel for 
                 for (int k=1; k<xcp; k++) solutionOutput(state1[k]->Q[0], xpts[k], t_eq);
                 
                 #pragma omp parallel for

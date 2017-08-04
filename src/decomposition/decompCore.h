@@ -3,20 +3,26 @@
 
 #include <mpi.h>
 #include <omp.h>
+#include <algorithm> //string utility
 #include "json.hpp"
 #include "dummyheader.h"
 
 #define TAGS(x) x & 32767
 
+#define CEIL(x, y)  (x + y - 1) / y 
+
 // MPI process properties
 MPI_Status status;
 MPI_Datatype struct_type;
+MPI_Request req[2];
 int ranks[3];
 int nprocs;
 int lastproc;
 
 // Topology
-int nthreads, xgpu, xcpu;
+int nThreads, nWaves, nGpu; 
+int xg, xcpu;
+double gpuA;
 
 // Geometry
 int tpb, tpbp, base;
@@ -24,7 +30,7 @@ int ht, htm, htp;
 int szState;
 
 // Iterator
-double t_end, freq, dt;
+double tf, freq, dt;
 int tstep=1;
 bool bCond[2] = {true, true}; // Initialize passing both sides.
 

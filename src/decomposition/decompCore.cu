@@ -24,30 +24,37 @@ void makeMPI(int argc, char* argv[])
 
 void getDeviceInformation();
 {
-    cudaGetDeviceCount(devcnt);
+    cudaGetDeviceCount(nGpu);
 
-    if (devcnt)
+    if (nGpu)
     {
         cudaGetDeviceProp(&props);
     }
     
     nthreads = omp_get_num_procs();
+
+    // From this I want what GPUs each proc can see, and how many threads they can make
+    // This may require nvml to get the UUID of the GPUS, pass them all up to the 
+    // Master proc to decide which proc gets which gpu.
 }
 
 void delegateDomain()
 {
     // Set shared memory banks to double if REAL is double.
-    if (sizeof(REAL)>6 && gpuYes) 
+    if (sizeof(REAL)>6 && xgpu) 
     {
         cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
     }
 }
 
+/* 
+    Takes any extra command line arguments which override json default args and inserts 
+    them into the json type which will be read into variables in the next step.
+
+    Arguments are key, value pairs all lowercase keys, no dash in front of arg.
+*/
 void parseArgs(json inJ, int argc, char *argv[]);
 {
-    // Will include div, tpb, type (classic vs swept), and file outputs.)
-    // The numbers aren't right yet.
-
     if (argc>6)
     {
         for (int k=6; k<argc; k+=2)
@@ -69,10 +76,6 @@ void parseArgs(json inJ, int argc, char *argv[]);
 // // Iterator
 // int tstep=1;
 
-// // devicepointers
-// states *dStateBase;
-// states *dState[4];
-
 void initArgs(json inJ);
 {
     try{
@@ -83,9 +86,19 @@ void initArgs(json inJ);
         echeckIn(0, "Your input json is missing a key element.");
     }
 
-
     tpb = inJ["tpb"];
-    tpb = inJ[]
+    gpuA = inJ["gpuA"];
+    dt = inJ["dt"];
+    tf = inJ["tf"];
+    freq = inJ["freq"];
+    nX = inJ["nX"];
+
+    xg = ((tpb * gpuA)/32) * 32;  // Number of gpu spatial points.
+    xcpu = nThreads * tpb;
+    xWave = (nprocs * xcpu + nGpu * xg); // Number of points on a device x number of devices.
+    nWaves = CEIL(xWave, nX);
+    nX = nWaves*xWave; // Now it's an even wave of spatial points.
+    
     enum
     {
         // If BCTYPE == "Dirichlet"
@@ -97,49 +110,6 @@ void initArgs(json inJ);
 
 
 }
-
-
-void eCheckIn (type typer , char *string)// int argc?
-{
-    // 0 type error, error string is input.
-    if (!typer)
-    {
-        if (!rank) std::cout << string << std::endl;
-        exit(-1);
-    }
-    if (argc < 6)
-	{
-        if (rank == 0)
-        {
-        std::cout << "NOT ENOUGH ARGUMENTS:" << std::endl;
-		std::cout << "The Program takes 8 inputs, #Divisions, #Threads/block, deltat, finish time, output frequency..." << std::endl;
-        std::cout << "Algorithm type, Variable Output File, Timing Output File (optional)" << std::endl;
-        }
-        exit(-1);
-	}
-
-	if ((dv & (tpb-1) != 0) || (tpb&31) != 0)
-    {
-        if (rank == 0)
-        {
-        std::cout << "INVALID NUMERIC INPUT!! "<< std::endl;
-        std::cout << "2nd ARGUMENT MUST BE A POWER OF TWO >= 32 AND FIRST ARGUMENT MUST BE DIVISIBLE BY SECOND" << std::endl;
-        }
-        exit(-1);
-    }
-
-
-    if (dimz.dt_dx > .21)
-    {
-        if (rank == 0)
-        {
-        cout << "The value of dt/dx (" << dimz.dt_dx << ") is too high.  In general it must be <=.21 for stability." << endl;
-        }
-        exit(-1);
-    }
-
-}
-
 // THIS IS GREAT BUT YOU CAN'T PASS IT BACK BECAUSE TYPES!
 void solutionOutput(REALthree outState, REAL tstamp, REAL xpt)
 {

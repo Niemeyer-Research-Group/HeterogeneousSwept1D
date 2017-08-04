@@ -59,17 +59,22 @@ double lx; // Length of domain.
 
 _host__ void equationSpecificArgs(json inJ)
 {
-    lx = inJ["lx"];
     heqConsts.gammma = inJ["gamma"];
     heqConsts.mgammma = heqConsts.gammma - 1;
-    // Here's a significant problem.  I don't know what dx will be because
-    // div is flexible because it needs to make sense!!
+    REAL rhoL = inJ["rhoL"];
+    REAL vL = inJ["vL"];
+    REAL pL = inJ["pL"];
+    REAL rhoR = inJ["rhoR"];
+    REAL vR = inJ["vR"];
+    REAL pR = inJ["pR"];
+    hBounds[0] = {rhoL, vL*rhoL, pL/heqConsts.mgamma + HALF * rhoL * vL * vL};
+    hBounds[1] = {rhoR, vR*rhoR, pR/heqConsts.mgamma + HALF * rhoR * vR * vR};
 }
 
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(REALthree *intl, double xpt)
+__host__ void initialState(REALthree *intl, double xpt, char ic)
 {
     if (ic == "PARTITION")
     {

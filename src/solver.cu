@@ -16,6 +16,7 @@
 #include "decomposition/classicCore.h"
 #include "decomposition/sweptCore.h"
 
+<<<<<<< Updated upstream
 /*
     TOOD
     - Swept always passes so what to do about bCond.
@@ -32,6 +33,8 @@
 //     system("json-merge path/to/jsons/*.json")
 // }
 
+=======
+>>>>>>> Stashed changes
 int main(int argc, char *argv[])
 {   
     makeMPI(argc, &argv);
@@ -54,6 +57,8 @@ int main(int argc, char *argv[])
 
     parseArgs(inJ, argc, &argv);
     initArgs(inJ);
+
+    //Malloc it!
     
     delegateDomain(double *xpts, states *state);
 

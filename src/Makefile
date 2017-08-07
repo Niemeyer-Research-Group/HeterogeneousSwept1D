@@ -13,6 +13,8 @@ EQDIR := $(PROJECTDIR)equations
 EQDIRS := ${sort ${dir ${wildcard ${EQDIR}/*/}}}
 EQHEAD = $(EQDIRS)*.h
 APPOBJ := $(OUTDIR)/${lastword ${subst /, ,$(EQDIRS)}}
+CONFS = $(PROJECTDIR)eqconf.conf
+EQS=`cat $(CONFS)`
 
 # MPICFLAGS=-I${MPI_HOME}/include
 # CUDACFLAGS=-I${CUDA_INSTALL_PATH}/include
@@ -25,17 +27,17 @@ INC := -I$(PROJECTDIR)utilities -I$(PROJECTDIR)equations -I/usr/include/mpi
 
 CUDAFLAGS := $(GENCODE) $(NATLIB) $(INC) $(CROSSLIB) $(PARALLELLIB) 
 
-# .PHONY: printvar
+.PHONY: printvar 
 
-# printvar:
-# 	@echo $(EQHEAD)
+printvar:
+	@echo $(EQHEAD) $(PREP) $(EQS)
 
-default: $(APPOBJ)
+# default: $(APPOBJ)
 
 # Rule to write "#include $(EQHEAD)" in an intermediate include file.
 
-$(APPOBJ): $(PROJECTDIR)solver.cu $(EQHEAD)
-	$(NVCC) -o $@ $< $(CUDAFLAGS)
+# $(APPOBJ): $(PROJECTDIR)solver.cu $(EQHEAD)
+# 	$(NVCC) -o $@ $< $(CUDAFLAGS)
 
 # $(OUTDIR)/euler.o:	$(EQDIR)/Euler/EulerDevice.cu
 #	$(NVCC) -o $@ $< $(CUDAFLAGS)

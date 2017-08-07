@@ -2,6 +2,9 @@
     The Classic Functions for the stencil operation
 */
 
+// Perhaps http://www.cplusplus.com/reference/unordered_map/unordered_map/insert/
+// For json.
+
 #include "classicCore.h"
 
 /** 
@@ -19,7 +22,6 @@ __global__ void classicStep(states *state, int ts)
 
 void classicStepCPU(states *state, int numx)
 {
-    #pragma omp parallel for
     for (int k=1; k<numx; k++)
     {
         stepUpdate(state, k, tstep)
@@ -35,7 +37,7 @@ void classicPassLeft(states *state, int idxend)
                 MPI_COMM_WORLD, &req[0]);
 
         MPI_recv(&state[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
-                MPI_COMM_WORLD, &status);
+                MPI_COMM_WORLD, MPI_STATUS_IGNORE); //????
     }
                                      
 }
@@ -48,18 +50,16 @@ void classicPassRight(states *state, int idxend)
                 MPI_COMM_WORLD, &req[1]);
 
         MPI_recv(&state[idxend], 1, struct_type, ranks[2], TAGS(tstep), 
-                MPI_COMM_WORLD, &status);
+                MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
     }
 }
 
-//Classic Discretization wrapper.
-double classicWrapper(states *state, double *xpts)
+// Still struggling with the idea of the local vs parameter arrays.
+// Classic Discretization wrapper.
+double classicWrapper(states *state, double *xpts, int *tstep)
 {
     cout << "Classic Decomposition" << endl;
-    int *bpt, bsize = 50*szState;
-    // MPI_Buffer_attach(malloc(bsize), bsize);
 
-    tstep = 1; 
     double t_eq = 0.0;
     double twrite = freq - QUARTER*dt;
 
@@ -71,10 +71,22 @@ double classicWrapper(states *state, double *xpts)
         int cpuzise = szState * xcpp;
 
         states *state1, *state2;
+        // Do not like
         cudaHostAlloc((void **)&state1, cpusize);
         cudaHostAlloc((void **)&state2, cpusize);
+        // Do not like! Or can I free up state here!
         memcpy(state1, state, cpusize)
         memcpy(state2, state + xg + xc, cpusize)
+
+        states *dState, *hState;
+
+        
+        cudaMalloc((void **)&dState, gpusize;
+        // Copy the initial conditions to the device array.
+        cudaMemcpy(dState, state + xc, gpusize, cudaMemcpyHostToDevice);
+
+        free(state);
+        cudaHostAlloc((void **)&hState, gpusize);
 
         // Four streams for four transfers to and from cpu.
         cudaStream_t st1, st2, st3, st4;
@@ -83,20 +95,22 @@ double classicWrapper(states *state, double *xpts)
         cudaStreamCreate(&st3);
         cudaStreamCreate(&st4);
 
-        states *dState, *hState;
-
-        cudaHostAlloc((void **)&hState, gpusize);
-        cudaMalloc((void **)&dState, gpusize;
-
-        // Copy the initial conditions to the device array.
-        cudaMemcpy(dState, state + xc, gpusize, cudaMemcpyHostToDevice);
-
         while (t_eq < t_end)
         {
             classicDecomp <<< bks,tpb >>> (dState, tstep);
-            classicStepCPU(state1, xcp);
-            classicStepCPU(state2, xcp);
 
+            #pragma omp parallel sections num_threads(2)
+            {
+                #pragma omp section
+                {
+                    classicStepCPU(state1, xcp);
+                }
+                #pragma omp section
+                {
+                    classicStepCPU(state2, xcp);
+                }
+            }
+            
             // Host to device first.
             # pragma omp parallel sections num_threads(3)
             {
@@ -170,8 +184,17 @@ double classicWrapper(states *state, double *xpts)
             if (MODULA(tstep)) t_eq += dt;
             tstep++
 
-            classicPassRight(state, xcp);
-            classicPassLeft(state, xcp);)
+            #pragma omp parallel sections num_threads(2)
+            {
+                #pragma omp section
+                {
+                    classicPassRight(state, xcp);
+                }
+                #pragma omp section
+                {
+                    classicPassLeft(state, xcp);
+                }
+            }
 
             if (t_eq > twrite)
             {

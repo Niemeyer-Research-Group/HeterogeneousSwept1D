@@ -14,21 +14,35 @@
 // Two primary strategies used in this code: global variables and templating using structures.
 
 #include "decomposition/classicCore.h"
-// #include "decomposition/sweptCore.h"
+#include "decomposition/sweptCore.h"
 
-// This feels like a bad idea.
-void exitMerge()
-{
-    system("json-merge path/to/jsons/*.json")
-}
+/*
+    TOOD
+    - Swept always passes so what to do about bCond.
+    - Make sure all struct variables are correctly initialized
+    - Watch cluster video, try to run something like the Test bench
+    - Write json for workstation situation.
+    - Write the cluster explorer code.
+    - Using an npm js solution for merging is a bad idea, try something else.
+*/
+
+// // This feels like a bad idea.
+// void exitMerge()
+// {
+//     system("json-merge path/to/jsons/*.json")
+// }
 
 int main(int argc, char *argv[])
 {   
     makeMPI(argc, &argv);
 
-    if (!rank[1]) atexit(exitMerge);
+    // if (!ranks[1]) atexit(exitMerge);
+
+    // Maybe using my new script and imporitng another json instead of this.
 
     getDeviceInformation();
+
+    // Maybe not declaring and mallocing right now.
 
     states *state;
     double *xpts;
@@ -52,6 +66,7 @@ int main(int argc, char *argv[])
     // PROBABLY NEED TO CHECK TO MAKE SURE THERE"S A GPU FIRST.
     if (xgpu) cudaMemcpyToSymbol(deqConsts,&heqConsts,sizeof(eqConsts));
 
+    int tstep = 1;
     // Start the counter and start the clock.
     MPI_Barrier(MPI_COMM_WORLD);
     cudaEvent_t start, stop;
@@ -70,7 +85,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        tfm = classicWrapper(state, xpts);
+        tfm = classicWrapper(state, xpts, &tstep);
     }
 
     endMPI();

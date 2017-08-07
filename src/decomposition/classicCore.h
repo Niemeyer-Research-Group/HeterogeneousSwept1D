@@ -13,6 +13,6 @@ void classicPassRight(states *state, int idxend);
 
 void classicPass(states *state, int idxend);
 
-classicWrapper(states *state, double *xpts);
+classicWrapper(states *state, double *xpts, int *tstep);
 
 #endif

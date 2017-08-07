@@ -11,34 +11,36 @@
 
 #define CEIL(x, y)  (x + y - 1) / y 
 
+/*
+    Globals needed to execute simulation.  Nothing here is specific to an individual equation
+*/
+
 // MPI process properties
-MPI_Status status;
 MPI_Datatype struct_type;
 MPI_Request req[2];
-int ranks[3];
-int nprocs;
-int lastproc;
+int lastproc, nprocs, ranks[3];
 
+struct globalism {
 // Topology
-int nThreads, nWaves, nGpu; 
-int xg, xcpu;
-double gpuA;
+    int nThreads, nWaves, nGpu, nX;  
+    int xg, xcpu, xWave;
+    bool hasGpu;
+    double gpuA;
 
 // Geometry
-int tpb, tpbp, base;
-int ht, htm, htp;
-int szState;
+    int tpb, tpbp, base;
+    int ht, htm, htp;
+    int szState;
 
 // Iterator
-double tf, freq, dt;
-int tstep=1;
-bool bCond[2] = {true, true}; // Initialize passing both sides.
+    double tf, freq, dt, dx, lx;
+    bool bCond[2] = {true, true}; // Initialize passing both sides.
+};
 
-// Cuda Device Prop props;
+globalism cGlob;
 
 json solution;
 json timing;
-
 
 void makeMPI(int argc, char* argv[]);
 

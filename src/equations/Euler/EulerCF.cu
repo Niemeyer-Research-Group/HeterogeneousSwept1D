@@ -69,12 +69,15 @@ _host__ void equationSpecificArgs(json inJ)
     REAL pR = inJ["pR"];
     hBounds[0] = {rhoL, vL*rhoL, pL/heqConsts.mgamma + HALF * rhoL * vL * vL};
     hBounds[1] = {rhoR, vR*rhoR, pR/heqConsts.mgamma + HALF * rhoR * vR * vR};
+    REAL dtx = inJ["dt"];
+    REAL dxx = inJ["dx"];
+    heqConsts.dt_dx = dtx/dxx;
 }
 
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(REALthree *intl, double xpt, char ic)
+__host__ void initialState(REALthree *intl, double xpt, double lx, char ic)
 {
     if (ic == "PARTITION")
     {

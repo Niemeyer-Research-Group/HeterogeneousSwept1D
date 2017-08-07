@@ -13,13 +13,8 @@ void makeMPI(int argc, char* argv[])
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
-    szState = sizeof(states);
-    base = tpb+2;
-    tpbp = tpb+1;
-    ht = tpb/2;
-    htm = ht-1;
-	ranks[0] = (ranks[1]) ? ranks[1]-1 : lastproc; 
-    ranks[2] = (ranks[1] == nprocs) ? 0 : ranks[1]+1;
+	ranks[0] = (ranks[1]-1) % nprocs;
+    ranks[2] = (ranks[1]+1) % nprocs;
 }
 
 void getDeviceInformation();
@@ -63,47 +58,54 @@ void parseArgs(json inJ, int argc, char *argv[]);
         }
     }
 }
-// // Topology
-// int devcnt;
-// int nthreads;
-
-// // Geometry
-// int tpb, tpbp, base;
-// int dv, bk;
-// int ht, htm, htp;
-// int szState;
-
-// // Iterator
-// int tstep=1;
 
 void initArgs(json inJ);
 {
-    try{
-        equationSpecificArgs(json inJ); 
-    }
-    except
-    {
-        echeckIn(0, "Your input json is missing a key element.");
-    }
 
-    tpb = inJ["tpb"];
-    gpuA = inJ["gpuA"];
-    dt = inJ["dt"];
-    tf = inJ["tf"];
-    freq = inJ["freq"];
-    nX = inJ["nX"];
+    cGlob.lx = inJ["lx"]
+    cGlob.szState = sizeof(states);
+    cGlob.base = cGlob.tpb+2;
+    cGlob.tpbp = cGlob.tpb+1;
+    cGlob.ht = cGlob.tpb/2;
+    cGlob.htm = cGlob.ht-1;
+    cGlob.tpb = inJ["tpb"];
+    cGlob.gpuA = inJ["gpuA"];
+    cGlob.dt = inJ["dt"];
+    cGlob.tf = inJ["tf"];
+    cGlob.freq = inJ["freq"];
+    cGlob.nX = inJ["nX"];
 
-    xg = ((tpb * gpuA)/32) * 32;  // Number of gpu spatial points.
-    xcpu = nThreads * tpb;
-    xWave = (nprocs * xcpu + nGpu * xg); // Number of points on a device x number of devices.
-    nWaves = CEIL(xWave, nX);
-    nX = nWaves*xWave; // Now it's an even wave of spatial points.
+    cGlob.xg = ((cGlob.tpb * cGlob.gpuA)/32) * 32;  // Number of gpu spatial points.
+    cGlob.xcpu = cGlob.nThreads * cGlob.tpb;
+    cGlob.xWave = (nprocs * cGlob.xcpu + cGlob.nGpu * cGlob.xg); // Number of points on a device x number of devices.
+    cGlob.nWaves = CEIL(cGlob.xWave, cGlob.nX);
+    cGlob.nX = cGlob.nWaves*cGlob.xWave; // Now it's an even wave of spatial points.
+
+    cGlob.tpbp = cGlob.tpb + 1;
+    cGlob.base = cGlob.tpb + 2;
+    cGlob.ht = cGlob.tpb/2;
+    cGlob.htm = cGlob.ht - 1;
+    cGlob.htp = cGlob.ht + 1;
+
+    cGlob.dx = cGlob.lx/(cGlob.nX - 2.0); // Spatial step
+    inJ["dx"] = cGlob.dx; // To send back to equation folder.  It aay need it, it may not.
+
+    equationSpecificArgs(json inJ); 
+
+    // Maybe here assign gpus
+    // return bool
+    // hasGpu = gpuAssign();
+
+    cGlob.xg = cGlob.xg * cGlob.hasGpu;
+    cGlob.xtot = cGlob.xcpu + cGlob.xg + cGlob.hasGpu*4 + 2; // cpu points + gpu points + inner ghosts + outer ghosts
+
     
+    // Swept Always Passes!
     enum
     {
         // If BCTYPE == "Dirichlet"
-        if (!rank) bCond[0] = false;
-        if (rank == lastproc) bCond[1] = false;
+        if (!ranks[1]) cGlob.bCond[0] = false;
+        if (ranks[1] == lastproc) cGlob.bCond[1] = false;
         // If BCTYPE == "Periodic"
             // Don't do anything.
     }
@@ -111,6 +113,7 @@ void initArgs(json inJ);
 
 }
 // THIS IS GREAT BUT YOU CAN'T PASS IT BACK BECAUSE TYPES!
+// Maybe.
 void solutionOutput(REALthree outState, REAL tstamp, REAL xpt)
 {
     for (int k=0; k<NVARS; k++)

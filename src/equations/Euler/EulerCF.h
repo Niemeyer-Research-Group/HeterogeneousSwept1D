@@ -64,7 +64,7 @@ struct eqConsts {
 };
 
 //---------------// 
-struct states{
+struct states {
     REALthree Q[2]; // Full Step, Midpoint step state variables
     REAL Pr; // Pressure ratio
 };
@@ -81,7 +81,6 @@ std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //------
 __constant__ eqConsts deqConsts;  //---------------// 
 eqConsts heqConsts; //---------------// 
 REALthree hBound[2]; // Boundary Conditions
-double lx; // Length of domain.
 
 /*
 	============================================================

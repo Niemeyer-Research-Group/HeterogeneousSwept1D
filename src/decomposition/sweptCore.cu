@@ -13,9 +13,6 @@
 
 #include "sweptCore.h"
 
-static int offs[2];
-static int offr[2];
-
 /**
     Builds an upright triangle using the swept rule.
 
@@ -141,9 +138,9 @@ wholeDiamond(states *state, int tstep)
 
 void upTriangleCPU(states *state)
 {
-    for (int k=2; k<htp; k++)
+    for (int k=2; k<cGlob.htp; k++)
     {
-        for (int n=k, n<(base-k), n++)
+        for (int n=k, n<(cGlob.base-k), n++)
         {
             stepUpdate(state, n, tstep + (k-1));
         }
@@ -163,22 +160,31 @@ void downTriangleCPU(states *state)
     //Apply BC
 }
 
-void wholeDiamondCPU(states *state)
+// Now you can call this on a split for all proc/threads except (0,0)
+void wholeDiamondCPU(states *state, int tid, int endThread=-1)
 {
-    for (int k=ht; k>1; k--)
+    for (int k=cGlob.ht; k>1; k--)
     {
-        for (int n=k; n<(base-k); n++)
+        for (int n=k; n<(cGlob.base-k); n++)
         {
             stepUpdate(state, n, tstep + (k-1));
         }
     }
 
-    //APPLY BC HERE!  That's why it doesn't go to zero
-    //IF OMP THREAD AND MPI PROC ARE rank (0,0) or (end,end)
+// If BC = DIRICHILET!
+    int zi = 1;
+    int zj = cGlob.tpbp;
+    if (rank == 0 && tid == 0) zi = 2;
+    if (rank == lastproc && tid == endThread) zj = cGlob.tpb;
 
-    for (int k=2; k<htp; k++)
+    for (int n=zi; n<zj; n++)
     {
-        for (int n=k, n<(base-k), n++)
+        stepUpdate(state, n, tstep + (k-1));
+    } 
+
+    for (int k=2; k<cGlob.htp; k++)
+    {
+        for (int n=k, n<(cGlob.base-k), n++)
         {
             stepUpdate(state, n, tstep + (k-1));
         }
@@ -187,23 +193,25 @@ void wholeDiamondCPU(states *state)
 
 void splitDiamondCPU(states *state)
 {
-    // Continuously apply bc. for thread (0,0)
-    for (int k=ht; k>1; k--)
+    for (int k=ht; k>0; k--)
     {
         for (int n=k; n<(base-k); n++)
         {
-            stepUpdate(state, n, tstep + (k-1));
+            if (n < ht || n > htp)
+            {
+                stepUpdate(state, n, tstep + (k-1));
+            }
         }
     }
-
-    //APPLY BC HERE!  That's why it doesn't go to zero
-    //IF OMP THREAD AND MPI PROC ARE rank (0,0) or (end,end)
 
     for (int k=2; k<htp; k++)
     {
         for (int n=k, n<(base-k), n++)
         {
-            stepUpdate(state, n, tstep + (k-1));
+            if (n < ht || n > htp)
+            {
+                stepUpdate(state, n, tstep + (k-1));
+            }
         }
     }
 }
@@ -216,7 +224,6 @@ void passSwept(states *state, int idxend, int rnk, int offs, int offr)
 
     MPI_recv(state + offr, htp, struct_type, ranks[2*rnk], TAGS(tstep), 
             MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
-
 }
 
 double sweptWrapper(states *state, double *xpts, int *tstep)
@@ -229,7 +236,7 @@ double sweptWrapper(states *state, double *xpts, int *tstep)
 
     if (xg) // If there's no gpu assigned to the process this is 0.
     {
-        int rnk = 0, rrnk;
+        int rnk = 0, rrnk; // Seems cheesy.
         const int xc = xcpu/2, xcp = xc+1, xcpp = xc+2;
         const int xgp = xg+1, xgpp = xg+2;
         const int gpusize =  szState * xgpp;

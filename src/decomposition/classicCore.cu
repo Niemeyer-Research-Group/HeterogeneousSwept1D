@@ -54,6 +54,7 @@ void classicPassRight(states *state, int idxend)
     }
 }
 
+// We are working with the assumption that the parallelism is too fine to see any benefit.
 // Still struggling with the idea of the local vs parameter arrays.
 // Classic Discretization wrapper.
 double classicWrapper(states *state, double *xpts, int *tstep)
@@ -61,14 +62,15 @@ double classicWrapper(states *state, double *xpts, int *tstep)
     cout << "Classic Decomposition" << endl;
 
     double t_eq = 0.0;
-    double twrite = freq - QUARTER*dt;
+    double twrite = cGlob.freq - QUARTER*cGlob.dt;
 
-    if (xg) // If there's no gpu assigned to the process this is 0.
+    if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
-        int xc = xcpu/2, xcp = xc+1, xcpp = xc+2;
-        int xgp = xg+1, xgpp = xg+2;
-        int gpusize =  szState * xgpp;
-        int cpuzise = szState * xcpp;
+        const int xc = cGlob.xcpu/2, xcp = xc+1, xcpp = xc+2;
+        const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
+        const int gpusize =  cGlob.szState * xgpp;
+        const int cpuzise = cGlob.szState * xcpp;
+        const int bks = cGlob.xg/cGlob.tpb;
 
         states *state1, *state2;
         // Do not like
@@ -76,10 +78,9 @@ double classicWrapper(states *state, double *xpts, int *tstep)
         cudaHostAlloc((void **)&state2, cpusize);
         // Do not like! Or can I free up state here!
         memcpy(state1, state, cpusize)
-        memcpy(state2, state + xg + xc, cpusize)
+        memcpy(state2, state + cGlob.xg + xc, cpusize)
 
         states *dState, *hState;
-
         
         cudaMalloc((void **)&dState, gpusize;
         // Copy the initial conditions to the device array.
@@ -97,7 +98,7 @@ double classicWrapper(states *state, double *xpts, int *tstep)
 
         while (t_eq < t_end)
         {
-            classicDecomp <<< bks,tpb >>> (dState, tstep);
+            classicDecomp <<< bks, cGlob.tpb >>> (dState, tstep);
 
             #pragma omp parallel sections num_threads(2)
             {
@@ -116,10 +117,10 @@ double classicWrapper(states *state, double *xpts, int *tstep)
             {
                 #pragma omp section
                 {
-                    cudaMemcpyAsync(dState, state1 + xc, szState, cudaMemcpyHostToDevice, st1);
-                    cudaMemcpyAsync(dState + xgp, state2 + 1, szState, cudaMemcpyHostToDevice, st2);
-                    cudaMemcpyAsync(state1 + xcp, dState + 1, szState, cudaMemcpyDeviceToHost, st3);
-                    cudaMemcpyAsync(state2, dState + xg, szState, cudaMemcpyDeviceToHost, st4);
+                    cudaMemcpyAsync(dState, state1 + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
+                    cudaMemcpyAsync(dState + xgp, state2 + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
+                    cudaMemcpyAsync(state1 + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
+                    cudaMemcpyAsync(state2, dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4);
                 }
                 #pragma omp section
                 {
@@ -130,7 +131,6 @@ double classicWrapper(states *state, double *xpts, int *tstep)
                     classicPassLeft(state1, xcp);
                 }
             }
-
             
             // Increment Counter and timestep
             if (MODULA(tstep)) t_eq += dt;
@@ -176,12 +176,12 @@ double classicWrapper(states *state, double *xpts, int *tstep)
     }
     else
     {
-        while (t_eq < t_end)
+        while (t_eq < cGlob.tf)
         {
-            int xcp = xcpu + 1;
+            int xcp = cGlob.xcpu + 1;
 
             classicStepCPU(state, xcp);
-            if (MODULA(tstep)) t_eq += dt;
+            if (MODULA(tstep)) t_eq += cGlob.dt;
             tstep++
 
             #pragma omp parallel sections num_threads(2)

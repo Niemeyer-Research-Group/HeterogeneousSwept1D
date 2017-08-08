@@ -150,9 +150,9 @@ void upTriangleCPU(states *state)
 
 void downTriangleCPU(states *state)
 {
-    for (int k=ht; k>0; k--)
+    for (int k=cGlob.ht; k>0; k--)
     {
-        for (int n=k; n<(base-k); n++)
+        for (int n=k; n<(cGlob.base-k); n++)
         {
             stepUpdate(state, n, tstep + (k-1));
         }
@@ -161,7 +161,7 @@ void downTriangleCPU(states *state)
 }
 
 // Now you can call this on a split for all proc/threads except (0,0)
-void wholeDiamondCPU(states *state, int tid, int endThread=-1)
+void wholeDiamondCPU(states *state, int tid, int zi=1, int zf=cGlob.tpbp;)
 {
     for (int k=cGlob.ht; k>1; k--)
     {
@@ -170,12 +170,6 @@ void wholeDiamondCPU(states *state, int tid, int endThread=-1)
             stepUpdate(state, n, tstep + (k-1));
         }
     }
-
-// If BC = DIRICHILET!
-    int zi = 1;
-    int zj = cGlob.tpbp;
-    if (rank == 0 && tid == 0) zi = 2;
-    if (rank == lastproc && tid == endThread) zj = cGlob.tpb;
 
     for (int n=zi; n<zj; n++)
     {
@@ -193,9 +187,9 @@ void wholeDiamondCPU(states *state, int tid, int endThread=-1)
 
 void splitDiamondCPU(states *state)
 {
-    for (int k=ht; k>0; k--)
+    for (int k=cGlob.ht; k>0; k--)
     {
-        for (int n=k; n<(base-k); n++)
+        for (int n=k; n<(cGlob.base-k); n++)
         {
             if (n < ht || n > htp)
             {
@@ -204,9 +198,9 @@ void splitDiamondCPU(states *state)
         }
     }
 
-    for (int k=2; k<htp; k++)
+    for (int k=2; k<cGlob.htp; k++)
     {
-        for (int n=k, n<(base-k), n++)
+        for (int n=k, n<cGlob.base-k), n++)
         {
             if (n < ht || n > htp)
             {
@@ -219,42 +213,44 @@ void splitDiamondCPU(states *state)
 
 void passSwept(states *state, int idxend, int rnk, int offs, int offr)
 {
-    MPI_Isend(state + offs, htp, struct_type, ranks[2*rnk], TAGS(tstep),
+    MPI_Isend(state + offs, cGlob.htp, struct_type, ranks[2*rnk], TAGS(tstep),
             MPI_COMM_WORLD, &req[rnk]);
 
-    MPI_recv(state + offr, htp, struct_type, ranks[2*rnk], TAGS(tstep), 
+    MPI_recv(state + offr, cGlob.htp, struct_type, ranks[2*rnk], TAGS(tstep), 
             MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
 }
 
 double sweptWrapper(states *state, double *xpts, int *tstep)
 {
-
-    cout << "Classic Decomposition" << endl;
+    cout << "Swept Decomposition" << endl;
 
     double t_eq = 0.0;
-    double twrite = freq - QUARTER*dt;
+    double twrite = cGlob.freq - QUARTER*cGlob.dt;
 
-    if (xg) // If there's no gpu assigned to the process this is 0.
+    if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
         int rnk = 0, rrnk; // Seems cheesy.
-        const int xc = xcpu/2, xcp = xc+1, xcpp = xc+2;
+        const int xc =cGlob. xcpu/2, xcp = xc+1, xcpp = xc+2;
         const int xgp = xg+1, xgpp = xg+2;
-        const int gpusize =  szState * xgpp;
-        const int cpuzise = szState * xcpp;
+        const size_t gpusize =  szState * xgpp;
+        const size_t cpuzise = szState * xcpp;
+        const size_t smem = szState * cGlob.base;
         const int offSend[2] = {1, xc}; // {left, right}    
         const int offRecv[2] = {xcp, 0}; 
-        const double t_fullstep = 0.25*dt*(double)tpb;
+        const int bks = cGlob.xg/cGlob.tpb;
 
         states *dState; 
-        cudaMalloc((void **)&dState, sizeof(states)*dv);
+        cudaMalloc((void **)&dState, gpusize);
 
-        cudaMemcpy(dState, state, sizeof(states)*dv, cudaMemcpyHostToDevice);
+        cudaMemcpy(dState, state, gpusize, cudaMemcpyHostToDevice);
 
-        // Start the counter and start the clock.
+        // Separate these.
+        upTriangle <<<bks, cGlob.tpb, smem>>> (dState, tstep);
 
-        upTriangle <<<bks, tpb, smem>>> (dState, tstep);
-
-        t_eq = t_fullstep;
+        #pragma parallel num_threads(nThreads)
+        // for nWaves then for nthreads
+        upTriangleCPU(state1);
+        upTriangleCPU(state2);
 
         cudaStream_t st1, st2, st3 st4;
         cudaStreamCreate(&st1);
@@ -267,40 +263,29 @@ double sweptWrapper(states *state, double *xpts, int *tstep)
             rrnk = rnk & 1;
             passSwept(state, xcp, rrnk, offSend[rrnk], offRecv[rrnk]);
             
-            wholeDiamond <<<bks, tpb, smem>>> (d2_right, d2_left, d0_right, d0_left, false);
-            tstep += tpb; // Each time the number of FULL timesteps completed is tpb.
-            // Split Diamond Begin------
+            wholeDiamond <<<bks, cGlob.tpb, smem>>> (dState, tstep);
 
-            wholeDiamond <<<bks-1, tpb, smem, st1>>> (d0_right, d0_left, d2_right, d2_left, true);
+            cudaMemcpyAsync(h_left, d0_left, tpb * , cudaMemcpyDeviceToHost, st1);
+            cudaMemcpyAsync(h_right, d0_right, tpb*sizeof(REALthree), cudaMemcpyDeviceToHost, st2);
 
-            cudaMemcpyAsync(h_left, d0_left, tpb*sizeof(REALthree), cudaMemcpyDeviceToHost, st2);
-            cudaMemcpyAsync(h_right, d0_right, tpb*sizeof(REALthree), cudaMemcpyDeviceToHost, st3);
+            cudaMemcpyAsync(d2_right, h_right, tpb*sizeof(REALthree), cudaMemcpyHostToDevice, st3);
+            cudaMemcpyAsync(d2_left + cpuLoc, h_left, tpb*sizeof(REALthree), cudaMemcpyHostToDevice, st4);
 
-            cudaStreamSynchronize(st2);
-            cudaStreamSynchronize(st3);
-
-            cudaMemcpyAsync(d2_right, h_right, tpb*sizeof(REALthree), cudaMemcpyHostToDevice, st2);
-            cudaMemcpyAsync(d2_left + cpuLoc, h_left, tpb*sizeof(REALthree), cudaMemcpyHostToDevice, st3);
-
-            // CPU Part End -----
+            // Increment Counter and timestep
+            tstep += cGlob.tpb;
+            t_eq += cGlob.dt * (tstep/NSTEPS);
 
             // Automatic synchronization with memcpy in default stream
 
-            //Split Diamond End------
-
-            t_eq += t_fullstep;
-
             if (t_eq > twrite)
             {
-                downTriangle <<<bks, tpb, smem>>> (d_IC, d2_right, d2_left);
+                downTriangle <<<bks, cGlob.tpb, smem>>> (d_IC, d2_right, d2_left);
 
-                cudaMemcpy(T_f, d_IC, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
+                cudaMemcpy(T_f, d_IC, gpusize, cudaMemcpyDeviceToHost);
 
-                upTriangle <<<bks, tpb, smem>>> (d_IC, d0_right, d0_left);
+                upTriangle <<<bks, cGlob.tpb, smem>>> ();
 
-                splitDiamond <<<bks, tpb, smem>>> (d0_right, d0_left, d2_right, d2_left);
-
-                t_eq += t_fullstep;
+                // SPLIT DIAMOND!
 
                 twrite += freq;
             }
@@ -315,10 +300,39 @@ double sweptWrapper(states *state, double *xpts, int *tstep)
 
     else
     {
-        // pure CPU
+        int xcp = cGlob.xcpu + htp;
+        upTriangleCPU(state);
+
+        while (t_eq < t_end)
+        {
+            passSwept(state, xcp); // Left first
+
+            if (rank == 0 && )
+            {
+                splitDiamondCPU(state + cGlob.htp)
+            }
+            else
+            {
+                wholeDiamondCPU(state + cGlob.htp, cGlob.tpb);
+            }
+
+            passSwept(state, xcp); // Then Right
+
+            if (t_eq > twrite)
+            {
+                #pragma omp parallel for
+                for (int k=1; k<xcp; k++) solutionOutput(state[k]->Q[0], xpts[k], t_eq);
+                twrite += freq;
+            }
+            
+        }
+        #pragma omp parallel for
+        for (int k=1; k<xcp; k++) solutionOutput(state[k]->Q[0], xpts[k], t_eq);
+    }
+    return t_eq;
     }
 
-return t_eq;
+    return t_eq;
 
 }
 

@@ -13,10 +13,11 @@
 
 // Two primary strategies used in this code: global variables and templating using structures.
 
+// Use: mpirun --bind-to-socket exe [args]
+
 #include "decomposition/classicCore.h"
 #include "decomposition/sweptCore.h"
 
-<<<<<<< Updated upstream
 /*
     TOOD
     - Swept always passes so what to do about bCond.
@@ -33,8 +34,6 @@
 //     system("json-merge path/to/jsons/*.json")
 // }
 
-=======
->>>>>>> Stashed changes
 int main(int argc, char *argv[])
 {   
     makeMPI(argc, &argv);
@@ -50,6 +49,7 @@ int main(int argc, char *argv[])
     states *state;
     double *xpts;
 
+    // Equation, grid, affinity data
     std::ifstream injson(argv[1]);
     json inJ;
     injson >> inJ;
@@ -58,8 +58,17 @@ int main(int argc, char *argv[])
     parseArgs(inJ, argc, &argv);
     initArgs(inJ);
 
-    //Malloc it!
-    
+    // Hardware information in json. Use hwloc, lspci, lstopo etc to get it.
+    std::ifstream hwjson(argv[2]);
+    json hwJ;
+    hwjson >> hwJ;
+    hwjson.close();
+
+    std::map <int, bool> gpuMap;
+    for (json::iterator it = o.begin(); it != o.end(); ++it) {
+        gpuMap.insert(it.key(), it.value());
+    }
+
     delegateDomain(double *xpts, states *state);
 
     for (int k=0; k<dv; k++) initialState(inJ, &state[k]->Q[0]);

@@ -28,7 +28,6 @@ void classicStepCPU(states *state, int numx)
     }
 }
 
-
 void classicPassLeft(states *state, int idxend)
 {   
     if (bCond[0])

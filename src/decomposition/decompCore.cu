@@ -75,6 +75,11 @@ void initArgs(json inJ);
     cGlob.freq = inJ["freq"];
     cGlob.nX = inJ["nX"];
 
+    if (inJ.count("nWaves"))
+    {
+
+    }
+
     cGlob.xg = ((cGlob.tpb * cGlob.gpuA)/32) * 32;  // Number of gpu spatial points.
     cGlob.xcpu = cGlob.nThreads * cGlob.tpb;
     cGlob.xWave = (nprocs * cGlob.xcpu + cGlob.nGpu * cGlob.xg); // Number of points on a device x number of devices.

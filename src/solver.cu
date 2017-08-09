@@ -18,6 +18,10 @@
 #include "decomposition/classicCore.h"
 #include "decomposition/sweptCore.h"
 
+#ifndef HDW
+    #define HDW     #@WORKSTATION.json
+#endif
+
 /*
     TOOD
     - Swept always passes so what to do about bCond.
@@ -42,15 +46,27 @@ int main(int argc, char *argv[])
 
     // Maybe using my new script and imporitng another json instead of this.
 
-    getDeviceInformation();
+    // getDeviceInformation();
 
     // Maybe not declaring and mallocing right now.
 
-    states *state;
-    double *xpts;
+    // Hardware information in json. Use hwloc, lspci, lstopo etc to get it.
 
+    std::ifstream hwjson(HDW, std::ifstream::in);
+    json hwJ;
+    hwjson >> hwJ;
+    hwjson.close();
+
+    std::vector<int> gpuvec = hwJ["GPU"];
+    std::vector<int smGpu(ivec.size())
+    cGlob.nThreads = hwJ["nThreads"]; // Potetntial for non constant
+    cGlob.hasGPU = ivec[ranks[1]];
+    std::partial_sum(ivec.begin(), ivec.end(), smGpu.begin());
+    cGlob.nGpu = smGpu.back();
+    smGpu.insert(smGpu.begin(), 0);
+    
     // Equation, grid, affinity data
-    std::ifstream injson(argv[1]);
+    std::ifstream injson(argv[1], std::ifstream::in));
     json inJ;
     injson >> inJ;
     injson.close();
@@ -58,27 +74,50 @@ int main(int argc, char *argv[])
     parseArgs(inJ, argc, &argv);
     initArgs(inJ);
 
-    // Hardware information in json. Use hwloc, lspci, lstopo etc to get it.
-    std::ifstream hwjson(argv[2]);
-    json hwJ;
-    hwjson >> hwJ;
-    hwjson.close();
+    /*  Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
+        Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
+    */
 
-    std::map <int, bool> gpuMap;
-    for (json::iterator it = o.begin(); it != o.end(); ++it) {
-        gpuMap.insert(it.key(), it.value());
+
+    states **state;
+    double **xpts;
+    if (cGlob.hasGpu)
+    {
+        **state = new state* [3];
+        **xpts = new double* [3];
+        // Now you have the index in smGpu[rank]*xg + xcp*rank  so get the k value with dx.
+
+    }
+    else
+    {
+
     }
 
-    delegateDomain(double *xpts, states *state);
+    int prt = 1 + 2*cGlob.hasGpu;
+    
 
-    for (int k=0; k<dv; k++) initialState(inJ, &state[k]->Q[0]);
+    
 
-    const int bks = dv/tpb; //The number of blocks
+
+    int strt, npt, nar;
+
+
+    for (int k=0; k<rank[2]; k++) 
+    {
+
+    }
+         
+
+
+    for (int k=0; k<; k++) 
+        initialState(inJ, &state[k]->Q[0]);
 
     // We always know that there's some eqConsts struct that we need to 
     // to put into constant memory.
     // PROBABLY NEED TO CHECK TO MAKE SURE THERE"S A GPU FIRST.
-    if (xgpu) cudaMemcpyToSymbol(deqConsts,&heqConsts,sizeof(eqConsts));
+
+
+    if (xgpu) cudaMemcpyToSymbol(deqConsts, heqConsts, sizeof(eqConsts));
 
     int tstep = 1;
     // Start the counter and start the clock.

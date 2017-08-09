@@ -61,7 +61,6 @@ void parseArgs(json inJ, int argc, char *argv[]);
 
 void initArgs(json inJ);
 {
-
     cGlob.lx = inJ["lx"]
     cGlob.szState = sizeof(states);
     cGlob.base = cGlob.tpb+2;
@@ -75,12 +74,15 @@ void initArgs(json inJ);
     cGlob.freq = inJ["freq"];
     cGlob.nX = inJ["nX"];
 
+    // Do it backward if you already know the waves.
     if (inJ.count("nWaves"))
     {
 
     }
 
+    // This part needs rework.
     cGlob.xg = ((cGlob.tpb * cGlob.gpuA)/32) * 32;  // Number of gpu spatial points.
+    cGlob.gpuA = cGlob.xg/cGlob.tpb; 
     cGlob.xcpu = cGlob.nThreads * cGlob.tpb;
     cGlob.xWave = (nprocs * cGlob.xcpu + cGlob.nGpu * cGlob.xg); // Number of points on a device x number of devices.
     cGlob.nWaves = CEIL(cGlob.xWave, cGlob.nX);
@@ -93,7 +95,7 @@ void initArgs(json inJ);
     cGlob.htp = cGlob.ht + 1;
 
     cGlob.dx = cGlob.lx/(cGlob.nX - 2.0); // Spatial step
-    inJ["dx"] = cGlob.dx; // To send back to equation folder.  It aay need it, it may not.
+    inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
 
     equationSpecificArgs(json inJ); 
 
@@ -101,10 +103,8 @@ void initArgs(json inJ);
     // return bool
     // hasGpu = gpuAssign();
 
-    cGlob.xg = cGlob.xg * cGlob.hasGpu;
-    cGlob.xtot = cGlob.xcpu + cGlob.xg + cGlob.hasGpu*4 + 2; // cpu points + gpu points + inner ghosts + outer ghosts
 
-    
+
     // Swept Always Passes!
     enum
     {
@@ -114,8 +114,6 @@ void initArgs(json inJ);
         // If BCTYPE == "Periodic"
             // Don't do anything.
     }
-
-
 }
 // THIS IS GREAT BUT YOU CAN'T PASS IT BACK BECAUSE TYPES!
 // Maybe.

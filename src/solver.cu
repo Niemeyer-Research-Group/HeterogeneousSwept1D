@@ -64,6 +64,7 @@ int main(int argc, char *argv[])
     std::partial_sum(ivec.begin(), ivec.end(), smGpu.begin());
     cGlob.nGpu = smGpu.back();
     smGpu.insert(smGpu.begin(), 0);
+    int gpuID = hwJ["gpuID"];
     
     // Equation, grid, affinity data
     std::ifstream injson(argv[1], std::ifstream::in));
@@ -87,6 +88,8 @@ int main(int argc, char *argv[])
 
     if (cGlob.hasGpu)
     {
+        cudaSetDevice(gpuID);
+        
         **state = new state* [3];
         **xpts = new double* [3];
         cudaHostAlloc((void **) xpts[0], (xcpu/2+exSpace)*sizeof(double), cudaHostAllocDefault);
@@ -98,8 +101,9 @@ int main(int argc, char *argv[])
 
         initialState(inJ, &state[k]->Q[0]);
 
-        // Now you have the index in smGpu[rank]*xg + xcp*rank  so get the k value with dx.
 
+        // Now you have the index in smGpu[rank]*xg + xcp*rank  so get the k value with dx.
+        cudaMemcpyToSymbol(deqConsts, heqConsts, sizeof(eqConsts));
     }
     else
     {

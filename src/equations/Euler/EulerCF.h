@@ -107,7 +107,7 @@ __host__ void printout(const int i, REALthree subj); //---------------//
 
 _host__ void equationSpecificArgs(json inJ) //---------------//
 
-__host__ states initialState(json icMaker); //---------------//
+__host__ states initialState(json icMaker, states *state, double *xpts, int pt); //---------------//
 
 __host__ void mpi_type(MPI_Datatype *dtype); //---------------//
 

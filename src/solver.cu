@@ -80,11 +80,13 @@ int main(int argc, char *argv[])
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
 
-    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * cGlob.smGput[ranks[1]] - 1; //
+    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGput[ranks[1]]; //
     states **state;
     double **xpts;
 
-    int exSpace = (cGlob.hasGpu) ? htp : 2)
+    int exSpace = (cGlob.hasGpu) ? cGlob.htp : 2;
+    int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
+    int xalloc = xc + exSpace ;
 
     if (cGlob.hasGpu)
     {
@@ -92,14 +94,18 @@ int main(int argc, char *argv[])
         
         **state = new state* [3];
         **xpts = new double* [3];
-        cudaHostAlloc((void **) xpts[0], (xcpu/2+exSpace)*sizeof(double), cudaHostAllocDefault);
-        cudaHostAlloc((void **) xpts[1], (xg+exSpace)*sizeof(double), cudaHostAllocDefault);
-        cudaHostAlloc((void **) xpts[2], (xcpu/2+exSpace)*sizeof(double), cudaHostAllocDefault);
-        cudaHostAlloc((void **) state[0], (xcpu/2+exSpace)*sizeof(states), cudaHostAllocDefault);
-        cudaHostAlloc((void **) state[1], (xg+exSpace)*sizeof(states), cudaHostAllocDefault);
-        cudaHostAlloc((void **) state[2], (xcpu/2+exSpace)*sizeof(states), cudaHostAllocDefault);
+        cudaHostAlloc((void **) &xpts[0], xalloc * sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) &xpts[1], cGlob.xg * sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) &xpts[2], xalloc * sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) state[1], cGlob.xg * cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
 
-        initialState(inJ, &state[k]->Q[0]);
+        for (int k=strt; k<(strt + xc); k++)  initialState(inJ, state[0], xpts[0], k); 
+
+        for (int k=(strt + xc); k<(strt + xc + cGlob.xg); k++)  initialState(inJ, state[1], xpts[1], k);
+
+        for (int k=(strt + xc + cGlob.xg); k<(strt + 2*xc + cGlob.xg); k++)  initialState(inJ, state[2], xpts[2], k); 
 
 
         // Now you have the index in smGpu[rank]*xg + xcp*rank  so get the k value with dx.
@@ -109,8 +115,9 @@ int main(int argc, char *argv[])
     {
         **state = new state* [1];
         **xpts = new double* [1];
-        cudaHostAlloc((void **) xpts[0], (xcpu+exSpace)*sizeof(double), cudaHostAllocDefault);
-        cudaHostAlloc((void **) state[0], (xcpu+exSpace)*sizeof(states), cudaHostAllocDefault);
+        cudaHostAlloc((void **) xpts[0], xalloc * sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
+        for (int k=strt; k<(strt + xc); k++)  initialState(inJ, state[0], xpts[0], k); 
     }
 
     int prt = 1 + 2*cGlob.hasGpu;
@@ -136,9 +143,6 @@ int main(int argc, char *argv[])
     // to put into constant memory.
     // PROBABLY NEED TO CHECK TO MAKE SURE THERE"S A GPU FIRST.
 
-
-    if (xgpu) cudaMemcpyToSymbol(deqConsts, heqConsts, sizeof(eqConsts));
-
     int tstep = 1;
     // Start the counter and start the clock.
     MPI_Barrier(MPI_COMM_WORLD);
@@ -161,12 +165,15 @@ int main(int argc, char *argv[])
         tfm = classicWrapper(state, xpts, &tstep);
     }
 
-    endMPI();
+    ;
+    MPI_Barrier(MPI_COMM_WORLD);
 
 	// Show the time and write out the final condition.
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&timed, start, stop);
+
+    endMPI();
 
     cudaError_t error = cudaGetLastError();
     if(error != cudaSuccess)

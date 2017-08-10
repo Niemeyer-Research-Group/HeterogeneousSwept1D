@@ -19,6 +19,6 @@ void wholeDiamondCPU(states *state);
 
 void passSwept(states *state, int idxend, int dr);
 
-void sweptWrapper(states *state, double *xpts, int *tstep);
+double sweptWrapper(states *state, double *xpts, int *tstep);
 
 #endif 

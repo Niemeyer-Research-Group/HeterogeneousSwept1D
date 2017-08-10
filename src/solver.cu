@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
     hwjson.close();
 
     std::vector<int> gpuvec = hwJ["GPU"];
-    std::vector<int smGpu(ivec.size())
+    std::vector<int> smGpu(ivec.size());
     cGlob.nThreads = hwJ["nThreads"]; // Potetntial for non constant
     cGlob.hasGPU = ivec[ranks[1]];
     std::partial_sum(ivec.begin(), ivec.end(), smGpu.begin());
@@ -74,23 +74,39 @@ int main(int argc, char *argv[])
     parseArgs(inJ, argc, &argv);
     initArgs(inJ);
 
-    /*  Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
+    /*  
+        Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
 
-
+    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * cGlob.smGput[ranks[1]] - 1; //
     states **state;
     double **xpts;
+
+    int exSpace = (cGlob.hasGpu) ? htp : 2)
+
     if (cGlob.hasGpu)
     {
         **state = new state* [3];
         **xpts = new double* [3];
+        cudaHostAlloc((void **) xpts[0], (xcpu/2+exSpace)*sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) xpts[1], (xg+exSpace)*sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) xpts[2], (xcpu/2+exSpace)*sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) state[0], (xcpu/2+exSpace)*sizeof(states), cudaHostAllocDefault);
+        cudaHostAlloc((void **) state[1], (xg+exSpace)*sizeof(states), cudaHostAllocDefault);
+        cudaHostAlloc((void **) state[2], (xcpu/2+exSpace)*sizeof(states), cudaHostAllocDefault);
+
+        initialState(inJ, &state[k]->Q[0]);
+
         // Now you have the index in smGpu[rank]*xg + xcp*rank  so get the k value with dx.
 
     }
     else
     {
-
+        **state = new state* [1];
+        **xpts = new double* [1];
+        cudaHostAlloc((void **) xpts[0], (xcpu+exSpace)*sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) state[0], (xcpu+exSpace)*sizeof(states), cudaHostAllocDefault);
     }
 
     int prt = 1 + 2*cGlob.hasGpu;

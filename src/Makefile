@@ -10,6 +10,7 @@ NVCC=$(PREP) nvcc
 PROJECTDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 OUTDIR := $(PROJECTDIR)bin
 EQDIR := $(PROJECTDIR)equations
+COREDIR := $(PROJECTDIR)decomposition
 EQDIRS := ${sort ${dir ${wildcard ${EQDIR}/*/}}}
 EQHEAD = $(EQDIRS)*.h
 APPOBJ := $(OUTDIR)/${lastword ${subst /, ,$(EQDIRS)}}
@@ -19,20 +20,26 @@ EQS=`cat $(CONFS)`
 # MPICFLAGS=-I${MPI_HOME}/include
 # CUDACFLAGS=-I${CUDA_INSTALL_PATH}/include
 
-GENCODE := -gencode arch=compute_35,code=sm_35 -std=c++11
-PARALLELLIB := -lmpi -Xcompiler -fopenmp 
-NATLIB = -lm -restrict -O3 
-CROSSLIB := -Xptxas=-v 
+# IFNVCC = -lmpi -Xcompiler -fopenmp -Xptxas=-v -restrict -march=native
+# GENCODE :=  -lcudart -lcuda
+
+PARALLELLIB := -Xcompiler -fopenmp -lmpi -gencode arch=compute_35,code=sm_35
+NATLIB = -lm -O3 -std=c++11 
 INC := -I$(PROJECTDIR)utilities -I$(PROJECTDIR)equations -I/usr/include/mpi
 
-CUDAFLAGS := $(GENCODE) $(NATLIB) $(INC) $(CROSSLIB) $(PARALLELLIB) 
+CUDAFLAGS := $(NATLIB) $(INC) $(PARALLELLIB) 
+
+default: $(APPOBJ)
+
+$(APPOBJ): $(PROJECTDIR)solver.cu $(EQDIRS)EulerCF.cpp $(COREDIR)/classicCore.cpp $(COREDIR)/decompCore.cpp 
+	$(NVCC) $^ -o $@ $(CUDAFLAGS)
+
 
 .PHONY: printvar 
 
 printvar:
 	@echo $(EQHEAD) $(PREP) $(EQS)
 
-# default: $(APPOBJ)
 
 # Rule to write "#include $(EQHEAD)" in an intermediate include file.
 

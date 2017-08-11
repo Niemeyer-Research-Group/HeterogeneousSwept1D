@@ -28,9 +28,9 @@ struct globalism {
     double gpuA;
 
 // Geometry
-    int tpb, tpbp, base;
+    int tpb, tpbp, base, bks;
     int ht, htm, htp;
-    int bks, szState;
+    int szState;
 
 // Iterator
     double tf, freq, dt, dx, lx;
@@ -56,7 +56,7 @@ void initArgs(json inJ);
 
 void eCheckIn(int argc);
 
-void solutionOutput(REALthree *outVec, double tstamp, double xpt1);
+void solutionOutput(states *outVec, double tstamp, double xpt1);
 
 void timingOutput(REAL timer, FILE *timeOut);
 

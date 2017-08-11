@@ -7,8 +7,9 @@
  */
 #include <assert.h>
 #include <stdio.h>
-#include "cuda.h"
-#include "mpi.h"
+#include <cuda_runtime.h>
+#include <cuda.h>
+#include <mpi.h>
 #include "hwloc.h"
  
 #define ABORT_ON_ERROR(func)                          \

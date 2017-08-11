@@ -16,10 +16,10 @@
 // Use: mpirun --bind-to-socket exe [args]
 
 #include "decomposition/classicCore.h"
-#include "decomposition/sweptCore.h"
+//#include "decomposition/sweptCore.h"
 
 #ifndef HDW
-    #define HDW     #@WORKSTATION.json
+    #define HDW     "hardware/WORKSTATION.json"
 #endif
 
 /*
@@ -40,21 +40,14 @@
 
 int main(int argc, char *argv[])
 {   
-    makeMPI(argc, &argv);
+    makeMPI(argc, argv);
 
     std::string ext = ".json";
-    std::string myrank = ranks[1].to_string();
+    std::string myrank = std::to_string(ranks[1]);
     std::string sout = argv[3];
     sout.append(myrank);
     sout.append(ext); 
-    int scheme;
-
-    if (!argv[1].compare("C"))
-    {
-
-    }
-    else if  (!argv[1].compare("C"))
-    // if (!ranks[1]) atexit(exitMerge);
+    std::string scheme = argv[1];
 
     std::ifstream hwjson(HDW, std::ifstream::in);
     json hwJ;
@@ -62,21 +55,21 @@ int main(int argc, char *argv[])
     hwjson.close();
 
     std::vector<int> gpuvec = hwJ["GPU"];
-    std::vector<int> smGpu(ivec.size());
+    std::vector<int> smGpu(gpuvec.size());
     cGlob.nThreads = hwJ["nThreads"]; // Potetntial for non constant
-    cGlob.hasGPU = ivec[ranks[1]];
-    std::partial_sum(ivec.begin(), ivec.end(), smGpu.begin());
+    cGlob.hasGpu = gpuvec[ranks[1]];
+    std::partial_sum(gpuvec.begin(), gpuvec.end(), smGpu.begin());
     cGlob.nGpu = smGpu.back();
     smGpu.insert(smGpu.begin(), 0);
     int gpuID = hwJ["gpuID"];
     
     // Equation, grid, affinity data
-    std::ifstream injson(argv[1], std::ifstream::in));
+    std::ifstream injson(argv[1], std::ifstream::in);
     json inJ;
     injson >> inJ;
     injson.close();
 
-    parseArgs(inJ, argc, &argv);
+    parseArgs(inJ, argc, argv);
     initArgs(inJ);
 
     /*  
@@ -84,7 +77,7 @@ int main(int argc, char *argv[])
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
 
-    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGput[ranks[1]]; //
+    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; //
     states **state;
     double **xpts;
 
@@ -96,8 +89,8 @@ int main(int argc, char *argv[])
     {
         cudaSetDevice(gpuID);
         
-        **state = new state* [3];
-        **xpts = new double* [3];
+        state = new states* [3];
+        xpts = new double* [3];
         cudaHostAlloc((void **) &xpts[0], xc * sizeof(double), cudaHostAllocDefault);
         cudaHostAlloc((void **) &xpts[1], (cGlob.xg + exSpace) * sizeof(double), cudaHostAllocDefault);
         cudaHostAlloc((void **) &xpts[2], xc * sizeof(double), cudaHostAllocDefault);
@@ -105,10 +98,10 @@ int main(int argc, char *argv[])
         cudaHostAlloc((void **) state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
 
-        int pone = (strt + xc) 
+        int pone = (strt + xc);
         int ptwo = (pone + cGlob.xg);
 
-        for (int k=1; k<=xc; k++) 
+        for (int k=1; k <= xc; k++) 
         {
             initialState(inJ, k, strt, state[0], xpts[0]); 
             initialState(inJ, k, ptwo, state[2], xpts[2]); 
@@ -116,17 +109,22 @@ int main(int argc, char *argv[])
 
         for (int k=1; k <= cGlob.xg; k++)  initialState(inJ, k, pone, state[1], xpts[1]); 
 
-        // Now you have the index in smGpu[rank]*xg + xcp*rank  so get the k value with dx.
-        cudaMemcpyToSymbol(deqConsts, heqConsts, sizeof(eqConsts));
+        cudaMemcpyToSymbol(&deqConsts, &heqConsts, sizeof(eqConsts));
+
+        if (sizeof(REAL)>6) 
+        {
+            cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+        }
     }
-    else
+    else 
     {
-        **state = new state* [1];
-        **xpts = new double* [1];
+        state = new states* [1];
+        xpts = new double* [1];
         cudaHostAlloc((void **) xpts[0], xalloc * sizeof(double), cudaHostAllocDefault);
         cudaHostAlloc((void **) state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
-        for (int k=1; k<cGlob.xc); k++)  initialState(inJ, k, strt, state[0], xpts[0]); 
+        for (int k=1; k<=xc; k++)  initialState(inJ, k, strt, state[0], xpts[0]); 
     }
+
     int tstep = 1;
     // Start the counter and start the clock.
     MPI_Barrier(MPI_COMM_WORLD);
@@ -139,13 +137,13 @@ int main(int argc, char *argv[])
     // Call the correct function with the correct algorithm.
     double tfm;
 
-    if (!argv[1].compare("C"))
+    if (!scheme.compare("C"))
     {
         tfm = classicWrapper(state, xpts, &tstep);
     }
-    else if  (!argv[1].compare("S"))
+    else if  (!scheme.compare("S"))
     {
-        tfm = sweptWrapper(state, xpts, &tstep);
+        //tfm = sweptWrapper(state, xpts, &tstep);
     }
     else
     {
@@ -173,24 +171,24 @@ int main(int argc, char *argv[])
     soljson << solution;
     soljson.close();
 
-    if (rank == 0)
+    if (!ranks[1])
     {
         //READ OUT JSONS
         
         timed *= 1.e3;
 
-        double n_timesteps = tfm/dt;
+        double n_timesteps = tfm/cGlob.dt;
 
         double per_ts = timed/n_timesteps;
 
-        cout << n_timesteps << " timesteps" << endl;
-        cout << "Averaged " << per_ts << " microseconds (us) per timestep" << endl;
+        std::cout << n_timesteps << " timesteps" << std::endl;
+        std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
         json timing;
-        timing[dv][tpb][gpuA] = per_ts;
+        timing[cGlob.nX][cGlob.tpb][cGlob.gpuA] = per_ts;
 
         std::ofstream timejson(argv[4]);
-        timejson << std::setw(4) << timing << std::endl;
+        timejson << timing;
         timejson.close();
     }
 
@@ -199,10 +197,11 @@ int main(int argc, char *argv[])
         cudaDeviceSynchronize();
         cudaEventDestroy( start );
         cudaEventDestroy( stop );
+
         for (int k=0; k<3; k++)
         {
-            cudaHostFree(xpts[k]);
-            cudaHostFree(state[k]);
+            cudaFreeHost(xpts[k]);
+            cudaFreeHost(state[k]);
         }
         
         delete[] xpts;
@@ -211,10 +210,10 @@ int main(int argc, char *argv[])
     }
     else
     {
-        cudaHostFree(xpts[0])
-        cudaHostFree(state[0])
+        cudaFreeHost(xpts[0]);
+        cudaFreeHost(state[0]);
         delete[] xpts;
-        delete[] states;
+        delete[] state;
     }
 	return 0;
 }

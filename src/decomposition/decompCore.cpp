@@ -17,30 +17,21 @@ void makeMPI(int argc, char* argv[])
     ranks[2] = (ranks[1]+1) % nprocs;
 }
 
-void getDeviceInformation();
-{
-    cudaGetDeviceCount(nGpu);
+// void getDeviceInformation();
+// {
+//     cudaGetDeviceCount(nGpu);
 
-    if (nGpu)
-    {
-        cudaGetDeviceProp(&props);
-    }
+//     if (nGpu)
+//     {
+//         cudaGetDeviceProp(&props);
+//     }
     
-    nthreads = omp_get_num_procs();
+//     nthreads = omp_get_num_procs();
 
-    // From this I want what GPUs each proc can see, and how many threads they can make
-    // This may require nvml to get the UUID of the GPUS, pass them all up to the 
-    // Master proc to decide which proc gets which gpu.
-}
-
-void delegateDomain()
-{
-    // Set shared memory banks to double if REAL is double.
-    if (sizeof(REAL)>6 && xgpu) 
-    {
-        cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
-    }
-}
+//     // From this I want what GPUs each proc can see, and how many threads they can make
+//     // This may require nvml to get the UUID of the GPUS, pass them all up to the 
+//     // Master proc to decide which proc gets which gpu.
+// }
 
 /* 
     Takes any extra command line arguments which override json default args and inserts 
@@ -48,7 +39,7 @@ void delegateDomain()
 
     Arguments are key, value pairs all lowercase keys, no dash in front of arg.
 */
-void parseArgs(json inJ, int argc, char *argv[]);
+void parseArgs(json inJ, int argc, char *argv[])
 {
     if (argc>6)
     {
@@ -59,9 +50,9 @@ void parseArgs(json inJ, int argc, char *argv[]);
     }
 }
 
-void initArgs(json inJ);
+void initArgs(json inJ)
 {
-    cGlob.lx = inJ["lx"]
+    cGlob.lx = inJ["lx"];
     cGlob.szState = sizeof(states);
     cGlob.base = cGlob.tpb+2;
     cGlob.tpbp = cGlob.tpb+1;
@@ -74,47 +65,43 @@ void initArgs(json inJ);
     cGlob.freq = inJ["freq"];
     cGlob.nX = inJ["nX"];
 
-    // Do it backward if you already know the waves.
-    if (inJ.count("nWaves"))
-    {
+    // Derived quantities
+    cGlob.xcpu = cGlob.nThreads * cGlob.tpb;
+    cGlob.bks = (((double)cGlob.xcpu * cGlob.gpuA)/cGlob.tpb);
+    cGlob.xg = cGlob.tpb * cGlob.bks;
+    cGlob.gpuA = (double)cGlob.xg/(double)cGlob.tpb; // Adjusted gpuA.
+    cGlob.xWave = (nprocs * cGlob.xcpu + cGlob.nGpu * cGlob.xg); 
 
+    // Do it backward if you already know the waves. Else we get the waves from nX (which is just an approximation).
+    if (inJ.count("nW"))
+    {
+        cGlob.nWaves = inJ["nW"];
+    }
+    else
+    {
+        cGlob.nWaves = CEIL(cGlob.xWave, cGlob.nX);
     }
 
-    // This part needs rework.
-    cGlob.xg = ((cGlob.tpb * cGlob.gpuA)/32) * 32;  // Number of gpu spatial points.
-    cGlob.gpuA = cGlob.xg/cGlob.tpb; 
-    cGlob.xcpu = cGlob.nThreads * cGlob.tpb;
-    cGlob.xWave = (nprocs * cGlob.xcpu + cGlob.nGpu * cGlob.xg); // Number of points on a device x number of devices.
-    cGlob.nWaves = CEIL(cGlob.xWave, cGlob.nX);
-    cGlob.nX = cGlob.nWaves*cGlob.xWave; // Now it's an even wave of spatial points.
-
+    cGlob.nX = cGlob.nWaves*cGlob.xWave; 
     cGlob.tpbp = cGlob.tpb + 1;
     cGlob.base = cGlob.tpb + 2;
     cGlob.ht = cGlob.tpb/2;
     cGlob.htm = cGlob.ht - 1;
     cGlob.htp = cGlob.ht + 1;
-    cGlob.bks = cGlob.xg/cGlob.tpb;
 
     cGlob.dx = cGlob.lx/((double)cGlob.nX - 2.0); // Spatial step
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
 
-    equationSpecificArgs(json inJ); 
+    equationSpecificArgs(inJ); 
 
-    // Maybe here assign gpus
-    // return bool
-    // hasGpu = gpuAssign();
+    // Swept Always Passes!
 
+    // If BCTYPE == "Dirichlet"
+    if (!ranks[1]) cGlob.bCond[0] = false;
+    if (ranks[1] == lastproc) cGlob.bCond[1] = false;
+    // If BCTYPE == "Periodic"
+        // Don't do anything.
 
-
-    // // Swept Always Passes!
-    // enum
-    // {
-    //     // If BCTYPE == "Dirichlet"
-    //     if (!ranks[1]) cGlob.bCond[0] = false;
-    //     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
-    //     // If BCTYPE == "Periodic"
-    //         // Don't do anything.
-    // }
 }
 
 void solutionOutput(states *outState, REAL tstamp, REAL xpt)

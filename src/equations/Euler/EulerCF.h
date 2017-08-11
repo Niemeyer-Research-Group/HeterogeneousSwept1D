@@ -11,11 +11,15 @@
 #include <device_functions.h>
 #include <mpi.h>
 
-#include <string>
-#include <fstream>
 #include <iostream>
-#include <stdio.h>
-#include <stdlib.h>
+#include <fstream>
+#include <ostream>
+#include <istream>
+
+#include <cstdio>
+#include <cstdlib>
+#include <cmath>
+#include <string>
 
 #include "myVectorTypes.h"
 #include "json.hpp"
@@ -33,6 +37,7 @@
 #define SQUAREROOT(x)   sqrt(x)
 
 #define NSTEPS              4
+#define NVARS               4
 
 // Since anyone would need to write a header and functions file, why not just hardwire this.  
 // If the user's number of steps isn't a power of 2 use the other one.
@@ -48,18 +53,10 @@
 	============================================================
 */
 
-/*
- We don't need the grid data anymore because the node shapes are much simpler.  
- And do not affect the discretization implementation, only the decomposition.  
- Well the structs aren't accessible like arrays so shit.
-*/
-
-using json = nlohmann::json;
-
 //---------------// 
 struct eqConsts {
-    REAL gammma; // Heat capacity ratio
-    REAL mgammma; // 1- Heat capacity ratio
+    REAL gamma; // Heat capacity ratio
+    REAL mgamma; // 1- Heat capacity ratio
     REAL dt_dx; // deltat/deltax
 };
 
@@ -80,13 +77,15 @@ std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //------
 
 __constant__ eqConsts deqConsts;  //---------------// 
 eqConsts heqConsts; //---------------// 
-REALthree hBound[2]; // Boundary Conditions
+REALthree hBounds[2]; // Boundary Conditions
 
 /*
 	============================================================
 	EQUATION SPECIFIC FUNCTIONS
 	============================================================
 */
+
+using json = nlohmann::json;
 
 /*
 //---------------// 
@@ -100,14 +99,14 @@ __host__ REAL velocity(REALthree subj);
 
 __host__ REAL energy(REALthree subj);
 
-__device__ __host__ 
+__device__ __host__
 __forceinline__ REAL pressure(REALthree qH);
 
-__host__ void printout(const int i, states *state); //---------------//
+__host__ REAL printout(const int i, states *state); //---------------//
 
-_host__ void equationSpecificArgs(json inJ) //---------------//
+__host__ void equationSpecificArgs(json inJ); //---------------//
 
-__host__ states initialState(json inJ, int idx, int xst, states *inl, double *xs); //---------------//
+__host__ void initialState(json inJ, int idx, int xst, states *inl, double *xs); //---------------//
 
 __host__ void mpi_type(MPI_Datatype *dtype); //---------------//
 

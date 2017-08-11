@@ -1,5 +1,5 @@
 {
     "GPU" : [1],
     "nThreads": [16],
-    "Boo" : "Okok"
+    "gpuID" : [0]
 }

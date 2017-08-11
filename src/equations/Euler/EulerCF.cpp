@@ -37,7 +37,7 @@ __device__ __host__
 __forceinline__
 REAL pressure(REALthree qH)
 {
-    return DIMS.mgam * (qH.z - (HALF * qH.y * qH.y/qH.x));
+    return DIMS.mgamma * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }
 
 __host__ REAL printout(const int i, states *state)
@@ -46,7 +46,7 @@ __host__ REAL printout(const int i, states *state)
     switch(i)
     {
         case 0: return density(subj);
-        case 1: return velocity(subj):
+        case 1: return velocity(subj);
         case 2: return energy(subj);
         case 3: return pressure(subj);
     } 
@@ -58,18 +58,22 @@ REALthree hBound[2]; // Boundary Conditions
 double lx; // Length of domain.
 */
 
-_host__ void equationSpecificArgs(json inJ)
+__host__ void equationSpecificArgs(json inJ)
 {
-    heqConsts.gammma = inJ["gamma"];
-    heqConsts.mgammma = heqConsts.gammma - 1;
+    heqConsts.gamma = inJ["gamma"];
+    heqConsts.mgamma = heqConsts.gamma - 1;
     REAL rhoL = inJ["rhoL"];
     REAL vL = inJ["vL"];
     REAL pL = inJ["pL"];
     REAL rhoR = inJ["rhoR"];
     REAL vR = inJ["vR"];
     REAL pR = inJ["pR"];
-    hBounds[0] = {rhoL, vL*rhoL, pL/heqConsts.mgamma + HALF * rhoL * vL * vL};
-    hBounds[1] = {rhoR, vR*rhoR, pR/heqConsts.mgamma + HALF * rhoR * vR * vR};
+    hBounds[0].x = rhoL;
+    hBounds[0].y = vL*rhoL;
+    hBounds[0].z = pL/heqConsts.mgamma + HALF * rhoL * vL * vL;
+    hBounds[1].x = rhoR;
+    hBounds[1].y = vR*rhoR, 
+    hBounds[1].z = pR/heqConsts.mgamma + HALF * rhoR * vR * vR;
     REAL dtx = inJ["dt"];
     REAL dxx = inJ["dx"];
     heqConsts.dt_dx = dtx/dxx;
@@ -80,15 +84,15 @@ _host__ void equationSpecificArgs(json inJ)
 // lxh is half the domain length assuming starting at 0.
 __host__ void initialState(json inJ, int idx, int xst, states *inl, double *xs)
 {
-    REAL dtx = inJ["dt"];
     REAL dxx = inJ["dx"];
-    double xss = dx*(double)(idx + xst);
+    REAL lx = inJ["lx"];
+    double xss = dxx*(double)(idx + xst);
     xs[idx] = xss;
     bool wh = inJ["IC"] == "PARTITION";
     if (wh)
     {
-        int side = (xs < HALF*lx);
-        intl = hBound[side];
+        int side = (xss < HALF*lx);
+        inl->Q[0] = hBounds[side];
     }
 }
 
@@ -118,7 +122,7 @@ __device__ __host__
 __forceinline__
 REAL pressureRoe(REALthree qH)
 {
-    return DIMS.mgam * (qH.z - HALF * qH.y * qH.y);
+    return DIMS.mgamma * (qH.z - HALF * qH.y * qH.y);
 }
 
 /**
@@ -128,7 +132,7 @@ __device__ __host__
 __forceinline__
 void pressureRatio(states *state, int idx, int tstep)
 {
-    state[idx].Pr = (pressure(state[idx+1]->Q[tstep]) - pressure(state[idx]->Q[tstep]))/(pressure(state[idx]->Q[tstep]) - pressure(state[idx-1]->Q[tstep]));
+    state[idx].Pr = (pressure(state[idx+1].Q[tstep]) - pressure(state[idx].Q[tstep]))/(pressure(state[idx].Q[tstep]) - pressure(state[idx-1].Q[tstep]));
 }   
 
 /**
@@ -143,7 +147,7 @@ __device__ __host__
 __forceinline__
 REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
 {   
-    return (isnan(pRatio) || pRatio<0) ? qH :  (qH + HALF * min(pRatio, ONE) * (qN - qH));
+    return (std::isnan(pRatio) || pRatio<0) ? qH :  (qH + HALF * std::min(pRatio, ONE) * (qN - qH));
 }
 
 /**
@@ -192,7 +196,7 @@ __forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR)
 
     REAL pH = pressureRoe(halfState);
 
-    return (SQUAREROOT(pH * DIMS.gam) + fabs(halfState.y)) * (qL - qR);
+    return (SQUAREROOT(pH * DIMS.gamma) + fabs(halfState.y)) * (qL - qR);
 }
 
 /**

@@ -42,15 +42,19 @@ int main(int argc, char *argv[])
 {   
     makeMPI(argc, &argv);
 
+    std::string ext = ".json";
+    std::string myrank = ranks[1].to_string();
+    std::string sout = argv[3];
+    sout.append(myrank);
+    sout.append(ext); 
+    int scheme;
+
+    if (!argv[1].compare("C"))
+    {
+
+    }
+    else if  (!argv[1].compare("C"))
     // if (!ranks[1]) atexit(exitMerge);
-
-    // Maybe using my new script and imporitng another json instead of this.
-
-    // getDeviceInformation();
-
-    // Maybe not declaring and mallocing right now.
-
-    // Hardware information in json. Use hwloc, lspci, lstopo etc to get it.
 
     std::ifstream hwjson(HDW, std::ifstream::in);
     json hwJ;
@@ -86,7 +90,7 @@ int main(int argc, char *argv[])
 
     int exSpace = (cGlob.hasGpu) ? cGlob.htp : 2;
     int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
-    int xalloc = xc + exSpace ;
+    int xalloc = xc + exSpace;
 
     if (cGlob.hasGpu)
     {
@@ -94,19 +98,23 @@ int main(int argc, char *argv[])
         
         **state = new state* [3];
         **xpts = new double* [3];
-        cudaHostAlloc((void **) &xpts[0], xalloc * sizeof(double), cudaHostAllocDefault);
-        cudaHostAlloc((void **) &xpts[1], cGlob.xg * sizeof(double), cudaHostAllocDefault);
-        cudaHostAlloc((void **) &xpts[2], xalloc * sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) &xpts[0], xc * sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) &xpts[1], (cGlob.xg + exSpace) * sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) &xpts[2], xc * sizeof(double), cudaHostAllocDefault);
         cudaHostAlloc((void **) state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
-        cudaHostAlloc((void **) state[1], cGlob.xg * cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
 
-        for (int k=strt; k<(strt + xc); k++)  initialState(inJ, state[0], xpts[0], k); 
+        int pone = (strt + xc) 
+        int ptwo = (pone + cGlob.xg);
 
-        for (int k=(strt + xc); k<(strt + xc + cGlob.xg); k++)  initialState(inJ, state[1], xpts[1], k);
+        for (int k=1; k<=xc; k++) 
+        {
+            initialState(inJ, k, strt, state[0], xpts[0]); 
+            initialState(inJ, k, ptwo, state[2], xpts[2]); 
+        }
 
-        for (int k=(strt + xc + cGlob.xg); k<(strt + 2*xc + cGlob.xg); k++)  initialState(inJ, state[2], xpts[2], k); 
-
+        for (int k=1; k <= cGlob.xg; k++)  initialState(inJ, k, pone, state[1], xpts[1]); 
 
         // Now you have the index in smGpu[rank]*xg + xcp*rank  so get the k value with dx.
         cudaMemcpyToSymbol(deqConsts, heqConsts, sizeof(eqConsts));
@@ -117,32 +125,8 @@ int main(int argc, char *argv[])
         **xpts = new double* [1];
         cudaHostAlloc((void **) xpts[0], xalloc * sizeof(double), cudaHostAllocDefault);
         cudaHostAlloc((void **) state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
-        for (int k=strt; k<(strt + xc); k++)  initialState(inJ, state[0], xpts[0], k); 
+        for (int k=1; k<cGlob.xc); k++)  initialState(inJ, k, strt, state[0], xpts[0]); 
     }
-
-    int prt = 1 + 2*cGlob.hasGpu;
-    
-
-    
-
-
-    int strt, npt, nar;
-
-
-    for (int k=0; k<rank[2]; k++) 
-    {
-
-    }
-         
-
-
-    for (int k=0; k<; k++) 
-        initialState(inJ, &state[k]->Q[0]);
-
-    // We always know that there's some eqConsts struct that we need to 
-    // to put into constant memory.
-    // PROBABLY NEED TO CHECK TO MAKE SURE THERE"S A GPU FIRST.
-
     int tstep = 1;
     // Start the counter and start the clock.
     MPI_Barrier(MPI_COMM_WORLD);
@@ -153,19 +137,21 @@ int main(int argc, char *argv[])
 	cudaEventRecord( start, 0);
 
     // Call the correct function with the correct algorithm.
-    cout << scheme << " " ;
     double tfm;
 
-    if (scheme)
-    {
-        tfm = sweptWrapper(bks, tpb, dv, dt, tf, scheme-1, IC, T_final, freq, fwr);
-    }
-    else
+    if (!argv[1].compare("C"))
     {
         tfm = classicWrapper(state, xpts, &tstep);
     }
+    else if  (!argv[1].compare("S"))
+    {
+        tfm = sweptWrapper(state, xpts, &tstep);
+    }
+    else
+    {
+        std::cerr << "Incorrect or no scheme given" << std::endl;
+    }
 
-    ;
     MPI_Barrier(MPI_COMM_WORLD);
 
 	// Show the time and write out the final condition.
@@ -183,8 +169,9 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    std::ofstream soljson(argv[2]);
+    std::ofstream soljson(argv[3]);
     soljson << solution;
+    soljson.close();
 
     if (rank == 0)
     {
@@ -202,18 +189,32 @@ int main(int argc, char *argv[])
         json timing;
         timing[dv][tpb][gpuA] = per_ts;
 
-        std::ofstream timejson(argv[2]);
+        std::ofstream timejson(argv[4]);
         timejson << std::setw(4) << timing << std::endl;
+        timejson.close();
     }
 
-    if (xgpu)
+    if (cGlob.hasGpu)
     {
         cudaDeviceSynchronize();
-
         cudaEventDestroy( start );
         cudaEventDestroy( stop );
+        for (int k=0; k<3; k++)
+        {
+            cudaHostFree(xpts[k]);
+            cudaHostFree(state[k]);
+        }
+        
+        delete[] xpts;
+        delete[] state;
         cudaDeviceReset();
     }
-
+    else
+    {
+        cudaHostFree(xpts[0])
+        cudaHostFree(state[0])
+        delete[] xpts;
+        delete[] states;
+    }
 	return 0;
 }

@@ -40,8 +40,9 @@ REAL pressure(REALthree qH)
     return DIMS.mgam * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }
 
-__host__ REAL printout(const int i, REALthree subj)
+__host__ REAL printout(const int i, states *state)
 {
+    REALthree subj = state->Q[0];
     switch(i)
     {
         case 0: return density(subj);
@@ -77,11 +78,16 @@ _host__ void equationSpecificArgs(json inJ)
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(REALthree *intl, double xpt, double lx, char ic)
+__host__ void initialState(json inJ, int idx, int xst, states *inl, double *xs)
 {
-    if (ic == "PARTITION")
+    REAL dtx = inJ["dt"];
+    REAL dxx = inJ["dx"];
+    double xss = dx*(double)(idx + xst);
+    xs[idx] = xss;
+    bool wh = inJ["IC"] == "PARTITION";
+    if (wh)
     {
-        int side = (xpt < HALF*lx);
+        int side = (xs < HALF*lx);
         intl = hBound[side];
     }
 }

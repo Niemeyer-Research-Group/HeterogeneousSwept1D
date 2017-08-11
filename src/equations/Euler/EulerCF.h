@@ -103,11 +103,11 @@ __host__ REAL energy(REALthree subj);
 __device__ __host__ 
 __forceinline__ REAL pressure(REALthree qH);
 
-__host__ void printout(const int i, REALthree subj); //---------------//
+__host__ void printout(const int i, states *state); //---------------//
 
 _host__ void equationSpecificArgs(json inJ) //---------------//
 
-__host__ states initialState(json icMaker, states *state, double *xpts, int pt); //---------------//
+__host__ states initialState(json inJ, int idx, int xst, states *inl, double *xs); //---------------//
 
 __host__ void mpi_type(MPI_Datatype *dtype); //---------------//
 

@@ -93,8 +93,9 @@ void initArgs(json inJ);
     cGlob.ht = cGlob.tpb/2;
     cGlob.htm = cGlob.ht - 1;
     cGlob.htp = cGlob.ht + 1;
+    cGlob.bks = cGlob.xg/cGlob.tpb;
 
-    cGlob.dx = cGlob.lx/(cGlob.nX - 2.0); // Spatial step
+    cGlob.dx = cGlob.lx/((double)cGlob.nX - 2.0); // Spatial step
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
 
     equationSpecificArgs(json inJ); 
@@ -105,23 +106,22 @@ void initArgs(json inJ);
 
 
 
-    // Swept Always Passes!
-    enum
-    {
-        // If BCTYPE == "Dirichlet"
-        if (!ranks[1]) cGlob.bCond[0] = false;
-        if (ranks[1] == lastproc) cGlob.bCond[1] = false;
-        // If BCTYPE == "Periodic"
-            // Don't do anything.
-    }
+    // // Swept Always Passes!
+    // enum
+    // {
+    //     // If BCTYPE == "Dirichlet"
+    //     if (!ranks[1]) cGlob.bCond[0] = false;
+    //     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
+    //     // If BCTYPE == "Periodic"
+    //         // Don't do anything.
+    // }
 }
-// THIS IS GREAT BUT YOU CAN'T PASS IT BACK BECAUSE TYPES!
-// Maybe.
-void solutionOutput(REALthree outState, REAL tstamp, REAL xpt)
+
+void solutionOutput(states *outState, REAL tstamp, REAL xpt)
 {
     for (int k=0; k<NVARS; k++)
     {
-        solution[outVars[k]][tstamp][xpt] = printout(k, outVec); 
+        solution[outVars[k]][tstamp][xpt] = printout(k, outState); 
     }
 }
 

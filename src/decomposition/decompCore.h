@@ -30,7 +30,7 @@ struct globalism {
 // Geometry
     int tpb, tpbp, base;
     int ht, htm, htp;
-    int szState;
+    int bks, szState;
 
 // Iterator
     double tf, freq, dt, dx, lx;

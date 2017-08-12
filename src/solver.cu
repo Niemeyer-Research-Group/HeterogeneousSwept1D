@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
     states **state;
     double **xpts;
 
-    int exSpace = (cGlob.hasGpu) ? cGlob.htp : 2;
+    int exSpace = (!scheme.compare("S") ? cGlob.htp : 2;
     int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
     int xalloc = xc + exSpace;
 

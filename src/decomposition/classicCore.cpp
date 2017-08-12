@@ -74,6 +74,7 @@ double classicWrapper(states **state, double **xpts, int *tstep)
         
         cudaMalloc((void **)&dState, gpusize);
         // Copy the initial conditions to the device array.
+        // This is ok, the whole array has been malloced.
         cudaMemcpy(dState, state[1], gpusize, cudaMemcpyHostToDevice);
 
         // Four streams for four transfers to and from cpu.

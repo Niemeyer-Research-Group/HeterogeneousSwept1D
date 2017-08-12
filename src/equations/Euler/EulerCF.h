@@ -128,8 +128,8 @@ __forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR);
 __device__ __host__ 
 __forceinline__ void eulerStep(states *state, int idx, int tstep);
 
-__device__ __host__ 
-__forceinline__ void stepUpdate(states *state, int idx, int tstep); //---------------//
+__device__ __host__  
+void stepUpdate(states *state, int idx, int tstep); //---------------//
 
 
 // #ifndef REAL

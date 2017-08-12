@@ -231,7 +231,7 @@ __device__ __host__ void eulerStep(states *state, int idx, int tstep)
 }
 
 __device__ __host__ 
-__forceinline__ void stepUpdate(states *state, int idx, int tstep)
+void stepUpdate(states *state, int idx, int tstep)
 {
     if (tstep & 1) //Odd 0 for even numbers
     {

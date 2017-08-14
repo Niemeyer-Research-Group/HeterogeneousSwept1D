@@ -94,9 +94,9 @@ int main(int argc, char *argv[])
         cudaHostAlloc((void **) &xpts[0], xc * sizeof(double), cudaHostAllocDefault);
         cudaHostAlloc((void **) &xpts[1], (cGlob.xg + exSpace) * sizeof(double), cudaHostAllocDefault);
         cudaHostAlloc((void **) &xpts[2], xc * sizeof(double), cudaHostAllocDefault);
-        cudaHostAlloc((void **) state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
-        cudaHostAlloc((void **) state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
-        cudaHostAlloc((void **) state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
 
         int pone = (strt + xc);
         int ptwo = (pone + cGlob.xg);
@@ -120,8 +120,8 @@ int main(int argc, char *argv[])
     {
         state = new states* [1];
         xpts = new double* [1];
-        cudaHostAlloc((void **) xpts[0], xalloc * sizeof(double), cudaHostAllocDefault);
-        cudaHostAlloc((void **) state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) &xpts[0], xalloc * sizeof(double), cudaHostAllocDefault);
+        cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
         for (int k=1; k<=xc; k++)  initialState(inJ, k, strt, state[0], xpts[0]); 
     }
 

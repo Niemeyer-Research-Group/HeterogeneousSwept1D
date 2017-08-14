@@ -226,17 +226,34 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
 
+    states **staten = new states* [cGlob.nThreads]; 
+    int ar1;
+    int ptin;
+
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
+        int tps = cGlob.nThreads/2; // Threads per side.
+        for (int k=0; k<cGlob.nThreads; k++)
+        {
+            ar1 = (k/tps) * 2;
+            ptin = (k % tps) * cGlob.tpb; 
+            staten[k] = (state[ar1] + ptin); // ptr + offset
+        }
+
+        int stride = tps * cGlob.tpb;
         int tid, strt, rnk = 0; // Seems cheesy.
         const int xc =cGlob.xcpu/2, xcp = xc+1, xcpp = xc+2;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
-        const size_t gpusize = cGlob.szState * (xc + cGlob.htp)
+        const size_t gpusize = cGlob.szState * (xc + cGlob.htp);
         const size_t ptsize = cGlob.szState * xgpp;
         const size_t passsize =  cGlob.szState * cGlob.htp;
         const size_t smem = cGlob.szState * cGlob.base;
         const int offSend[2] = {1, xc}; // {left, right}    
         const int offRecv[2] = {xcp, 0}; 
+
+        cudaStream_t st1, st2;
+        cudaStreamCreate(&st1);
+        cudaStreamCreate(&st2);
 
         states *dState; 
         cudaMalloc((void **)&dState, gpusize);
@@ -246,21 +263,16 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         // Separate these.
         upTriangle <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tstep);
 
-        // I wanted to split this.
+        // The pointers are already strided, now we stride each wave of pointers.
         #pragma parallel num_threads(cGlob.nThreads) private(strt, tid)
         {
             tid = omp_get_thread_num();
             for (int k=0; k<cGlob.nWaves; k++)
             {
-                strt = cGlob.tpb * (k * cGLob.nThreads);
-                upTriangleCPU(&state[0][strt]);
-                upTriangleCPU(&state[2][strt]);
+                strt = k*stride;
+                upTriangleCPU(staten[tid] + strt, *tstep);
             }
         }
-
-        cudaStream_t st1, st2;
-        cudaStreamCreate(&st1);
-        cudaStreamCreate(&st2);
 
         while(t_eq < t_end)
         { 

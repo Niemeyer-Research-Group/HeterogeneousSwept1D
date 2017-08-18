@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
     }
     else if  (!scheme.compare("S"))
     {
-        //tfm = sweptWrapper(state, xpts, &tstep);
+        tfm = sweptWrapper(state, xpts, &tstep);
     }
     else
     {

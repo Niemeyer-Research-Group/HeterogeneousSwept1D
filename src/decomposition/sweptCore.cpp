@@ -146,7 +146,6 @@ wholeDiamond(states *state, int tstep)
 }
 
 // HOST SWEPT ROUTINES
-
 void upTriangleCPU(states *state, int tstep)
 {
     for (int k=2; k<cGlob.htp; k++)
@@ -159,20 +158,23 @@ void upTriangleCPU(states *state, int tstep)
 }
 
 
-void downTriangleCPU(states *state, int tstep)
+void downTriangleCPU(states *state, int tstep, int zi, int zf)
 {
-    for (int k=cGlob.ht; k>0; k--)
+    for (int k=cGlob.ht; k>1; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
             stepUpdate(state, n, tstep + (k-1));
         }
     }
-    // Apply BC
+    for (int n=zi; n<zf; n++)
+    {
+        stepUpdate(state, n, tstep + (k-1));
+    }
 }
 
 // Now you can call this on a split for all proc/threads except (0,0)
-void wholeDiamondCPU(states *state, int tstep, int zi=1)
+void wholeDiamondCPU(states *state, int tstep, int zi, int zf)
 {
     for (int k=cGlob.ht; k>1; k--)
     {
@@ -182,7 +184,7 @@ void wholeDiamondCPU(states *state, int tstep, int zi=1)
         }
     }
 
-    for (int n=zi; n<zj; n++)
+    for (int n=zi; n<zf; n++)
     {
         stepUpdate(state, n, tstep + (k-1));
     } 
@@ -221,7 +223,7 @@ void splitDiamondCPU(states *state, int tstep)
     }
 }
 
-void passSwept(states *stateSend, states *stateRecv, int tstep)
+static void inline passSwept(states *stateSend, states *stateRecv, int tstep)
 {
     MPI_Isend(stateSend + offSend[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(rnk),
             MPI_COMM_WORLD, &req[turn]);
@@ -231,8 +233,8 @@ void passSwept(states *stateSend, states *stateRecv, int tstep)
 }
 
 /*
-    The idea of the timestep counter is: the timestep you're on is the timestep you would export if you called 
-    downTriangle NEXT.
+    The idea of the timestep counter is: the timestep you're on is the timestep you would export 
+    if you called downTriangle NEXT.
 
 */
 
@@ -244,7 +246,9 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
 
     states **staten = new states* [cGlob.nThreads]; 
-    int ar1, ptin;
+    int ar1, ptin; 
+    const int lastThread = cGlob.nThreads-1, lastWave = cGlob.nWaves-1;
+    int sw[2] = {!ranks[1], ranks[1] == lastproc}; // {First node, last node}
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
@@ -278,7 +282,11 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
 
         cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
 
+        /* -- DOWN MUST FOLLOW A SPLIT AND UP CANNOT BE IN WHILE LOOP SO DO UP AND FIRST SPLIT OUTSIDE OF LOOP 
+            THEN LOOP CAN BE WITH WHOLE - DIAMOND - CHECK DOWN.
+        */
         // ------------ Step Forward ------------ //
+        // ------------ UP ------------ //
 
         upTriangle <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tstep);
 
@@ -295,32 +303,101 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
 
         // ------------ Pass Edges ------------ // Give to 0, take from 2.
         // I'm doing it backward but it's the only way that really makes sense in this context.
-        // Before I really abstracted this process away.  But here I have to deal with it.  If you pass left first, you // need to start at ht rather than 0.  That's the problem.
+        // Before I really abstracted this process away.  But here I have to deal with it.  
+        //If you pass left first, you need to start at ht rather than 0.  That's the problem.
 
         passSwept(state[0], state[2], *tstep);
         cudaMemcpyAsync(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost, st1);
         cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
         swIncrement();//Increment
 
+        // ------------ Step Forward ------------ //
+        // ------------ SPLIT ------------ //
+
+        wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState + cGlob.ht, *tstep);
+
+        #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
+        {
+            tid = omp_get_thread_num();
+            sw[1] = (sw[1] && tid == lastThread); // Only true for last proc and last thread.
+            for (int k=0; k<cGlob.nWaves; k++)
+            {
+                sw[1] = (sw[1] && k == lastWave)
+                strt = k*stride + cGlob.ht;
+                if (sw[1])
+                {
+                    splitDiamondCPU(staten[0] + strt, *tstep);
+                }
+                else
+                {
+                    wholeDiamondCPU(staten[tid] + strt, *tstep, 1, cGlob.tpbp);
+                }
+            }
+        }   
+
+        // ------------ Pass Edges ------------ //
+        
+        passSwept(state[2], state[0], *tstep);
+        cudaMemcpyAsync(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost, st1);
+        cudaMemcpyAsync(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
+        swIncrement();
+
+        // Increment Counter and timestep
+        tstep += cGlob.tpb;
+        t_eq += cGlob.dt * (*tstep/NSTEPS);
+
         while(t_eq < t_end)
         {
             // ------------ Step Forward ------------ //
+            // ------------ WHOLE ------------ //
+            
+            wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, *tstep);
+
+            #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
+            {
+                tid = omp_get_thread_num();
+                sw[0] = (sw[0] && !tid);
+                sw[1] = (sw[1] && tid == lastThread);
+                for (int k=0; k<cGlob.nWaves; k++)
+                {
+                    sw[0] = (sw[0] && !k);
+                    sw[1] = (sw[1] && tid == lastWave);   
+                    strt = k*stride;
+                    wholeDiamondCPU(staten[tid] + strt, *tstep, sw[0] + 1,  cGlob.tpbp-sw[1]);
+                }
+            }   
+
+            // ------------ Pass Edges ------------ //
+            
+            passSwept(state[0], state[2], *tstep);
+            cudaMemcpyAsync(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost, st1);
+            cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
+            swIncrement();//Increment
+
+            // Increment Counter and timestep
+            tstep += cGlob.tpb;
+            t_eq += cGlob.dt * (*tstep/NSTEPS);
+
+            // ------------ Step Forward ------------ //
+            // ------------ SPLIT ------------ //
 
             wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState + cGlob.ht, *tstep);
 
-            #pragma parallel num_threads(cGlob.nThreads) private(strt, tid)
+            #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
             {
                 tid = omp_get_thread_num();
+                sw[1] = (sw[1] && tid == lastThread); // Only true for last proc and last thread.
                 for (int k=0; k<cGlob.nWaves; k++)
                 {
+                    sw[1] = (sw[1] && k == lastWave)
                     strt = k*stride + cGlob.ht;
-                    if (!ranks[1] && !(tid + k))
+                    if (sw[1])
                     {
                         splitDiamondCPU(staten[0] + strt, *tstep);
                     }
                     else
                     {
-                        wholeTriangleCPU(staten[tid] + strt, *tstep);
+                        wholeDiamondCPU(staten[tid] + strt, *tstep, 1, cGlob.tpbp);
                     }
                 }
             }   
@@ -328,33 +405,8 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
             // ------------ Pass Edges ------------ //
             
             passSwept(state[2], state[0], *tstep);
-            cudaMemcpyAsync(state[2] + offRecv[turn], dState, passsize, cudaMemcpyDeviceToHost, st1);
-            cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
-            swIncrement();
-
-            // Increment Counter and timestep
-            tstep += cGlob.tpb;
-            t_eq += cGlob.dt * (*tstep/NSTEPS);
-
-            // ------------ Step Forward ------------ //
-            
-            wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, *tstep);
-
-            #pragma parallel num_threads(cGlob.nThreads) private(strt, tid)
-            {
-                tid = omp_get_thread_num();
-                for (int k=0; k<cGlob.nWaves; k++)
-                {
-                    strt = k*stride;
-                    wholeTriangleCPU(staten[tid] + strt, *tstep);
-                }
-            }   
-
-            // ------------ Pass Edges ------------ //
-            
-            passSwept(state, xcp, *tstep);
-            cudaMemcpyAsync(state[0] + offRecv[turn], dState, passsize, cudaMemcpyDeviceToHost, st1);
-            cudaMemcpyAsync(dState + xgp, state[0] + offRecv[turn], passsize, cudaMemcpyHostToDevice, st2);
+            cudaMemcpyAsync(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost, st1);
+            cudaMemcpyAsync(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
             swIncrement();
 
             // Increment Counter and timestep
@@ -365,13 +417,17 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
             {
                 downTriangle <<<cGlob.bks, cGlob.tpb, smem>>> (dState + cGlob.htp, *tstep);
 
-                #pragma parallel num_threads(cGlob.nThreads) private(strt, tid)
+                #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
                 {
                     tid = omp_get_thread_num();
+                    sw[0] = (sw[0] && !tid);
+                    sw[1] = (sw[1] && tid == lastThread);
                     for (int k=0; k<cGlob.nWaves; k++)
                     {
+                        sw[0] = (sw[0] && !k);
+                        sw[1] = (sw[1] && tid == lastWave);   
                         strt = k*stride;
-                        downTriangleCPU(staten[tid] + strt, *tstep);
+                        downTriangleCPU(staten[tid] + strt, *tstep, sw[0] + 1,  cGlob.tpbp-sw[1]);
                     }
                 }   
 
@@ -393,9 +449,10 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
                         upTriangleCPU(staten[tid] + strt, *tstep);
                     }
                 }
-                passSwept(state, xcp, *tstep);
-                cudaMemcpyAsync(state[0] + offRecv[turn], dState, passsize, cudaMemcpyDeviceToHost, st1);
-                cudaMemcpyAsync(dState + xgp, state[2] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
+
+                passSwept(state[0], state[2], *tstep);
+                cudaMemcpyAsync(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost, st1);
+                cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
                 swIncrement();//Increment
 
                 // Increment Counter and timestep
@@ -409,7 +466,7 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         cudaStreamDestroy(st1);
         cudaStreamDestroy(st2);
     }
-
+    // YES YOU CAN PASS THE SAME POINTER AS TWO DIFFERENT ARGS TO THE FUNCITON.
     else
     {
         int xcp = cGlob.xcpu + cGlob.htp;
@@ -430,7 +487,7 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
             }
         }
 
-        passSwept(state, xcp, *tstep); // Left first
+        passSwept(state[0], state[0], *tstep); // Left first
         swIncrement();
 
         while (t_eq < t_end)
@@ -448,12 +505,13 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
                     }
                     else
                     {
-                        wholeTriangleCPU(staten[tid] + strt, *tstep);
+                        wholeDiamondCPU(staten[tid] + strt, *tstep);
                     }
                 }
             }   
 
-            passSwept(state, xcp, *tstep); // Left first
+            passSwept(state[0], state[0], *tstep); // Left first
+            swIncrement();
 
             if (t_eq > twrite)
             {

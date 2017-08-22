@@ -1,6 +1,8 @@
 #ifndef DUMMYS_H
 #define DUMMYS_H
 
-#include "Euler/EulerCF.h"
+#ifdef EulerCF
+    #include "EulerCF/EulerCF.h"
+#endif
 
 #endif

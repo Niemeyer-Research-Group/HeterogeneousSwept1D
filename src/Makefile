@@ -13,8 +13,9 @@ OUTDIR := $(PROJECTDIR)bin
 EQDIR := $(PROJECTDIR)equations
 COREDIR := $(PROJECTDIR)decomposition
 CONFS := $(PROJECTDIR)eqconf.conf
-EQS := $(file < $(CONFS))
+EQS := $(shell cat $(CONFS))
 EQDIRS := $(addprefix $(EQDIR)/, $(EQS))
+UTILDIR := $(PROJECTDIR)utilities
 
 # MPICFLAGS=-I${MPI_HOME}/include
 # CUDACFLAGS=-I${CUDA_INSTALL_PATH}/include
@@ -27,14 +28,15 @@ EQDIRS := $(addprefix $(EQDIR)/, $(EQS))
 
 PARALLELLIB := -Xcompiler -fopenmp -lmpi -gencode arch=compute_35,code=sm_35
 NATLIB := -lm -O3 -std=c++11 
-INC := -I$(PROJECTDIR)utilities -I$(PROJECTDIR)equations -I$(MPIPATH)
+INC := -I$(UTILDIR) -I$(PROJECTDIR)equations -I$(MPIPATH)
 CUDAFLAGS := $(NATLIB) $(INC) $(PARALLELLIB) 
+
 COREDEP := $(PROJECTDIR)solver.cu $(wildcard $(COREDIR)/*.cpp)
 
 .PHONY: $(EQS)
 
-$(EQS): %: $(EQDIRS)/%.cu $(COREDEP) 
-	$(NVCC) $^ -o $(OUTDIR)/$@ $(CUDAFLAGS) -D=$@
+$(EQS): %: $(EQDIRS)/%.cpp $(COREDEP)
+	$(NVCC) $^ -o $(OUTDIR)/$@ -D=$@ $(CUDAFLAGS) 
 
 # all: $(EQS)
 

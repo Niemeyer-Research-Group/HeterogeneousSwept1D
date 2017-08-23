@@ -132,25 +132,5 @@ __device__ __host__
 void stepUpdate(states *state, int idx, int tstep); //---------------//
 
 
-// #ifndef REAL
-//     #define REAL            float
-//     #define REALtwo         float2
-//     #define REALthree       float3
-//     #define SQUAREROOT(x)   sqrtf(x)
-
-//     #define ZERO            0.0f
-//     #define QUARTER         0.25f
-//     #define HALF            0.5f
-//     #define ONE             1.f
-//     #define TWO             2.f
-// #else
-
-//     #define ZERO            0.0
-//     #define QUARTER         0.25
-//     #define HALF            0.5
-//     #define ONE             1.0
-//     #define TWO             2.0
-//     #define SQUAREROOT(x)   sqrt(x)
-// #endif
 
 #endif

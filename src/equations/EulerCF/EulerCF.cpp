@@ -13,8 +13,12 @@
 */
 #ifdef __CUDA_ARCH__
     #define DIMS    deqConsts
+    #define QNAN(x) isnan(x)
+    #define QMIN(x, y) min(x, y)
 #else
     #define DIMS    heqConsts
+    #define QNAN(x) std::isnan(x)
+    #define QMIN(x, y) std::min(x, y)
 #endif
 
 __host__ REAL density(REALthree subj)
@@ -43,13 +47,15 @@ REAL pressure(REALthree qH)
 __host__ REAL printout(const int i, states *state)
 {
     REALthree subj = state->Q[0];
+    REAL outs;
     switch(i)
     {
-        case 0: return density(subj);
-        case 1: return velocity(subj);
-        case 2: return energy(subj);
-        case 3: return pressure(subj);
+        case 0: outs = density(subj);
+        case 1: outs = velocity(subj);
+        case 2: outs = energy(subj);
+        case 3: outs = pressure(subj);
     } 
+    return outs;
 }
 
 /*
@@ -147,7 +153,7 @@ __device__ __host__
 __forceinline__
 REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
 {   
-    return (std::isnan(pRatio) || pRatio<0) ? qH :  (qH + HALF * std::min(pRatio, ONE) * (qN - qH));
+    return (QNAN(pRatio) || pRatio<0) ? qH :  (qH + HALF * QMIN(pRatio, ONE) * (qN - qH));
 }
 
 /**

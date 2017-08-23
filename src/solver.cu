@@ -27,7 +27,6 @@
     - Swept always passes so what to do about bCond.
     - Make sure all struct variables are correctly initialized
     - Watch cluster video, try to run something like the Test bench
-    - Write json for workstation situation.
     - Write the cluster explorer code.
     - Using an npm js solution for merging is a bad idea, try something else.
 */
@@ -65,8 +64,7 @@ int main(int argc, char *argv[])
     
     // Equation, grid, affinity data
     std::ifstream injson(argv[1], std::ifstream::in);
-    json inJ;
-    injson >> inJ;
+    json inJ = json::parse(injson);
     injson.close();
 
     parseArgs(inJ, argc, argv);
@@ -81,7 +79,7 @@ int main(int argc, char *argv[])
     states **state;
     double **xpts;
 
-    int exSpace = (!scheme.compare("S") ? cGlob.htp : 2;
+    int exSpace = (!scheme.compare("S")) ? cGlob.htp : 2;
     int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
     int xalloc = xc + exSpace;
 
@@ -143,7 +141,7 @@ int main(int argc, char *argv[])
     }
     else if  (!scheme.compare("S"))
     {
-        tfm = sweptWrapper(state, xpts, &tstep);
+//        tfm = sweptWrapper(state, xpts, &tstep);
     }
     else
     {

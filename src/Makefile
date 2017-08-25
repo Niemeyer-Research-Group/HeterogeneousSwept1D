@@ -27,15 +27,15 @@ UTILDIR := $(PROJECTDIR)utilities
 # GENCODE := -lcudart -lcuda
 
 PARALLELLIB := -Xcompiler -fopenmp -lmpi -gencode arch=compute_35,code=sm_35
-NATLIB := -lm -O3 -std=c++11 
+NATLIB := -lm -O3 -std=c++11
 INC := -I$(UTILDIR) -I$(PROJECTDIR)equations -I$(MPIPATH)
 CUDAFLAGS := $(NATLIB) $(INC) $(PARALLELLIB) 
 
-COREDEP := $(PROJECTDIR)solver.cu $(wildcard $(COREDIR)/*.cpp)
+COREDEP := $(PROJECTDIR)solver.cu $(wildcard $(COREDIR)/*.cu) $(wildcard $(COREDIR)/*.cpp)
 
 .PHONY: $(EQS)
 
-$(EQS): %: $(EQDIRS)/%.cpp $(COREDEP)
+$(EQS): %: $(EQDIRS)/%.cu $(COREDEP)
 	$(NVCC) $^ -o $(OUTDIR)/$@ -D=$@ $(CUDAFLAGS) 
 
 # all: $(EQS)

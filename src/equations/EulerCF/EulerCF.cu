@@ -6,7 +6,7 @@
 
 /**
     Calculates the pressure at the current spatial point with the (x,y,z) rho, u * rho, e *rho state variables.
-    
+
     Calculates pressure from working array variables.  Pressure is not stored outside procedure to save memory.
     @param current  The state variables at current node
     @return Pressure at subject node
@@ -66,22 +66,22 @@ double lx; // Length of domain.
 
 __host__ void equationSpecificArgs(jsons inJ)
 {
-    heqConsts.gamma = inJ["gamma"];
+    heqConsts.gamma = inJ["gamma"].asDouble();
     heqConsts.mgamma = heqConsts.gamma - 1;
-    REAL rhoL = inJ["rhoL"];
-    REAL vL = inJ["vL"];
-    REAL pL = inJ["pL"];
-    REAL rhoR = inJ["rhoR"];
-    REAL vR = inJ["vR"];
-    REAL pR = inJ["pR"];
+    REAL rhoL = inJ["rhoL"].asDouble();
+    REAL vL = inJ["vL"].asDouble();
+    REAL pL = inJ["pL"].asDouble();
+    REAL rhoR = inJ["rhoR"].asDouble();
+    REAL vR = inJ["vR"].asDouble();
+    REAL pR = inJ["pR"].asDouble();
     hBounds[0].x = rhoL;
     hBounds[0].y = vL*rhoL;
     hBounds[0].z = pL/heqConsts.mgamma + HALF * rhoL * vL * vL;
     hBounds[1].x = rhoR;
-    hBounds[1].y = vR*rhoR, 
+    hBounds[1].y = vR*rhoR,
     hBounds[1].z = pR/heqConsts.mgamma + HALF * rhoR * vR * vR;
-    REAL dtx = inJ["dt"];
-    REAL dxx = inJ["dx"];
+    REAL dtx = inJ["dt"].asDouble();
+    REAL dxx = inJ["dx"].asDouble();
     heqConsts.dt_dx = dtx/dxx;
 }
 
@@ -90,11 +90,11 @@ __host__ void equationSpecificArgs(jsons inJ)
 // lxh is half the domain length assuming starting at 0.
 __host__ void initialState(jsons inJ, int idx, int xst, states *inl, double *xs)
 {
-    REAL dxx = inJ["dx"];
-    REAL lx = inJ["lx"];
+    REAL dxx = inJ["dx"].asDouble();
+    REAL lx = inJ["lx"].asDouble();
     double xss = dxx*(double)(idx + xst);
     xs[idx] = xss;
-    bool wh = inJ["IC"] == "PARTITION";
+    bool wh = inJ["IC"].asString() == "PARTITION";
     if (wh)
     {
         int side = (xss < HALF*lx);

@@ -39,6 +39,8 @@ void makeMPI(int argc, char* argv[])
 
     Arguments are key, value pairs all lowercase keys, no dash in front of arg.
 */
+static bool mg = false;
+
 void parseArgs(jsons inJ, int argc, char *argv[])
 {
     if (argc>6)
@@ -46,24 +48,26 @@ void parseArgs(jsons inJ, int argc, char *argv[])
         for (int k=6; k<argc; k+=2)
         {
             inJ[argv[k]] = argv[k+1];
+		// If it sets nW, flip the bool.
+	    mg=true;
         }
     }
 }
 
 void initArgs(jsons inJ)
 {
-    cGlob.lx = inJ["lx"];
+    cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);
     cGlob.base = cGlob.tpb+2;
     cGlob.tpbp = cGlob.tpb+1;
     cGlob.ht = cGlob.tpb/2;
     cGlob.htm = cGlob.ht-1;
-    cGlob.tpb = inJ["tpb"];
-    cGlob.gpuA = inJ["gpuA"];
-    cGlob.dt = inJ["dt"];
-    cGlob.tf = inJ["tf"];
-    cGlob.freq = inJ["freq"];
-    cGlob.nX = inJ["nX"];
+    cGlob.tpb = inJ["tpb"].asInt();
+    cGlob.gpuA = inJ["gpuA"].asDouble();
+    cGlob.dt = inJ["dt"].asDouble();
+    cGlob.tf = inJ["tf"].asDouble();
+    cGlob.freq = inJ["freq"].asDouble();
+    cGlob.nX = inJ["nX"].asInt();
 
     // Derived quantities
     cGlob.xcpu = cGlob.nThreads * cGlob.tpb;
@@ -73,16 +77,16 @@ void initArgs(jsons inJ)
     cGlob.xWave = (nprocs * cGlob.xcpu + cGlob.nGpu * cGlob.xg); 
 
     // Do it backward if you already know the waves. Else we get the waves from nX (which is just an approximation).
-    if (inJ.count("nW"))
+    if (mg)
     {
-        cGlob.nWaves = inJ["nW"];
+        cGlob.nWaves = inJ["nW"].asInt();
     }
     else
     {
         cGlob.nWaves = CEIL(cGlob.xWave, cGlob.nX);
     }
 
-    cGlob.nX = cGlob.nWaves*cGlob.xWave; 
+    cGlob.nX = cGlob.nWaves*cGlob.xWave;
     cGlob.tpbp = cGlob.tpb + 1;
     cGlob.base = cGlob.tpb + 2;
     cGlob.ht = cGlob.tpb/2;
@@ -92,7 +96,7 @@ void initArgs(jsons inJ)
     cGlob.dx = cGlob.lx/((double)cGlob.nX - 2.0); // Spatial step
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
 
-    equationSpecificArgs(inJ); 
+    equationSpecificArgs(inJ);
 
     // Swept Always Passes!
 
@@ -108,7 +112,7 @@ void solutionOutput(states *outState, REAL tstamp, REAL xpt)
 {
     for (int k=0; k<NVARS; k++)
     {
-        solution[outVars[k]][tstamp][xpt] = printout(k, outState); 
+        //solution[outVars[k]][tstamp][xpt] = printout(k, outState);
     }
 }
 

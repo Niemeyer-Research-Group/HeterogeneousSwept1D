@@ -16,7 +16,8 @@
 // Use: mpirun --bind-to-socket exe [args]
 
 #include "decomposition/classicCore.h"
-//#include "decomposition/sweptCore.h"
+#include "decomposition/sweptCore.h"
+#include "json/json.h"
 
 #ifndef HDW
     #define HDW     "hardware/WORKSTATION.json"
@@ -31,6 +32,16 @@
     - Using an npm js solution for merging is a bad idea, try something else.
 */
 
+std::vector <int> jsonP(jsons jp, size_t sz)
+{
+	std::vector <int> outv;
+	for(int i=0; i<sz; i++)
+	{
+		outv.push_back(jp[i].asInt());
+	}
+	return outv;
+}
+
 // // This feels like a bad idea.
 // void exitMerge()
 // {
@@ -41,8 +52,6 @@ int main(int argc, char *argv[])
 {   
     makeMPI(argc, argv);
 
-    Json::Reader reader;
-
     std::string ext = ".json";
     std::string myrank = std::to_string(ranks[1]);
     std::string sout = argv[3];
@@ -52,22 +61,24 @@ int main(int argc, char *argv[])
 
     std::ifstream hwjson(HDW, std::ifstream::in);
     jsons hwJ;
-    reader.parse(hwjson, hwJ);
+    hwjson >> hwJ;
     hwjson.close();
 
-    std::vector<int> gpuvec = hwJ["GPU"];
+    std::vector<int> gpuvec = jsonP(hwJ["GPU"], 1);
     std::vector<int> smGpu(gpuvec.size());
-    cGlob.nThreads = hwJ["nThreads"]; // Potetntial for non constant
+    std::vector<int> threadv =  jsonP(hwJ["nThreads"], 1);
+    cGlob.nThreads=threadv[ranks[1]]; // Potetntial for non constant
     cGlob.hasGpu = gpuvec[ranks[1]];
     std::partial_sum(gpuvec.begin(), gpuvec.end(), smGpu.begin());
     cGlob.nGpu = smGpu.back();
     smGpu.insert(smGpu.begin(), 0);
-    int gpuID = hwJ["gpuID"];
+    std::vector <int> myGPU = jsonP(hwJ["gpuID"], 1);
+    int gpuID = myGPU[ranks[1]];
     
     // Equation, grid, affinity data
     std::ifstream injson(argv[1], std::ifstream::in);
     jsons inJ;
-    reader.parse(injson, inJ);
+    injson >> inJ;
     injson.close();
 
     parseArgs(inJ, argc, argv);
@@ -185,11 +196,11 @@ int main(int argc, char *argv[])
         std::cout << n_timesteps << " timesteps" << std::endl;
         std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
-        json timing;
-        timing[cGlob.nX][cGlob.tpb][cGlob.gpuA] = per_ts;
+        jsons timing;
+        //timing[cGlob.nX][cGlob.tpb][cGlob.gpuA] = per_ts;
 
         std::ofstream timejson(argv[4]);
-        timejson << timing;
+        //timejson << timing;
         timejson.close();
     }
 

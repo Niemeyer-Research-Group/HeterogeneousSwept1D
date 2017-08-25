@@ -123,14 +123,12 @@ __device__ __host__
 __forceinline__ REALthree eulerFlux(REALthree qL, REALthree qR);
 
 __device__ __host__ 
-__forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR);
+REALthree eulerSpectral(REALthree qL, REALthree qR);
 
 __device__ __host__ 
-__forceinline__ void eulerStep(states *state, int idx, int tstep);
+void eulerStep(states *state, int idx, int tstep);
 
-__device__ __host__  
+__device__ __host__ __forceinline__
 void stepUpdate(states *state, int idx, int tstep); //---------------//
-
-
 
 #endif

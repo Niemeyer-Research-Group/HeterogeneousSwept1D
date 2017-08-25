@@ -4,7 +4,7 @@
 #include <mpi.h>
 #include <omp.h>
 #include <algorithm> //string utility
-#include "json.hpp"
+#include "json/json.h"
 #include "dummyheader.h"
 
 #define TAGS(x) x & 32767
@@ -39,8 +39,8 @@ struct globalism {
 
 globalism cGlob;
 
-json solution;
-json timing;
+jsons solution;
+jsons timing;
 
 void makeMPI(int argc, char* argv[]);
 
@@ -49,10 +49,10 @@ void getDeviceInformation();
 void delegateDomain(double *xpts, states *state);
 
 // All additional options overwrite inJ default values.
-void parseArgs(json inJ, int argc, char *argv[]);
+void parseArgs(jsons inJ, int argc, char *argv[]);
 
 // Now inJ gives values to variables.
-void initArgs(json inJ);
+void initArgs(jsons inJ);
 
 void eCheckIn(int argc);
 

@@ -41,6 +41,8 @@ int main(int argc, char *argv[])
 {   
     makeMPI(argc, argv);
 
+    Json::Reader reader;
+
     std::string ext = ".json";
     std::string myrank = std::to_string(ranks[1]);
     std::string sout = argv[3];
@@ -49,8 +51,8 @@ int main(int argc, char *argv[])
     std::string scheme = argv[1];
 
     std::ifstream hwjson(HDW, std::ifstream::in);
-    json hwJ;
-    hwjson >> hwJ;
+    jsons hwJ;
+    reader.parse(hwjson, hwJ);
     hwjson.close();
 
     std::vector<int> gpuvec = hwJ["GPU"];
@@ -64,7 +66,8 @@ int main(int argc, char *argv[])
     
     // Equation, grid, affinity data
     std::ifstream injson(argv[1], std::ifstream::in);
-    json inJ = json::parse(injson);
+    jsons inJ;
+    reader.parse(injson, inJ);
     injson.close();
 
     parseArgs(inJ, argc, argv);

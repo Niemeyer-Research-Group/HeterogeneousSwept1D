@@ -22,7 +22,7 @@
 #include <string>
 
 #include "myVectorTypes.h"
-#include "json.hpp"
+#include "json/json.h"
 
 // We're just going to assume doubles
 #define REAL            double
@@ -85,7 +85,7 @@ REALthree hBounds[2]; // Boundary Conditions
 	============================================================
 */
 
-using json = nlohmann::json;
+typedef Json::Value jsons;
 
 /*
 //---------------// 
@@ -104,9 +104,9 @@ __forceinline__ REAL pressure(REALthree qH);
 
 __host__ REAL printout(const int i, states *state); //---------------//
 
-__host__ void equationSpecificArgs(json inJ); //---------------//
+__host__ void equationSpecificArgs(jsons inJ); //---------------//
 
-__host__ void initialState(json inJ, int idx, int xst, states *inl, double *xs); //---------------//
+__host__ void initialState(jsons inJ, int idx, int xst, states *inl, double *xs); //---------------//
 
 __host__ void mpi_type(MPI_Datatype *dtype); //---------------//
 

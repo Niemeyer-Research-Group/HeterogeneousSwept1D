@@ -39,7 +39,7 @@ void makeMPI(int argc, char* argv[])
 
     Arguments are key, value pairs all lowercase keys, no dash in front of arg.
 */
-void parseArgs(json inJ, int argc, char *argv[])
+void parseArgs(jsons inJ, int argc, char *argv[])
 {
     if (argc>6)
     {
@@ -50,7 +50,7 @@ void parseArgs(json inJ, int argc, char *argv[])
     }
 }
 
-void initArgs(json inJ)
+void initArgs(jsons inJ)
 {
     cGlob.lx = inJ["lx"];
     cGlob.szState = sizeof(states);

@@ -64,7 +64,7 @@ REALthree hBound[2]; // Boundary Conditions
 double lx; // Length of domain.
 */
 
-__host__ void equationSpecificArgs(json inJ)
+__host__ void equationSpecificArgs(jsons inJ)
 {
     heqConsts.gamma = inJ["gamma"];
     heqConsts.mgamma = heqConsts.gamma - 1;
@@ -88,7 +88,7 @@ __host__ void equationSpecificArgs(json inJ)
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(json inJ, int idx, int xst, states *inl, double *xs)
+__host__ void initialState(jsons inJ, int idx, int xst, states *inl, double *xs)
 {
     REAL dxx = inJ["dx"];
     REAL lx = inJ["lx"];

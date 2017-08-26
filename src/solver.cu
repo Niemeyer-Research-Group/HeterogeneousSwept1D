@@ -32,7 +32,7 @@
     - Using an npm js solution for merging is a bad idea, try something else.
 */
 
-std::vector <int> jsonP(jsons jp, size_t sz)
+std::vector<int> jsonP(jsons jp, size_t sz)
 {
 	std::vector <int> outv;
 	for(int i=0; i<sz; i++)

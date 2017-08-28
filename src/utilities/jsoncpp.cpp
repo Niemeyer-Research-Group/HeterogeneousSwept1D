@@ -320,8 +320,7 @@ Reader::Reader(const Features& features)
 
 bool
 Reader::parse(const std::string& document, Value& root, bool collectComments) {
-  JSONCPP_STRING documentCopy(document.data(), document.data() + document.capacity());
-  std::swap(documentCopy, document_);
+  document_.assign(document.begin(), document.end());
   const char* begin = document_.c_str();
   const char* end = begin + document_.length();
   return parse(begin, end, root, collectComments);
@@ -4735,7 +4734,7 @@ void StyledWriter::writeCommentBeforeValue(const Value& root) {
   while (iter != comment.end()) {
     document_ += *iter;
     if (*iter == '\n' &&
-       (iter != comment.end() && *(iter + 1) == '/'))
+       ((iter+1) != comment.end() && *(iter + 1) == '/'))
       writeIndent();
     ++iter;
   }
@@ -4951,7 +4950,7 @@ void StyledStreamWriter::writeCommentBeforeValue(const Value& root) {
   while (iter != comment.end()) {
     *document_ << *iter;
     if (*iter == '\n' &&
-       (iter != comment.end() && *(iter + 1) == '/'))
+       ((iter+1) != comment.end() && *(iter + 1) == '/'))
       // writeIndent();  // would include newline
       *document_ << indentString_;
     ++iter;
@@ -5239,7 +5238,7 @@ void BuiltStyledStreamWriter::writeCommentBeforeValue(Value const& root) {
   while (iter != comment.end()) {
     *sout_ << *iter;
     if (*iter == '\n' &&
-       (iter != comment.end() && *(iter + 1) == '/'))
+       ((iter+1) != comment.end() && *(iter + 1) == '/'))
       // writeIndent();  // would write extra newline
       *sout_ << indentString_;
     ++iter;
@@ -5378,4 +5377,8 @@ JSONCPP_OSTREAM& operator<<(JSONCPP_OSTREAM& sout, Value const& root) {
 // //////////////////////////////////////////////////////////////////////
 // End of content of file: src/lib_json/json_writer.cpp
 // //////////////////////////////////////////////////////////////////////
+
+
+
+
 

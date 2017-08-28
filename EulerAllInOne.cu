@@ -11,6 +11,7 @@
 #include <cuda_runtime_api.h>
 #include <device_functions.h>
 #include <mpi.h>
+#include <omp.h>
 
 #include <iostream>
 #include <fstream>
@@ -21,6 +22,8 @@
 #include <cstdlib>
 #include <cmath>
 #include <string>
+#include <vector>
+#include <algorithm>
 
 #include "myVectorTypes.h"
 #include "json/json.h"
@@ -378,8 +381,8 @@ jsons timing;
 //Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
 {
+    MPI_Init(&argc, &argv);
     mpi_type(&struct_type);
-	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
@@ -607,11 +610,11 @@ double classicWrapper(states **state, double **xpts, int *tstep)
                 }
                 #pragma omp section
                 {
-                    classicPassRight(state[2], xcp);
+                    classicPassRight(state[2], xcp, *tstep);
                 }
                 #pragma omp section
                 {
-                    classicPassLeft(state[0], xcp);
+                    classicPassLeft(state[0], xcp, *tstep);
                 }
             }
             
@@ -659,11 +662,11 @@ double classicWrapper(states **state, double **xpts, int *tstep)
             {
                 #pragma omp section
                 {
-                    classicPassRight(state[0], xcp);
+                    classicPassRight(state[0], xcp, *tstep);
                 }
                 #pragma omp section
                 {
-                    classicPassLeft(state[0], xcp);
+                    classicPassLeft(state[0], xcp, *tstep);
                 }
             }
 
@@ -1209,7 +1212,7 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
 */
 
 #ifndef HDW
-    #define HDW     "hardware/WORKSTATION.json"
+    #define HDW     "src/hardware/WORKSTATION.json"
 #endif
 
 std::vector<int> jsonP(jsons jp, size_t sz)
@@ -1250,7 +1253,7 @@ int main(int argc, char *argv[])
     int gpuID = myGPU[ranks[1]];
     
     // Equation, grid, affinity data
-    std::ifstream injson(argv[1], std::ifstream::in);
+    std::ifstream injson(argv[2], std::ifstream::in);
     jsons inJ;
     injson >> inJ;
     injson.close();

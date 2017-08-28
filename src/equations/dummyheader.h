@@ -2,7 +2,7 @@
 #define DUMMYS_H
 
 #ifdef EulerCF
-    #include "EulerCF/EulerCF.h"
+    #include "EulerCF/EulerCF.hpp"
 #endif
 
 #endif

@@ -35,11 +35,11 @@ COREDEP := $(PROJECTDIR)solver.cu $(wildcard $(COREDIR)/*.cu) $(wildcard $(CORED
 
 .PHONY: $(EQS)
 
-$(EQS): %: $(EQDIRS)/%.cu $(COREDEP)
-	$(NVCC) $^ -o $(OUTDIR)/$@ -D=$@ $(CUDAFLAGS) 
+$(EQS): %:  $(COREDEP)
+	$(NVCC) $^ $(UTILDIR)/jsoncpp.cpp -o $(OUTDIR)/$@ -D=$@ $(CUDAFLAGS) 
 
 # all: $(EQS)
-
+# $(EQDIRS)/%.cu
 # define build_rule
 # $1: $(COREDEP) 
 # 	$(MPICC) $(COREDEP) $(EQDIR)/$1/$1.cu -o $(OUTDIR)/$1 -D=$1 $(CUDAFLAGS)

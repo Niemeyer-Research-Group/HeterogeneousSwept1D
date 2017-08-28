@@ -8,8 +8,9 @@
 //Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
 {
+    
+    MPI_Init(&argc, &argv);
     mpi_type(&struct_type);
-	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;

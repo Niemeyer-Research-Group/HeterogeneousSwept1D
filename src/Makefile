@@ -2,7 +2,7 @@
 # -maxrregcount=73 
 
 MPICC=$(PREP) mpicc
-MPILD=$(PREP) mpic++
+MPICP=$(PREP) mpic++
 NVCC=$(PREP) nvcc
 
 # It will put the compiled programs in the bin subdirectory within the directory
@@ -24,9 +24,9 @@ UTILDIR := $(PROJECTDIR)utilities
 # APPOBJ := $(OUTDIR)/${lastword ${subst /, ,$(EQDIRS)}}
 
 # IFNVCC = -lmpi -Xcompiler -fopenmp -Xptxas=-v -restrict -march=native
-# GENCODE := -lcudart -lcuda
+# GENCODE := -gencode arch=compute_35,code=sm_35
 
-PARALLELLIB := -Xcompiler -fopenmp -lmpi -gencode arch=compute_35,code=sm_35
+PARALLELLIB := -fopenmp -lmpi -lcudart -lcuda
 NATLIB := -lm -O3 -std=c++11
 INC := -I$(UTILDIR) -I$(PROJECTDIR)equations -I$(MPIPATH)
 CUDAFLAGS := $(NATLIB) $(INC) $(PARALLELLIB) 
@@ -36,7 +36,7 @@ COREDEP := $(PROJECTDIR)solver.cu $(wildcard $(COREDIR)/*.cu) $(wildcard $(CORED
 .PHONY: $(EQS)
 
 $(EQS): %:  $(COREDEP)
-	$(NVCC) $^ $(UTILDIR)/jsoncpp.cpp -o $(OUTDIR)/$@ -D=$@ $(CUDAFLAGS) 
+	$(MPICP) $^ $(UTILDIR)/jsoncpp.cpp -o $(OUTDIR)/$@ -D=$@ $(CUDAFLAGS) 
 
 # all: $(EQS)
 # $(EQDIRS)/%.cu

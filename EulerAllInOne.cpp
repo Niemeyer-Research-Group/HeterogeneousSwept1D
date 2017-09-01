@@ -91,6 +91,7 @@ REALthree hBounds[2]; // Boundary Conditions
 
 typedef Json::Value jsons;
 
+
 /**
     Calculates the pressure at the current spatial point with the (x,y,z) rho, u * rho, e *rho state variables.
 
@@ -177,17 +178,15 @@ __host__ void equationSpecificArgs(jsons inJ)
 // lxh is half the domain length assuming starting at 0.
 __host__ void initialState(jsons inJ, int idx, int xst, states *inl, double *xs)
 {
-    double dxx = inJ["dx"].asDouble();
-    double lx = inJ["lx"].asDouble();
-    double xss = dxx*((double)idx + (double)xst);
+    REAL dxx = inJ["dx"].asDouble();
+    REAL lx = inJ["lx"].asDouble();
+    double xss = dxx*(double)(idx + xst);
     xs[idx] = xss;
     bool wh = inJ["IC"].asString() == "PARTITION";
-    int side;
     if (wh)
     {
-        side = (xss > HALF*lx);
+        int side = (xss < HALF*lx);
         inl->Q[0] = hBounds[side];
-        printf("| %.2f %i %.2f %i %i %.2f %.2f %.8f | ", hBounds[side].x, side, xss, idx, xst, lx, xs[idx], dxx);
     }
 }
 
@@ -242,14 +241,7 @@ __device__ __host__
 __forceinline__
 REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
 {   
-    if(QNAN(pRatio) || pRatio<0)  
-    {
-        return qH;
-    }
-    else
-    {
-       return (qH + HALF * QMIN(pRatio, ONE) * (qN - qH));
-    }
+    return (QNAN(pRatio) || pRatio<0) ? qH :  (qH + HALF * QMIN(pRatio, ONE) * (qN - qH));
 }
 
 /**
@@ -383,7 +375,6 @@ struct globalism {
 
 globalism cGlob;
 
-jsons inJ;
 jsons solution;
 jsons timing;
 
@@ -423,7 +414,7 @@ void makeMPI(int argc, char* argv[])
 */
 static bool mg = false;
 
-void parseArgs(int argc, char *argv[])
+void parseArgs(jsons inJ, int argc, char *argv[])
 {
     if (argc>6)
     {
@@ -436,7 +427,7 @@ void parseArgs(int argc, char *argv[])
     }
 }
 
-void initArgs()
+void initArgs(jsons inJ)
 {
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);
@@ -477,13 +468,6 @@ void initArgs()
 
     cGlob.dx = cGlob.lx/((double)cGlob.nX - 2.0); // Spatial step
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
-    std::cout << cGlob.dx << std::flush;
-    std::cout << inJ << std::flush;
-    double mydx = inJ["dx"].asDouble();
-    std::cout << mydx << std::flush;
-
-    std::cin >> cGlob.freq;
-    
 
     equationSpecificArgs(inJ);
 
@@ -532,13 +516,11 @@ __global__ void classicStep(states *state, int ts)
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
 
     stepUpdate(state, gid, ts);
-    if (gid==1) printf("GPU!: %d, Density: %.2f\n", ts, state[gid].Q[0].x);
 }
 
 void classicStepCPU(states *state, int numx, int tstep)
 {
-    bool ornk = omp_get_thread_num() == 0;
-    if (!ranks[1] && ornk) std::cout << "we're taking a classic step on the cpu: " << tstep << std::endl;
+    if (!ranks[1]) std::cout << "we're taking a classic step on the cpu: " << tstep << std::endl;
     for (int k=1; k<numx; k++)
     {
         stepUpdate(state, k, tstep);
@@ -555,7 +537,7 @@ void classicPassLeft(states *state, int idxend, int tstep)
         MPI_Recv(&state[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
                 MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
     }
-    if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: " << tstep << " " << ranks[1] << std::endl;
+    if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: " << tstep << std::endl;
 }
 
 void classicPassRight(states *state, int idxend, int tstep)
@@ -576,7 +558,6 @@ void classicPassRight(states *state, int idxend, int tstep)
 double classicWrapper(states **state, double **xpts, int *tstep)
 {
     if (!ranks[1]) std::cout << "Classic Decomposition" << std::endl;
-    int tmine = *tstep;
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
@@ -601,27 +582,25 @@ double classicWrapper(states **state, double **xpts, int *tstep)
         cudaStreamCreate(&st2);
         cudaStreamCreate(&st3);
         cudaStreamCreate(&st4);
-        int nomar;
-        
-	if (!ranks[1]) std::cout << "Just for fun: " << xcpp << " nums in cpu " << xgpp << " nums in GPU " << cGlob.hasGpu << std::endl; 
+		
+	if (!ranks[1]) std::cout << "Just for fun: " << xcpp << " nums in cpu " << xgpp << " nums in GPU" << std::endl; 
         while (t_eq < cGlob.tf)
         {
-            // COMPUTE
-            classicStep <<< cGlob.bks, cGlob.tpb >>> (dState, tmine);
+            classicStep <<< cGlob.bks, cGlob.tpb >>> (dState, *tstep);
 
             #pragma omp parallel sections num_threads(2)
             {
                 #pragma omp section
                 {
-                    classicStepCPU(state[0], xcp, tmine);
+                    classicStepCPU(state[0], xcp, *tstep);
                 }
                 #pragma omp section
                 {
-                    classicStepCPU(state[2], xcp, tmine);
+                    classicStepCPU(state[2], xcp, *tstep);
                 }
             }
             
-            // Host to device first. PASS
+            // Host to device first.
             # pragma omp parallel sections num_threads(3)
             {
                 #pragma omp section
@@ -633,19 +612,18 @@ double classicWrapper(states **state, double **xpts, int *tstep)
                 }
                 #pragma omp section
                 {
-                    classicPassRight(state[2], xcp, tmine);
+                    classicPassRight(state[2], xcp, *tstep);
                 }
                 #pragma omp section
                 {
-                    classicPassLeft(state[0], xcp, tmine);
+                    classicPassLeft(state[0], xcp, *tstep);
                 }
             }
             
             // Increment Counter and timestep
-            if (MODULA(tmine)) t_eq += cGlob.dt;
-            tmine++;
+            if (MODULA(*tstep)) t_eq += cGlob.dt;
+            tstep++;
 
-            // OUTPUT
             if (t_eq > twrite)
             {
                 cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
@@ -656,16 +634,6 @@ double classicWrapper(states **state, double **xpts, int *tstep)
 
                 twrite += cGlob.freq;
             }
-            
-            if ((tmine%100) == 0) 
-            {
-                if (!ranks[1]) 
-                {
-                std::cout << "Full cycle: " << tmine << " " << t_eq << std::endl;
-                std::cin >> nomar; 
-                }
-            }
-            std::cout << std::flush;
         }
 
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
@@ -688,19 +656,19 @@ double classicWrapper(states **state, double **xpts, int *tstep)
         while (t_eq < cGlob.tf)
         {
 
-            classicStepCPU(state[0], xcp, tmine);
-            if (MODULA(tmine)) t_eq += cGlob.dt;
-            tmine++;
+            classicStepCPU(state[0], xcp, *tstep);
+            if (MODULA(*tstep)) t_eq += cGlob.dt;
+            *tstep++;
 
             #pragma omp parallel sections num_threads(2)
             {
                 #pragma omp section
                 {
-                    classicPassRight(state[0], xcp, tmine);
+                    classicPassRight(state[0], xcp, *tstep);
                 }
                 #pragma omp section
                 {
-                    classicPassLeft(state[0], xcp, tmine);
+                    classicPassLeft(state[0], xcp, *tstep);
                 }
             }
 
@@ -1288,11 +1256,12 @@ int main(int argc, char *argv[])
     
     // Equation, grid, affinity data
     std::ifstream injson(argv[2], std::ifstream::in);
+    jsons inJ;
     injson >> inJ;
     injson.close();
 
-    parseArgs(argc, argv);
-    initArgs();
+    parseArgs(inJ, argc, argv);
+    initArgs(inJ);
 
     /*  
         Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
@@ -1306,13 +1275,10 @@ int main(int argc, char *argv[])
     int exSpace = (!scheme.compare("S")) ? cGlob.htp : 2;
     int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
     int xalloc = xc + exSpace;
-    int mon;
 
     if (cGlob.hasGpu)
     {
         cudaSetDevice(gpuID);
-        std::cout << gpuID << std::flush;
-        std::cin >> mon;
         
         state = new states* [3];
         xpts = new double* [3];

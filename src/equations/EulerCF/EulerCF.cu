@@ -110,7 +110,7 @@ __host__ void mpi_type(MPI_Datatype *dtype)
     int n[3] = {1};
     MPI_Aint disp[3] = {0, sizeof(REAL), 2*sizeof(REAL)};
 
-    MPI_Type_struct(3, n, disp, typs, &vtype);
+    MPI_Type_create_struct(3, n, disp, typs, &vtype);
     MPI_Type_commit(&vtype);
 
     typs[0] = vtype;
@@ -118,7 +118,7 @@ __host__ void mpi_type(MPI_Datatype *dtype)
     disp[1] = 3*sizeof(vtype);
     disp[2] = 4*sizeof(REAL);
 
-    MPI_Type_struct(3, n, disp, typs, dtype);
+    MPI_Type_create_struct(3, n, disp, typs, dtype);
     MPI_Type_commit(dtype);
 
     MPI_Type_free(&vtype);

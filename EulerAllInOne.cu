@@ -151,37 +151,37 @@ REALthree hBound[2]; // Boundary Conditions
 double lx; // Length of domain.
 */
 
-__host__ void equationSpecificArgs(jsons inJ)
+__host__ void equationSpecificArgs(jsons inJs)
 {
-    heqConsts.gamma = inJ["gamma"].asDouble();
+    heqConsts.gamma = inJs["gamma"].asDouble();
     heqConsts.mgamma = heqConsts.gamma - 1;
-    REAL rhoL = inJ["rhoL"].asDouble();
-    REAL vL = inJ["vL"].asDouble();
-    REAL pL = inJ["pL"].asDouble();
-    REAL rhoR = inJ["rhoR"].asDouble();
-    REAL vR = inJ["vR"].asDouble();
-    REAL pR = inJ["pR"].asDouble();
+    REAL rhoL = inJs["rhoL"].asDouble();
+    REAL vL = inJs["vL"].asDouble();
+    REAL pL = inJs["pL"].asDouble();
+    REAL rhoR = inJs["rhoR"].asDouble();
+    REAL vR = inJs["vR"].asDouble();
+    REAL pR = inJs["pR"].asDouble();
     hBounds[0].x = rhoL;
     hBounds[0].y = vL*rhoL;
     hBounds[0].z = pL/heqConsts.mgamma + HALF * rhoL * vL * vL;
     hBounds[1].x = rhoR;
     hBounds[1].y = vR*rhoR,
     hBounds[1].z = pR/heqConsts.mgamma + HALF * rhoR * vR * vR;
-    REAL dtx = inJ["dt"].asDouble();
-    REAL dxx = inJ["dx"].asDouble();
+    REAL dtx = inJs["dt"].asDouble();
+    REAL dxx = inJs["dx"].asDouble();
     heqConsts.dt_dx = dtx/dxx;
 }
 
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(jsons inJ, int idx, int xst, states *inl, double *xs)
+__host__ void initialState(jsons inJs, int idx, int xst, states *inl, double *xs)
 {
-    double dxx = inJ["dx"].asDouble();
-    double lx = inJ["lx"].asDouble();
+    double dxx = inJs["dx"].asDouble();
+    double lx = inJs["lx"].asDouble();
     double xss = dxx*((double)idx + (double)xst);
     xs[idx] = xss;
-    bool wh = inJ["IC"].asString() == "PARTITION";
+    bool wh = inJs["IC"].asString() == "PARTITION";
     int side;
     if (wh)
     {
@@ -421,7 +421,6 @@ void makeMPI(int argc, char* argv[])
 
     Arguments are key, value pairs all lowercase keys, no dash in front of arg.
 */
-static bool mg = false;
 
 void parseArgs(int argc, char *argv[])
 {
@@ -452,20 +451,20 @@ void initArgs()
     cGlob.nX = inJ["nX"].asInt();
 
     // Derived quantities
-    cGlob.xcpu = cGlob.nThreads * cGlob.tpb;
-    cGlob.bks = (((double)cGlob.xcpu * cGlob.gpuA)/cGlob.tpb);
+    cGlob.xcpu = cGlob.nThreads * cGlob.tpb;    // How many spatial points can fit on one wave on a CPU.
+    cGlob.bks = (((double)cGlob.xcpu * cGlob.gpuA)/cGlob.tpb); // How many blocks should be launched on a GPU.
     cGlob.xg = cGlob.tpb * cGlob.bks;
     cGlob.gpuA = (double)cGlob.xg/(double)cGlob.tpb; // Adjusted gpuA.
     cGlob.xWave = (nprocs * cGlob.xcpu + cGlob.nGpu * cGlob.xg); 
 
     // Do it backward if you already know the waves. Else we get the waves from nX (which is just an approximation).
-    if (mg)
+    if (inJ["nW"] == NULL)
     {
-        cGlob.nWaves = inJ["nW"].asInt();
+        cGlob.nWaves = CEIL(cGlob.nX, cGlob.xWave);
     }
     else
     {
-        cGlob.nWaves = CEIL(cGlob.xWave, cGlob.nX);
+        cGlob.nWaves = inJ["nW"].asInt();
     }
 
     cGlob.nX = cGlob.nWaves*cGlob.xWave;
@@ -477,13 +476,12 @@ void initArgs()
 
     cGlob.dx = cGlob.lx/((double)cGlob.nX - 2.0); // Spatial step
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
-    std::cout << cGlob.dx << std::flush;
-    std::cout << inJ << std::flush;
+    std::cout << cGlob.dx << std::endl;
+    std::cout << inJ << std::endl;
     double mydx = inJ["dx"].asDouble();
-    std::cout << mydx << std::flush;
+    std::cout << mydx << std::endl;
 
     std::cin >> cGlob.freq;
-    
 
     equationSpecificArgs(inJ);
 

@@ -1,2 +1,0 @@
-nvcc EulerAllInOne.cu ./src/utilities/jsoncpp.cpp -o ./bin/eulercu -gencode arch=compute_35,code=sm_35 -std=c++11 -I/usr/include/mpi -I./src/utilities -lmpi -Xcompiler -fopenmp -lm -w
-# mpic++ EulerAllInOne.cpp ./src/utilities/jsoncpp.cpp -o ./bin/eulercp -fopenmp -lcuda -lcudart -lm -std=c++11 -I/usr/include/mpi -I./src/utilities

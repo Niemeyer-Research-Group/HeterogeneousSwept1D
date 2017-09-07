@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
 
-    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; //
+    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; 
     states **state;
     double **xpts;
 
@@ -89,21 +89,27 @@ int main(int argc, char *argv[])
 
         int pone = (strt + xc);
         int ptwo = (pone + cGlob.xg);
+        std::cout << pone << " " << ptwo << std::endl;
 
-        for (int k=1; k <= xc; k++) 
+        for (int k=0; k <= xalloc; k++) 
         {
             initialState(inJ, k, strt, state[0], xpts[0]); 
             initialState(inJ, k, ptwo, state[2], xpts[2]); 
         }
 
-        for (int k=1; k <= cGlob.xg; k++)  initialState(inJ, k, pone, state[1], xpts[1]); 
-        std::cout << state[1][5].Q[0].x << std::endl;
+        for (int k=0; k <= cGlob.xg+1; k++)  initialState(inJ, k, pone, state[1], xpts[1]); 
+
+        std::cout << state[1][5].Q[0].y << " " << state[1][5].Q[0].z << std::endl;
+
         cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
 
         if (sizeof(REAL)>6) 
         {
             cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
         }
+        for (int k=1; k<=xc; k++) solutionOutput(state[0]+k, 0.0, xpts[0][k]);                
+        for (int k=1; k<=xc; k++) solutionOutput(state[2]+k, 0.0, xpts[2][k]);
+        for (int k=1; k<=cGlob.xg; k++) solutionOutput(state[1]+k, 0.0, xpts[1][k]);   
     }
     else 
     {
@@ -111,7 +117,8 @@ int main(int argc, char *argv[])
         xpts = new double* [1];
         cudaHostAlloc((void **) &xpts[0], xalloc * sizeof(double), cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
-        for (int k=1; k<=xc; k++)  initialState(inJ, k, strt, state[0], xpts[0]); 
+        for (int k=0; k<=xalloc; k++) initialState(inJ, k, strt, state[0], xpts[0]); 
+        for (int k=1; k<=xc; k++) solutionOutput(state[0]+k, 0.0, xpts[0][k]);
     }
 
 

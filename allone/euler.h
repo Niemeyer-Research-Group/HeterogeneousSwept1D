@@ -131,7 +131,7 @@ REAL pressure(REALthree qH)
     return DIMS.mgamma * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }
 
-__host__ REAL printout(const int i, states *state)
+__host__ REAL printout(int i, states *state)
 {
     REALthree subj = state->Q[0];
     REAL outs;
@@ -178,8 +178,9 @@ __host__ void equationSpecificArgs(jsons inJs)
 __host__ void initialState(jsons inJs, int idx, int xst, states *inl, double *xs)
 {
     double dxx = inJs["dx"].asDouble();
+    double dxx2 = dxx/2.0;
     double lx = inJs["lx"].asDouble();
-    double xss = dxx*((double)idx + (double)xst);
+    double xss = dxx*((double)idx + (double)xst) - dxx2;
     xs[idx] = xss;
     bool wh = inJs["IC"].asString() == "PARTITION";
     int side;

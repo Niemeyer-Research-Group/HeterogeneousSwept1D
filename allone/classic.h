@@ -38,11 +38,13 @@ void classicPassLeft(states *state, int idxend, int tstep)
     {
         MPI_Isend(&state[1], 1, struct_type, ranks[0], TAGS(tstep),
                 MPI_COMM_WORLD, &req[0]);
+        
+        if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: "
+                << tstep << " " << ranks[1] << std::endl;
 
         MPI_Recv(&state[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
                 MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
     }
-    // if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: " << tstep << " " << ranks[1] << std::endl;
 }
 
 void classicPassRight(states *state, int idxend, int tstep)
@@ -51,6 +53,9 @@ void classicPassRight(states *state, int idxend, int tstep)
     {
         MPI_Isend(&state[idxend-1], 1, struct_type, ranks[2], TAGS(tstep+100),
                 MPI_COMM_WORLD, &req[1]);
+
+        if (!ranks[1]) std::cout << "we're passing a classic step Right on the cpu: "
+                << tstep << " " << ranks[1] << std::endl;
 
         MPI_Recv(&state[idxend], 1, struct_type, ranks[2], TAGS(tstep), 
                 MPI_COMM_WORLD,  MPI_STATUS_IGNORE);

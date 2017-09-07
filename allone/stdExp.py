@@ -1,6 +1,5 @@
 '''
     Run experiment.
-
 '''
 
 import os
@@ -20,10 +19,42 @@ resultpath = op.join(thispath, "results")
 
 sys.path.append(pypath)
 import result_help as rh
-import main_help as 
+import main_help as mh
 
-''' STUFF: Not really makeList, make iterable '''
+makr = "./allone.sh"
+prog = op.join(binpath, "euler")
 
-prog = op.join(binpath, 'euler')
+mpiarg = "--bind-to-socket "
+eqspec = op.join(thispath, "sod.json")
+schemes = ["C ", "S "]
 
-mh.runMPICUDA()
+if op.isfile(prog):
+
+    sgrp = os.stat(prog)
+    spp = sgrp.st_mtime 
+    prer = os.listdir(thispath)
+    suff = [".h", "cpp", ".cu", ".sh"]
+    prereq = [k for k in prer for n in suff if n in k]
+    print(prereq)
+
+    ftim = []
+    for p in prereq:
+        fg = os.stat(p)
+        ftim.append(fg.st_mtime)
+
+    ts = sum([fo > spp for fo in ftim])
+    if ts:
+        sp.call(makr)   
+
+else:
+    sp.call(makr) # The maker
+
+#Say iterate over gpuA at one size and tpb
+gpus = [k/2.0 for k in range(11)]
+prog += " "
+
+for g in gpus:
+    exargs = "gpuA {:.4f} ".format(g) 
+    mh.runMPICUDA(prog, 1, schemes[0], eqspec, mpiopt=mpiarg, eqopt=exargs)
+
+

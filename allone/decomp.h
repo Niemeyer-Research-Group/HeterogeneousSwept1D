@@ -143,8 +143,6 @@ void initArgs()
 
     
     cout << cGlob.dx << endl;
-
-    cout << inJ << endl;
     double mydx = inJ["dx"].asDouble();
     cGlob.xg *= cGlob.nWaves;
     cGlob.xcpu *= cGlob.nWaves;
@@ -169,6 +167,7 @@ void initArgs()
     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.
+    cout << inJ << endl;
 
 }
 

@@ -11,11 +11,12 @@ import pandas as pd
 import palettable.colorbrewer as pal
 import shlex
 import subprocess as sp
+import collections
 
 class Perform(object):
     
     def __init__(self,dataset):
-        self.dataMatrix = pd.read_table(dataset, delim_whitespace=True);
+        self.dataMatrix = pd.read_table(dataset, delim_whitespace=True)
         self.textfile = op.abspath(dataset)
         self.datafilename = op.splitext(op.basename(dataset))[0]
         self.fileLocation = op.dirname(dataset)
@@ -39,7 +40,7 @@ class Perform(object):
             plt.show()
 
 def makeList(v):
-    if isinstance(v, list):
+    if isinstance(v, collections.Iterable):
         return v
     else:
         return [v]
@@ -53,9 +54,9 @@ def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency,
 
     for tpb in threadsPerBlock:
         for i, dvs in enumerate(divisions):
-            print "---------------------"
-            print "Algorithm #divs #tpb dt endTime"
-            print decomp, dvs, tpb, timeStep, finishTime
+            print("---------------------")
+            print("Algorithm #divs #tpb dt endTime")
+            print(decomp, dvs, tpb, timeStep, finishTime)
 
             execut = Prog +  ' {0} {1} {2} {3} {4} {5} {6} {7}'.format(dvs, tpb, timeStep,
                     finishTime, frequency, decomp, varfile, timefile)
@@ -67,24 +68,21 @@ def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency,
     return None
 
 #Divisions and threads per block need to be lists (even singletons) at least.
-def runMPICUDA(exece, divisions, threadsPerBlock, timeStep, finishTime, frequency, 
-    decomp, varfile='temp.dat', timefile=""):
+def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", varfile="tempSol.json ", 
+                timefile="tempTime.json ", eqopt=""):
 
-    threadsPerBlock = makeList(threadsPerBlock)
-    divisions = makeList(divisions)
-    runnr = "mpirun -np " 
+    # if n[-1] != " ": n += " " for each function input.
 
-    for tpb in threadsPerBlock:
-        for i, dvs in enumerate(divisions):
-            print "---------------------"
-            print "Algorithm #divs #tpb dt endTime"
-            print decomp, dvs, tpb, timeStep, finishTime
+    runnr = "mpirun -np "
+    print("---------------------")
+    print("Scheme equation args")
+    print(scheme, eqfile, eqopt)
 
-            execut = rnnr + {0} + exece +  '  {1} {2} {3} {4} {5} {6} {7}'.format(dvs, tpb, timeStep,
-                    finishTime, frequency, decomp, varfile, timefile)
+    execut = rnnr + "{0} ".format(nproc) + mpiopt + exece + scheme + \
+        eqfile + varfile + timefile + eqopt
 
-            exeStr = shlex.split(execut)
-            proc = sp.Popen(exeStr)
-            sp.Popen.wait(proc)
+    exeStr = shlex.split(execut)
+    proc = sp.Popen(exeStr)
+    sp.Popen.wait(proc)
             
     return None

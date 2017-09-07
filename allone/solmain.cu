@@ -185,9 +185,11 @@ int main(int argc, char *argv[])
         std::string nXs = std::to_string(cGlob.nX);
         std::string gpuAs = std::to_string(cGlob.gpuA);
         std::cout << cGlob.gpuA << std::endl;
-        timing[nXs][tpbs][gpuAs] = per_ts;
 
-        std::ofstream timejson(argv[4]);
+        std::fstream timejson
+        timejson.open (argv[4], ios::in | ios::out | ios::trunc);
+        timejson >> timing;
+        timing[nXs][tpbs][gpuAs] = per_ts;
         timejson << timing;
         timejson.close();
     }

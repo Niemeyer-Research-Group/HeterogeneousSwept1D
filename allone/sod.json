@@ -13,7 +13,6 @@
     "dt": 0.00001,
     "lx": 1.0,
     "tf": 0.002,
-    "algorithm": "CLASSIC",
     "IC": "PARTITION",
     "BC": "DIRICHLET"
 }

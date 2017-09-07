@@ -77,7 +77,6 @@ int main(int argc, char *argv[])
     if (cGlob.hasGpu)
     {
         cudaSetDevice(gpuID);
-        std::cout << strt << std::endl;
         
         state = new states* [3];
         xpts = new double* [3];
@@ -99,7 +98,7 @@ int main(int argc, char *argv[])
 
         for (int k=1; k <= cGlob.xg; k++)  initialState(inJ, k, pone, state[1], xpts[1]); 
         std::cout << state[1][5].Q[0].x << std::endl;
-        cudaMemcpyToSymbol(&deqConsts, &heqConsts, sizeof(eqConsts));
+        cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
 
         if (sizeof(REAL)>6) 
         {
@@ -115,15 +114,15 @@ int main(int argc, char *argv[])
         for (int k=1; k<=xc; k++)  initialState(inJ, k, strt, state[0], xpts[0]); 
     }
 
+
     int tstep = 1;
     // Start the counter and start the clock.
-    MPI_Barrier(MPI_COMM_WORLD);std::cin >> mon;
-    std::cin >> mon;
+    MPI_Barrier(MPI_COMM_WORLD);
     cudaEvent_t start, stop;
 	float timed;
 	cudaEventCreate( &start );
 	cudaEventCreate( &stop );
-	cudaEventRecord( start, 0);
+    cudaEventRecord( start, 0);
 
     // Call the correct function with the correct algorithm.
     double tfm;
@@ -134,7 +133,7 @@ int main(int argc, char *argv[])
     }
     else if  (!scheme.compare("S"))
     {
-//        tfm = sweptWrapper(state, xpts, &tstep);
+       tfm = sweptWrapper(state, xpts, &tstep);
     }
     else
     {
@@ -175,11 +174,14 @@ int main(int argc, char *argv[])
         std::cout << n_timesteps << " timesteps" << std::endl;
         std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
-        jsons timing;
-        //timing[cGlob.nX][cGlob.tpb][cGlob.gpuA] = per_ts;
+        std::string tpbs = std::to_string(cGlob.tpb);
+        std::string nXs = std::to_string(cGlob.nX);
+        std::string gpuAs = std::to_string(cGlob.gpuA);
+        std::cout << cGlob.gpuA << std::endl;
+        timing[nXs][tpbs][gpuAs] = per_ts;
 
         std::ofstream timejson(argv[4]);
-        //timejson << timing;
+        timejson << timing;
         timejson.close();
     }
 

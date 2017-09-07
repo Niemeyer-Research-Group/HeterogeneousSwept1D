@@ -19,13 +19,13 @@ __global__ void classicStep(states *state, int ts)
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
 
     stepUpdate(state, gid, ts);
-    if (gid==1) printf("GPU!: %d, at 51 Density: %.2f\n", ts, state[gid+50].Q[0].x);
+    // if (gid==1) printf("GPU!: %d, at 51 Density: %.2f\n", ts, state[gid+50].Q[0].x);
 }
 
 void classicStepCPU(states *state, int numx, int tstep)
 {
     bool ornk = omp_get_thread_num() == 0;
-    if (!ranks[1] && ornk) std::cout << "we're taking a classic step on the cpu: " << tstep << std::endl;
+    // if (!ranks[1] && ornk) std::cout << "we're taking a classic step on the cpu: " << tstep << std::endl;
     for (int k=1; k<numx; k++)
     {
         stepUpdate(state, k, tstep);
@@ -42,7 +42,7 @@ void classicPassLeft(states *state, int idxend, int tstep)
         MPI_Recv(&state[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
                 MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
     }
-    if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: " << tstep << " " << ranks[1] << std::endl;
+    // if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: " << tstep << " " << ranks[1] << std::endl;
 }
 
 void classicPassRight(states *state, int idxend, int tstep)
@@ -90,12 +90,17 @@ double classicWrapper(states **state, double **xpts, int *tstep)
         cudaStreamCreate(&st4);
         int nomar;
         
-	if (!ranks[1]) std::cout << "Just for fun: " << xcpp << " nums in cpu " << xgpp << " nums in GPU " << cGlob.hasGpu << std::endl; 
+        if (!ranks[1]) 
+        {
+            std::cout << "Just for fun: " << xcpp << " nums in cpu " << xgpp << " nums in GPU " << cGlob.hasGpu << std::endl; 
+            std::cout << "AND the ends of x: " << xpts[0][xc] << " " << xpts[1][xc] << " " << xpts[2][xc] << std::endl; 
+        }
+
         while (t_eq < cGlob.tf)
         {
             // COMPUTE
-            std::cout << state[0][5].Q[0].x << std::endl;
-            classicStep <<< cGlob.bks, cGlob.tpb >>> (dState, tmine);
+            // std::cout << state[0][5].Q[0].x << std::endl;
+            classicStep<<<cGlob.bks, cGlob.tpb>>> (dState, tmine);
 
             #pragma omp parallel sections num_threads(2)
             {
@@ -108,7 +113,15 @@ double classicWrapper(states **state, double **xpts, int *tstep)
                     classicStepCPU(state[2], xcp, tmine);
                 }
             }
-            
+            if (tmine<8) std::cout << tmine << std::endl;
+            cudaError_t error = cudaGetLastError();
+            if(error != cudaSuccess)
+            {
+                // print the CUDA error message and exit
+                printf("CUDA error tstep: %i: msg %s\n", tmine, cudaGetErrorString(error));
+                std::cin >> nomar;
+            }
+
             // Host to device first. PASS
             # pragma omp parallel sections num_threads(3)
             {
@@ -128,7 +141,9 @@ double classicWrapper(states **state, double **xpts, int *tstep)
                     classicPassLeft(state[0], xcp, tmine);
                 }
             }
-            
+
+
+        
             // Increment Counter and timestep
             if (MODULA(tmine)) t_eq += cGlob.dt;
             tmine++;
@@ -138,9 +153,9 @@ double classicWrapper(states **state, double **xpts, int *tstep)
             {
                 cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
 
-                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, xpts[0][k], t_eq);                
-                for (int k=1; k<xcp; k++) solutionOutput(state[2]+k, xpts[2][k], t_eq);
-                for (int k=1; k<xgp; k++) solutionOutput(state[1]+k, xpts[1][k], t_eq);
+                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, t_eq, xpts[0][k]);                
+                for (int k=1; k<xcp; k++) solutionOutput(state[2]+k, t_eq, xpts[2][k]);
+                for (int k=1; k<xgp; k++) solutionOutput(state[1]+k, t_eq, xpts[1][k]);
 
                 twrite += cGlob.freq;
             }
@@ -150,10 +165,9 @@ double classicWrapper(states **state, double **xpts, int *tstep)
                 if (!ranks[1]) 
                 {
                 std::cout << "Full cycle: " << tmine << " " << t_eq << std::endl;
-                std::cin >> nomar; 
+                // std::cin >> nomar; 
                 }
             }
-            std::cout << std::flush;
         }
 
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
@@ -163,9 +177,9 @@ double classicWrapper(states **state, double **xpts, int *tstep)
         cudaStreamDestroy(st3);
         cudaStreamDestroy(st4);
         
-        for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, xpts[0][k], t_eq);
-        for (int k=1; k<xcp; k++) solutionOutput(state[2]+k, xpts[2][k], t_eq);
-        for (int k=1; k<xgp; k++) solutionOutput(state[1]+k, xpts[1][k], t_eq);
+        for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, t_eq, xpts[0][k]);                
+        for (int k=1; k<xcp; k++) solutionOutput(state[2]+k, t_eq, xpts[2][k]);
+        for (int k=1; k<xgp; k++) solutionOutput(state[1]+k, t_eq, xpts[1][k]);
 
         cudaFree(dState);
     }
@@ -194,11 +208,11 @@ double classicWrapper(states **state, double **xpts, int *tstep)
 
             if (t_eq > twrite)
             
-                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, xpts[0][k], t_eq);
+                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k,t_eq, xpts[0][k]);
                 twrite += cGlob.freq;
             }
 
-        for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, xpts[0][k], t_eq);
+        for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, t_eq, xpts[0][k]);
     }
     *tstep = tmine;
     return t_eq;

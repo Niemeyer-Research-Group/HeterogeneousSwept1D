@@ -4,6 +4,8 @@
 ---------------------------
 */
 
+#include <string>
+
 #define TAGS(x) x & 32767
 
 #define CEIL(x, y)  (x + y - 1) / y 
@@ -75,13 +77,15 @@ void makeMPI(int argc, char* argv[])
     Arguments are key, value pairs all lowercase keys, no dash in front of arg.
 */
 
+// I think this needs a try except for string inputs.
 void parseArgs(int argc, char *argv[])
 {
-    if (argc>6)
+    std::cout << argc << std::endl;
+    if (argc>5)
     {
-        for (int k=6; k<argc; k+=2)
+        for (int k=5; k<argc; k+=2)
         {
-            inJ[argv[k]] = argv[k+1];   
+            inJ[argv[k]] = atof(argv[k+1]);   
         }
     }
 }
@@ -106,12 +110,13 @@ void initArgs()
     cGlob.xcpu = cGlob.nThreads * cGlob.tpb;    // How many spatial points can fit on one wave on a CPU.
     cGlob.bks = (((double)cGlob.xcpu * cGlob.gpuA)/cGlob.tpb); // How many blocks should be launched on a GPU.
     cGlob.xg = cGlob.tpb * cGlob.bks;
-    cGlob.gpuA = (double)cGlob.xg/(double)cGlob.tpb; // Adjusted gpuA.
+    cGlob.gpuA = (double)cGlob.xg/(double)cGlob.xcpu; // Adjusted gpuA.
     cGlob.xWave = (nprocs * cGlob.xcpu + cGlob.nGpu * cGlob.xg); 
 
     // Do it backward if you already know the waves. Else we get the waves from nX (which is just an approximation).
     cout << "nX " << cGlob.nX << endl;
     cout << "nprocs: " << nprocs << endl;
+    cout << "gpuA " << cGlob.gpuA << endl;
     cout << "nGPU: " << cGlob.nGpu << endl;
     cout << "----------"  << endl;
 
@@ -138,6 +143,7 @@ void initArgs()
 
     
     cout << cGlob.dx << endl;
+
     cout << inJ << endl;
     double mydx = inJ["dx"].asDouble();
     cGlob.xg *= cGlob.nWaves;
@@ -150,7 +156,7 @@ void initArgs()
     cout << "nWaves " << cGlob.nWaves << endl;
     cout << "xWave " << cGlob.xWave << endl;
     cout << "bks " << cGlob.bks << endl;
-    cout << "xg " << cGlob.xg << endl;
+    cout << "gpuA " << cGlob.gpuA << endl;
 
     cin >> cGlob.freq;
 
@@ -168,9 +174,11 @@ void initArgs()
 
 void solutionOutput(states *outState, REAL tstamp, REAL xpt)
 {
+    std::string tsts = std::to_string(tstamp);
+    std::string xpts = std::to_string(xpt);
     for (int k=0; k<NVARS; k++)
     {
-        //solution[outVars[k]][tstamp][xpt] = printout(k, outState);
+        solution[outVars[k]][tsts][xpts] = printout(k, outState);
     }
 }
 

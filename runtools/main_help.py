@@ -67,7 +67,7 @@ def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency,
     return None
 
 #Divisions and threads per block need to be lists (even singletons) at least.
-def runMPICUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency, 
+def runMPICUDA(exece, divisions, threadsPerBlock, timeStep, finishTime, frequency, 
     decomp, varfile='temp.dat', timefile=""):
 
     threadsPerBlock = makeList(threadsPerBlock)
@@ -80,7 +80,7 @@ def runMPICUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency
             print "Algorithm #divs #tpb dt endTime"
             print decomp, dvs, tpb, timeStep, finishTime
 
-            execut = rnnr Prog +  ' {0} {1} {2} {3} {4} {5} {6} {7}'.format(dvs, tpb, timeStep,
+            execut = rnnr + {0} + exece +  '  {1} {2} {3} {4} {5} {6} {7}'.format(dvs, tpb, timeStep,
                     finishTime, frequency, decomp, varfile, timefile)
 
             exeStr = shlex.split(execut)

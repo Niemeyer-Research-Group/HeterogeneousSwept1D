@@ -73,6 +73,8 @@ double classicWrapper(states **state, double **xpts, int *tstep)
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
 
+    std::cout << cGlob.bCond[0] << " " << cGlob.bCond[1] << std::endl;
+
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
         const int xc = cGlob.xcpu/2, xcp = xc+1, xcpp = xc+2;

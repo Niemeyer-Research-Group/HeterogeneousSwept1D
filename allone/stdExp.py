@@ -21,10 +21,11 @@ sys.path.append(pypath)
 import result_help as rh
 import main_help as mh
 
-makr = "./allone.sh"
+makr = "nvcc solmain.cu jsoncpp.cpp -o ./bin/euler -gencode arch=compute_35,code=sm_35 -O3 -restrict -std=c++11 -I/usr/include/mpi -lmpi -Xcompiler -fopenmp -lm -w --ptxas-options=-v"
+makr = shlex.split(makr)
 prog = op.join(binpath, "euler")
 
-mpiarg = "--bind-to-socket "
+mpiarg = "--bind-to socket "
 eqspec = op.join(thispath, "sod.json")
 schemes = ["C ", "S "]
 
@@ -35,7 +36,6 @@ if op.isfile(prog):
     prer = os.listdir(thispath)
     suff = [".h", "cpp", ".cu", ".sh"]
     prereq = [k for k in prer for n in suff if n in k]
-    print(prereq)
 
     ftim = []
     for p in prereq:
@@ -44,17 +44,23 @@ if op.isfile(prog):
 
     ts = sum([fo > spp for fo in ftim])
     if ts:
-        sp.call(makr)   
+        print("Making executable...")
+        proc = sp.Popen(makr) 
+        sp.Popen.wait(proc)  
 
 else:
-    sp.call(makr) # The maker
+    print("Making executable...")
+    proc = sp.Popen(makr) 
+    sp.Popen.wait(proc)  
+
 
 #Say iterate over gpuA at one size and tpb
-gpus = [k/2.0 for k in range(11)]
+gpus = [k/2.0 for k in range(1, 11)]
 prog += " "
+eqspec += " "
 
 for g in gpus:
     exargs = "gpuA {:.4f} ".format(g) 
-    mh.runMPICUDA(prog, 1, schemes[0], eqspec, mpiopt=mpiarg, eqopt=exargs)
+    mh.runMPICUDA(prog, 1, schemes[0], eqspec, mpiopt=mpiarg, eqopt=exargs, timefile="timer.json ")
 
 

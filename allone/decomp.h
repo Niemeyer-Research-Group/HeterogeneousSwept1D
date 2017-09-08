@@ -118,6 +118,8 @@ void initArgs()
     cout << "nprocs: " << nprocs << endl;
     cout << "gpuA " << cGlob.gpuA << endl;
     cout << "nGPU: " << cGlob.nGpu << endl;
+    cout << "xGPU: " << cGlob.xg << endl;
+    cout << "bks " << cGlob.bks << endl;
     cout << "----------"  << endl;
 
     if (inJ["nW"].asInt() == 0)
@@ -145,6 +147,7 @@ void initArgs()
     cout << cGlob.dx << endl;
     double mydx = inJ["dx"].asDouble();
     cGlob.xg *= cGlob.nWaves;
+    cGlob.bks = cGlob.xg/cGlob.tpb;
     cGlob.xcpu *= cGlob.nWaves;
 
     cout << "After:" << endl;
@@ -155,8 +158,7 @@ void initArgs()
     cout << "xWave " << cGlob.xWave << endl;
     cout << "bks " << cGlob.bks << endl;
     cout << "gpuA " << cGlob.gpuA << endl;
-
-    cin >> cGlob.freq;
+    cout << "xGPU: " << cGlob.xg << endl;
 
     equationSpecificArgs(inJ);
 

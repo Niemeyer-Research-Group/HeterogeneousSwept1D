@@ -78,7 +78,7 @@ def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", varfile="tempSol.json ",
     print("Scheme equation args")
     print(scheme, eqfile, eqopt)
 
-    execut = rnnr + "{0} ".format(nproc) + mpiopt + exece + scheme + \
+    execut = runnr + "{0} ".format(nproc) + mpiopt + exece + scheme + \
         eqfile + varfile + timefile + eqopt
 
     exeStr = shlex.split(execut)

@@ -1,5 +1,5 @@
 
-
+#include <fstream>
 #include "euler.h"
 #include "decomp.h"
 #include "classic.h"
@@ -164,6 +164,7 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
+    int nomar;
     std::ofstream soljson(argv[3]);
     soljson << solution;
     soljson.close();
@@ -181,15 +182,21 @@ int main(int argc, char *argv[])
         std::cout << n_timesteps << " timesteps" << std::endl;
         std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
+        // Equation, grid, affinity data
+        try {
+            std::ifstream tjson(argv[4], std::ifstream::in);
+            tjson >> timing;
+            tjson.close();
+        }
+        catch (...) {}
+
         std::string tpbs = std::to_string(cGlob.tpb);
         std::string nXs = std::to_string(cGlob.nX);
         std::string gpuAs = std::to_string(cGlob.gpuA);
         std::cout << cGlob.gpuA << std::endl;
 
-        std::fstream timejson
-        timejson.open (argv[4], ios::in | ios::out | ios::trunc);
-        timejson >> timing;
-        timing[nXs][tpbs][gpuAs] = per_ts;
+        std::ofstream timejson(argv[4], std::ofstream::trunc);
+        timing[tpbs][nXs][gpuAs] = per_ts;
         timejson << timing;
         timejson.close();
     }

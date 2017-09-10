@@ -166,15 +166,6 @@ double classicWrapper(states **state, double **xpts, int *tstep)
 
                 twrite += cGlob.freq;
             }
-            
-            if ((tmine%100) == 0) 
-            {
-                if (!ranks[1]) 
-                {
-                std::cout << "Full cycle: " << tmine << " " << t_eq << std::endl;
-                // std::cin >> nomar; 
-                }
-            }
         }
 
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);

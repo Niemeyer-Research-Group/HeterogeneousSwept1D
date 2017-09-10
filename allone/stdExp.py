@@ -32,7 +32,7 @@ schemes = ["C ", "S "]
 if op.isfile(prog):
 
     sgrp = os.stat(prog)
-    spp = sgrp.st_mtime 
+    spp = sgrp.st_mtime
     prer = os.listdir(thispath)
     suff = [".h", "cpp", ".cu", ".sh"]
     prereq = [k for k in prer for n in suff if n in k]
@@ -45,22 +45,24 @@ if op.isfile(prog):
     ts = sum([fo > spp for fo in ftim])
     if ts:
         print("Making executable...")
-        proc = sp.Popen(makr) 
-        sp.Popen.wait(proc)  
+        proc = sp.Popen(makr)
+        sp.Popen.wait(proc)
 
 else:
     print("Making executable...")
-    proc = sp.Popen(makr) 
-    sp.Popen.wait(proc)  
+    proc = sp.Popen(makr)
+    sp.Popen.wait(proc)
 
 
 #Say iterate over gpuA at one size and tpb
 gpus = [k/2.0 for k in range(1, 11)]
 prog += " "
 eqspec += " "
+nX = [2**k for k in range(11,21,2)]
 
-for g in gpus:
-    exargs = "gpuA {:.4f} ".format(g) 
-    mh.runMPICUDA(prog, 1, schemes[0], eqspec, mpiopt=mpiarg, eqopt=exargs, timefile="timer.json ")
+for n in nX:
+    for g in gpus:
+        exargs = "dt 1e-6 gpuA {:.4f} nX {:d}".format(g, n)
+        mh.runMPICUDA(prog, 1, schemes[0], eqspec, mpiopt=mpiarg, eqopt=exargs, timefile="timer.json ")
 
 

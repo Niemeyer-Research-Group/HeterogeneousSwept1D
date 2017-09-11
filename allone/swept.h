@@ -22,6 +22,7 @@ static int offSend[2];
 static int offRecv[2];
 static int cnt, turn;
 
+
 void swIncrement()
 {
     cnt++;
@@ -63,14 +64,14 @@ __global__ void upTriangle(states *state, int tstep)
 */
 __global__
 void
-downTriangle(states *state, int tstep)
+downTriangle(states *state, int tstep, int offset)
 {
 	extern __shared__ states temper[];
 
     int tid = threadIdx.x; // Thread index
     int mid = blockDim.x >> 1; // Half of block size
     int base = blockDim.x + 2; 
-	int gid = blockDim.x * blockIdx.x + tid; 
+	int gid = blockDim.x * blockIdx.x + tid + offset; 
     int tidx = tid + 1;
 
     if (tid<2) temper[tid] = state[gid]; 
@@ -101,14 +102,14 @@ downTriangle(states *state, int tstep)
 */
 __global__
 void
-wholeDiamond(states *state, int tstep)
+wholeDiamond(states *state, int tstep, int offset)
 {
 	extern __shared__ states temper[];
 
     int tid = threadIdx.x; // Thread index
     int mid = (blockDim.x >> 1); // Half of block size
     int base = blockDim.x + 2; 
-	int gid = blockDim.x * blockIdx.x + tid; 
+	int gid = blockDim.x * blockIdx.x + tid + offset; 
     int tidx = tid + 1;
 
     if (tid<2) temper[tid] = state[gid]; 
@@ -122,6 +123,7 @@ wholeDiamond(states *state, int tstep)
 		if (tidx < (base-k) && tidx >= k)
 		{
             stepUpdate(temper, tidx, tstep - k);
+            if (k>12) printf("gid: %i  tsteps: %i ", gid, tstep-k);
 		}
 		__syncthreads();
 	}
@@ -148,7 +150,6 @@ void upTriangleCPU(states *state, int tstep)
         }
     }
 }
-
 
 void downTriangleCPU(states *state, int tstep, int zi, int zf)
 {
@@ -272,10 +273,11 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         std::cout << "GPU threads launched: " << cGlob.tpb*cGlob.bks << " GpuSize: " << gpusize/cGlob.szState << "  " << ptsize/cGlob.szState << " node ht: " << cGlob.ht << std::endl;
 
         states *dState; 
-
+    
         cudaMalloc((void **)&dState, gpusize);
 
         cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
+
         cudaError_t error = cudaGetLastError();
         if(error != cudaSuccess)
         {
@@ -288,7 +290,6 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         // ------------ UP ------------ //
 
         upTriangle <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine);
-        states *dState2 = dState + cGlob.ht;
         error = cudaGetLastError();
         if(error != cudaSuccess)
         {
@@ -307,6 +308,10 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
             }
         }
 
+        cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
+        for (int k=0; k<xgpp+10; k++) std::cout << state[1][k].Q[0].z << " ";
+        std::cout << std::endl;
+
         // ------------ Pass Edges ------------ // Give to 0, take from 2.
         // I'm doing it backward but it's the only way that really makes sense in this context.
         // Before I really abstracted this process away.  But here I have to deal with it.  
@@ -317,6 +322,9 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
         swIncrement();//Increment
 
+        // Increment Counter and timestep
+        tmine += cGlob.ht;
+        t_eq += cGlob.dt * (tmine/NSTEPS);
         if(error != cudaSuccess)
         {
             // print the CUDA error message and exit
@@ -325,8 +333,11 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
 
         // ------------ Step Forward ------------ //
         // ------------ SPLIT ------------ //
+        cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
+        for (int k=0; k<xgpp+10; k++) std::cout << state[1][k].Q[0].z << " ";
+        std::cout << std::endl;
 
-        wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState2, tmine);
+        wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
         #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
         {
@@ -346,6 +357,12 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
                 }
             }
         }   
+        cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
+        for (int k=0; k<xgpp+10; k++) std::cout << state[1][k].Q[0].z << " ";
+        std::cout << std::endl;
+
+        std::cout << cGlob.ht << " " << smem << " " << cGlob.bks << " " << cGlob.tpb << std::endl;
+
         error = cudaGetLastError();
         if(error != cudaSuccess)
         {
@@ -375,7 +392,7 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
             // ------------ Step Forward ------------ //
             // ------------ WHOLE ------------ //
             
-            wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine);
+            wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, 0);
 
             #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
             {
@@ -411,7 +428,7 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
             // ------------ Step Forward ------------ //
             // ------------ SPLIT ------------ //
 
-            wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState + cGlob.ht, tmine);
+            wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
             #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
             {
@@ -445,7 +462,7 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
 
             if (t_eq > twrite)
             {
-                downTriangle <<<cGlob.bks, cGlob.tpb, smem>>> (dState + cGlob.htp, tmine);
+                downTriangle <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, 0);
 
                 #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
                 {

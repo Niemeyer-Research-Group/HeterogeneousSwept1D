@@ -188,7 +188,7 @@ __host__ void initialState(jsons inJs, int idx, int xst, states *inl, double *xs
     {
         side = (xss > HALF*lx);
         (inl+idx)->Q[0] = hBounds[side];
-        // printf("| %.2f %.2f %i %.8f %i %i %.2f %.2f %.8f | ", hBounds[side].x, inl->Q[0].x, side, xss, idx, xst, lx, xs[idx], dxx);
+        // std::cout << hBounds[side].x << " " << hBounds[side].y << " " << hBounds[side].z << " | ";
     }
 }
 

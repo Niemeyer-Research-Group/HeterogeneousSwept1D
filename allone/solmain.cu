@@ -4,6 +4,7 @@
 #include "decomp.h"
 #include "classic.h"
 #include "swept.h"
+#include <iomanip>
 
 /**
 ----------------------
@@ -64,12 +65,12 @@ int main(int argc, char *argv[])
         Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
-
+    std::cout << std::setw(2);
     int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; 
     states **state;
     double **xpts;
 
-    int exSpace = (!scheme.compare("S")) ? cGlob.htp : 2;
+    int exSpace = (scheme.compare("S")) ? cGlob.htp : 2;
     int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
     int xalloc = xc + exSpace;
     int mon;
@@ -98,8 +99,7 @@ int main(int argc, char *argv[])
         }
 
         for (int k=0; k <= cGlob.xg+1; k++)  initialState(inJ, k, pone, state[1], xpts[1]); 
-
-        std::cout << state[1][5].Q[0].y << " " << state[1][5].Q[0].z << std::endl;
+        std::cout << ranks[1] << " " << strt << " " << pone << " " << ptwo << " " << cGlob.hasGpu << std::endl;
 
         cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
 

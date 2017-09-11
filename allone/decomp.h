@@ -95,16 +95,16 @@ void initArgs()
     using namespace std;
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);
-    cGlob.base = cGlob.tpb+2;
-    cGlob.tpbp = cGlob.tpb+1;
-    cGlob.ht = cGlob.tpb/2;
-    cGlob.htm = cGlob.ht-1;
     cGlob.tpb = inJ["tpb"].asInt();
     cGlob.gpuA = inJ["gpuA"].asDouble();
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
     cGlob.nX = inJ["nX"].asInt();
+    cGlob.base = cGlob.tpb+2;
+    cGlob.tpbp = cGlob.tpb+1;
+    cGlob.ht = cGlob.tpb/2;
+    cGlob.htm = cGlob.ht-1;
 
     // Derived quantities
     cGlob.xcpu = cGlob.nThreads * cGlob.tpb;    // How many spatial points can fit on one wave on a CPU.
@@ -134,8 +134,6 @@ void initArgs()
     }
 
     cGlob.nX = cGlob.nWaves*cGlob.xWave;
-    cGlob.tpbp = cGlob.tpb + 1;
-    cGlob.base = cGlob.tpb + 2;
     cGlob.ht = cGlob.tpb/2;
     cGlob.htm = cGlob.ht - 1;
     cGlob.htp = cGlob.ht + 1;
@@ -145,12 +143,13 @@ void initArgs()
 
     
     cout << cGlob.dx << endl;
-    double mydx = inJ["dx"].asDouble();
     cGlob.xg *= cGlob.nWaves;
     cGlob.bks = cGlob.xg/cGlob.tpb;
     cGlob.xcpu *= cGlob.nWaves;
 
     cout << "After:" << endl;
+    inJ["nX"] = cGlob.nX;
+    inJ["gpuA"] = cGlob.gpuA;
     
     cout << "nX " << cGlob.nX << endl;
     cout << "xg + xc " << cGlob.xg + cGlob.xcpu << endl;

@@ -74,11 +74,11 @@ downTriangle(states *state, int tstep)
     int tidx = tid + 1;
 
     if (tid<2) temper[tid] = state[gid]; 
-	temper[tid+2] = state[gid + 2];
+    __syncthreads();
+	temper[tid+2] = state[gid+2];
     
     __syncthreads();
 
-    #pragma unroll
 	for (int k=mid; k>0; k--)
 	{
 		if (tidx < (base-k) && tidx >= k)
@@ -96,8 +96,8 @@ downTriangle(states *state, int tstep)
 
     Unsplit diamond using the swept rule.  wholeDiamond must apply boundary conditions only at it's center.
 
-    @param inRight Array of right edges seeding solution vector.
-    @param inLeft Array of left edges seeding solution vector.
+    @param state The working array of structures states.
+    @param tstep The count of the first timestep.
 */
 __global__
 void
@@ -112,26 +112,25 @@ wholeDiamond(states *state, int tstep)
     int tidx = tid + 1;
 
     if (tid<2) temper[tid] = state[gid]; 
+    __syncthreads();
 	temper[tid + 2] = state[gid + 2];
-    
+
     __syncthreads();
 
-    #pragma unroll
 	for (int k=mid; k>0; k--)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-            stepUpdate(temper, tidx, tstep + k);
+            stepUpdate(temper, tidx, tstep - k);
 		}
 		__syncthreads();
 	}
 
-    #pragma unroll
 	for (int k=2; k<=mid; k++)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-            stepUpdate(temper, tidx, tstep + k);
+            stepUpdate(temper, tidx, tstep + (k-2));
 		}
 		__syncthreads();
 	}

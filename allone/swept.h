@@ -22,7 +22,6 @@ static int offSend[2];
 static int offRecv[2];
 static int cnt, turn;
 
-
 void swIncrement()
 {
     cnt++;
@@ -71,21 +70,23 @@ downTriangle(states *state, int tstep, int offset)
     int tid = threadIdx.x; // Thread index
     int mid = blockDim.x >> 1; // Half of block size
     int base = blockDim.x + 2; 
-	int gid = blockDim.x * blockIdx.x + tid + offset; 
+    int gid = blockDim.x * blockIdx.x + tid + offset; 
     int tidx = tid + 1;
 
+    int tnow = tstep; // read tstep into register.
     if (tid<2) temper[tid] = state[gid]; 
     __syncthreads();
-	temper[tid+2] = state[gid+2];
-    
+    temper[tid+2] = state[gid+2];
+
     __syncthreads();
 
 	for (int k=mid; k>0; k--)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-            stepUpdate(temper, tidx, tstep + k);
+	            stepUpdate(temper, tidx, tnow);
 		}
+		tnow++;
 		__syncthreads();
 	}
     state[gid] = temper[tidx];
@@ -108,13 +109,14 @@ wholeDiamond(states *state, int tstep, int offset)
 
     int tid = threadIdx.x; // Thread index
     int mid = (blockDim.x >> 1); // Half of block size
-    int base = blockDim.x + 2; 
-	int gid = blockDim.x * blockIdx.x + tid + offset; 
+    int base = blockDim.x + 2;
+    int gid = blockDim.x * blockIdx.x + tid + offset;
     int tidx = tid + 1;
 
+    int tnow = tstep;
     if (tid<2) temper[tid] = state[gid]; 
     __syncthreads();
-	temper[tid + 2] = state[gid + 2];
+    temper[tid + 2] = state[gid + 2];
 
     __syncthreads();
 
@@ -122,9 +124,9 @@ wholeDiamond(states *state, int tstep, int offset)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-            stepUpdate(temper, tidx, tstep - k);
-            if (k>12) printf("gid: %i  tsteps: %i ", gid, tstep-k);
+        	        stepUpdate(temper, tidx, tnow);
 		}
+		tnow++;
 		__syncthreads();
 	}
 
@@ -132,8 +134,9 @@ wholeDiamond(states *state, int tstep, int offset)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-            stepUpdate(temper, tidx, tstep + (k-2));
+            		stepUpdate(temper, tidx, tnow);
 		}
+		tnow++;
 		__syncthreads();
 	}
     state[gid + 1] = temper[tidx];
@@ -153,55 +156,63 @@ void upTriangleCPU(states *state, int tstep)
 
 void downTriangleCPU(states *state, int tstep, int zi, int zf)
 {
+    int tnow=tstep;
     for (int k=cGlob.ht; k>1; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
-            stepUpdate(state, n, tstep + (k-1));
+            stepUpdate(state, n, tnow);
         }
+	tnow++;
     }
     for (int n=zi; n<zf; n++)
     {
-        stepUpdate(state, n, tstep);
+        stepUpdate(state, n, tnow);
     }
 }
 
 // Now you can call this on a split for all proc/threads except (0,0)
 void wholeDiamondCPU(states *state, int tstep, int zi, int zf)
 {
+    int tnow=tstep;
     for (int k=cGlob.ht; k>1; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
-            stepUpdate(state, n, tstep + (k-1));
+            stepUpdate(state, n, tnow);
         }
+	tnow++;
     }
 
     for (int n=zi; n<zf; n++)
     {
-        stepUpdate(state, n, tstep);
-    } 
+        stepUpdate(state, n, tnow);
+    }
+    tnow++;
 
     for (int k=2; k<cGlob.htp; k++)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
-            stepUpdate(state, n, tstep + (k-1));
+            stepUpdate(state, n, tnow);
         }
+    tnow++;
     }
 }
 
 void splitDiamondCPU(states *state, int tstep)
 {
+    int tnow=tstep;
     for (int k=cGlob.ht; k>0; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
             if (n < cGlob.ht || n > cGlob.htp)
             {
-                stepUpdate(state, n, tstep + (k-1));
+                stepUpdate(state, n, tnow);
             }
         }
+        tnow++;
     }
 
     for (int k=2; k<cGlob.htp; k++)
@@ -210,9 +221,10 @@ void splitDiamondCPU(states *state, int tstep)
         {
             if (n < cGlob.ht || n > cGlob.htp)
             {
-                stepUpdate(state, n, tstep + (k-1));
+                stepUpdate(state, n, tnow);
             }
         }
+	tnow++;
     }
 }
 
@@ -221,12 +233,12 @@ static void inline passSwept(states *stateSend, states *stateRecv, int tstep)
     MPI_Isend(stateSend + offSend[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
             MPI_COMM_WORLD, &req[turn]);
 
-    MPI_Recv(stateRecv + offRecv[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep), 
+    MPI_Recv(stateRecv + offRecv[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
             MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
 }
 
 /*
-    The idea of the timestep counter is: the timestep you're on is the timestep you would export 
+    The idea of the timestep counter is: the timestep you're on is the timestep you would export
     if you called downTriangle NEXT.
 
 */
@@ -239,8 +251,8 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
     int tmine = *tstep;
 
-    states **staten = new states* [cGlob.nThreads]; 
-    int ar1, ptin, tid, strt; 
+    states **staten = new states* [cGlob.nThreads];
+    int ar1, ptin, tid, strt;
     const int lastThread = cGlob.nThreads-1, lastWave = cGlob.nWaves-1;
     int sw[2] = {!ranks[1], ranks[1] == lastproc}; // {First node, last node
     int stride;
@@ -251,7 +263,7 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         for (int k=0; k<cGlob.nThreads; k++)
         {
             ar1 = (k/tps) * 2;
-            ptin = (k % tps) * cGlob.tpb; 
+            ptin = (k % tps) * cGlob.tpb;
             staten[k] = (state[ar1] + ptin); // ptr + offset
         }
 
@@ -264,16 +276,16 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         const size_t passsize =  cGlob.szState * cGlob.htp;
         const size_t smem = cGlob.szState * cGlob.base;
 
-        offSend[0] = 1, offSend[1] = xc; // {left, right}    
-        offRecv[0] = xcp, offRecv[1] = 0; 
+        offSend[0] = 1, offSend[1] = xc; // {left, right}
+        offRecv[0] = xcp, offRecv[1] = 0;
 
         cudaStream_t st1, st2;
         cudaStreamCreate(&st1);
         cudaStreamCreate(&st2);
         std::cout << "GPU threads launched: " << cGlob.tpb*cGlob.bks << " GpuSize: " << gpusize/cGlob.szState << "  " << ptsize/cGlob.szState << " node ht: " << cGlob.ht << std::endl;
 
-        states *dState; 
-    
+        states *dState;
+
         cudaMalloc((void **)&dState, gpusize);
 
         cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
@@ -308,23 +320,20 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
             }
         }
 
-        cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
-        for (int k=0; k<xgpp+10; k++) std::cout << state[1][k].Q[0].z << " ";
-        std::cout << std::endl;
+        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+        for (int k=xgpp; k<xgpp+cGlob.htp; k++) std::cout << state[1][k].Q[0].z << " ";
+        std::cout << " | turn: " << turn << std::endl;
 
         // ------------ Pass Edges ------------ // Give to 0, take from 2.
         // I'm doing it backward but it's the only way that really makes sense in this context.
-        // Before I really abstracted this process away.  But here I have to deal with it.  
+        // Before I really abstracted this process away.  But here I have to deal with it.
         //If you pass left first, you need to start at ht rather than 0.  That's the problem.
 
         passSwept(state[0], state[2], tmine);
-        cudaMemcpyAsync(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost, st1);
-        cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
+        cudaMemcpy(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost);
+        cudaMemcpy(dState + xgp, state[2] + offSend[turn], passsize, cudaMemcpyHostToDevice);
         swIncrement();//Increment
 
-        // Increment Counter and timestep
-        tmine += cGlob.ht;
-        t_eq += cGlob.dt * (tmine/NSTEPS);
         if(error != cudaSuccess)
         {
             // print the CUDA error message and exit
@@ -333,10 +342,12 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
 
         // ------------ Step Forward ------------ //
         // ------------ SPLIT ------------ //
-        cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
-        for (int k=0; k<xgpp+10; k++) std::cout << state[1][k].Q[0].z << " ";
-        std::cout << std::endl;
-
+        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+	std::cout << "GPU Content " << std::endl;
+        for (int k=xgp; k<xgpp+cGlob.htp; k++) std::cout << state[1][k].Q[0].z << " ";
+        std::cout << "End cpu: " << std::endl;
+	for (int k=1; k<cGlob.htp; k++) std::cout << state[2][k].Q[0].z << " ";
+	std::cout << "CPU To Pass" << std::endl;
         wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
         #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
@@ -356,11 +367,10 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
                     wholeDiamondCPU(staten[tid] + strt, tmine, 1, cGlob.tpbp);
                 }
             }
-        }   
-        cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
-        for (int k=0; k<xgpp+10; k++) std::cout << state[1][k].Q[0].z << " ";
-        std::cout << std::endl;
-
+        }
+        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+        for (int k=xgpp; k<xgpp+cGlob.htp; k++) std::cout << state[1][k].Q[0].z << " ";
+        std::cout << "Split" << std::endl;
         std::cout << cGlob.ht << " " << smem << " " << cGlob.bks << " " << cGlob.tpb << std::endl;
 
         error = cudaGetLastError();
@@ -371,17 +381,17 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         }
 
         // ------------ Pass Edges ------------ //
-        
+
         passSwept(state[2], state[0], tmine);
-        cudaMemcpyAsync(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost, st1);
-        cudaMemcpyAsync(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
+        cudaMemcpy(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
+        cudaMemcpy(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice);
         swIncrement();
 
         // Increment Counter and timestep
         tmine += cGlob.tpb;
         t_eq += cGlob.dt * (tmine/NSTEPS);
 
-        if (!ranks[1]) 
+        if (!ranks[1])
         {
             std::cout << "Just for fun: " << xcpp << " nums in cpu " << xgpp << " nums in GPU " << cGlob.hasGpu << std::endl; 
             std::cout << "AND the ends of x: " << xpts[0][xc] << " " << xpts[1][xc] << " " << xpts[2][xc] << std::endl; 
@@ -391,7 +401,7 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         {
             // ------------ Step Forward ------------ //
             // ------------ WHOLE ------------ //
-            
+
             wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, 0);
 
             #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)

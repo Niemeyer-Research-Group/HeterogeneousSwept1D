@@ -175,20 +175,18 @@ __host__ void equationSpecificArgs(jsons inJs)
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(jsons inJs, int idx, int xst, states *inl, double *xs)
+__host__ void initialState(jsons inJs, int xp, states *inl)
 {
     double dxx = inJs["dx"].asDouble();
     double dxx2 = dxx/2.0;
     double lx = inJs["lx"].asDouble();
-    double xss = dxx*((double)idx + (double)xst) - dxx2;
-    xs[idx] = xss;
+    double xss = (dxx*xp) - dxx2;
     bool wh = inJs["IC"].asString() == "PARTITION";
     int side;
     if (wh)
     {
         side = (xss > HALF*lx);
         (inl+idx)->Q[0] = hBounds[side];
-        // std::cout << hBounds[side].x << " " << hBounds[side].y << " " << hBounds[side].z << " | ";
     }
 }
 

@@ -65,7 +65,7 @@ void classicPassRight(states *state, int idxend, int tstep)
 // We are working with the assumption that the parallelism is too fine to see any benefit.
 // Still struggling with the idea of the local vs parameter arrays.
 // Classic Discretization wrapper.
-double classicWrapper(states **state, double **xpts, int *tstep)
+double classicWrapper(states *state, std::vector xpts, int *tstep)
 {
     if (!ranks[1]) std::cout << "Classic Decomposition" << std::endl;
     int tmine = *tstep;

@@ -243,7 +243,7 @@ static void inline passSwept(states *stateSend, states *stateRecv, int tstep)
 
 */
 
-double sweptWrapper(states **state, double **xpts, int *tstep)
+double sweptWrapper(states *state, std::vector xpts, int *tstep)
 {
     if (!ranks[1]) std::cout << "Swept Decomposition" << std::endl;
 
@@ -251,10 +251,10 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
     int tmine = *tstep;
 
-    states **staten = new states* [cGlob.nThreads];
+    states *staten = new states* [cGlob.nThreads];
     int ar1, ptin, tid, strt;
     const int lastThread = cGlob.nThreads-1, lastWave = cGlob.nWaves-1;
-    int sw[2] = {!ranks[1], ranks[1] == lastproc}; // {First node, last node
+    int sw[2] = {!ranks[1], ranks[1] == lastproc}; // {First node, last node}
     int stride;
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
@@ -262,9 +262,8 @@ double sweptWrapper(states **state, double **xpts, int *tstep)
         int tps = cGlob.nThreads/2; // Threads per side.
         for (int k=0; k<cGlob.nThreads; k++)
         {
-            ar1 = (k/tps) * 2;
             ptin = (k % tps) * cGlob.tpb;
-            staten[k] = (state[ar1] + ptin); // ptr + offset
+            staten[k] = (state + ptin); // ptr + offset
         }
 
         stride = tps * cGlob.tpb;

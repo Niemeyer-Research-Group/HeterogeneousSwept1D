@@ -68,6 +68,7 @@ int main(int argc, char *argv[])
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
 
+    int exSpace = (scheme.compare("S")) ? cGlob.htp : 2;
     int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; 
     states *state;
     vector <int> xpts;
@@ -87,19 +88,18 @@ int main(int argc, char *argv[])
         cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts))
 
         // Add the other half of the CPU and the GPU alloc.
-        xalloc = cGlob.htp + cGlob.xg + cGlob.xcpu;  
+        xalloc = exSpace + cGlob.xg + cGlob.xcpu;
         cudaMallocManaged((void **) &state, xalloc * cGlob.szState);
 
-        for (int k=0; k <= xalloc; k++)  initialState(inJ, k + strt, state); 
-        for (int k=1; k<=; k++) solutionOutput(state, );                  
+        for (int k=0; k <= xalloc; k++)  initialState(inJ, k + strt, state);
+        for (int k=1; k<=xalloc; k++) solutionOutput(state, 0.0, xpts);                  
     }
     else 
     {
-        xalloc = 
+        xalloc = exSpace + cGlob.xcpu;
         malloc((void **) &state, xalloc * cGlob.szState);
         for (int k=0; k <= xalloc; k++)  initialState(inJ, k + strt, state);  
         for (int k=1; k<=xalloc-cGlob.ht; k++) solutionOutput(state, 0.0, xpts);
-
     }
 
     int tstep = 1;

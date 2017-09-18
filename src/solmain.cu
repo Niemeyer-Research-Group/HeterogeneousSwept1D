@@ -1,9 +1,9 @@
 
 #include <fstream>
-#include "euler.h"
+#include "eulerCF/eulerCF.h"
 #include "decomp.h"
 #include "classic.h"
-#include "swept.h"
+//#include "swept.h"
 #include <iomanip>
 
 /**
@@ -13,10 +13,10 @@
 */
 
 #ifndef HDW
-    #define HDW     "WORKSTATION.json"
+    #define HDW     "hardware/WORKSTATION.json"
 #endif
 
-using std::cout, std::endl, std::vector, std::string, std::ifstream, std::ostream;
+using namespace std;
 
 vector<int> jsonP(jsons jp, size_t sz)
 {
@@ -69,13 +69,12 @@ int main(int argc, char *argv[])
     */
 
     int exSpace = (scheme.compare("S")) ? cGlob.htp : 2;
-    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; 
+    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * smGpu[ranks[1]]; 
+    int xalloc, xwrt;
     states *state;
-    vector <int> xpts;
-    xpts.push_back(strt-1) // Basic vector will have all pass, start, and split points.
-    //The pattern is important. 
 
     int mon;
+    cout << "Made it to allocation flow " << endl;
 
     if (cGlob.hasGpu)
     {
@@ -85,55 +84,56 @@ int main(int argc, char *argv[])
         {
             cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
         }
-        cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts))
+
+        cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
 
         // Add the other half of the CPU and the GPU alloc.
-        xalloc = exSpace + cGlob.xg + cGlob.xcpu;
-        cudaMallocManaged((void **) &state, xalloc * cGlob.szState);
-
-        for (int k=0; k <= xalloc; k++)  initialState(inJ, k + strt, state);
-        for (int k=1; k<=xalloc; k++) solutionOutput(state, 0.0, xpts);                  
+        xwrt = cGlob.xg + cGlob.xcpu;
+        xalloc = exSpace + xwrt;
+        cudaMallocManaged((void **) &state, xalloc * cGlob.szState);              
     }
     else 
     {
-        xalloc = exSpace + cGlob.xcpu;
-        malloc((void **) &state, xalloc * cGlob.szState);
-        for (int k=0; k <= xalloc; k++)  initialState(inJ, k + strt, state);  
-        for (int k=1; k<=xalloc-cGlob.ht; k++) solutionOutput(state, 0.0, xpts);
+        xwrt = cGlob.xcpu;
+        xalloc = exSpace + xwrt;
+        cudaHostAlloc((void **) &state, xalloc * cGlob.szState, cudaHostAllocDefault);
     }
+    
+    for (int k=0; k <= xalloc; k++) initialState(inJ, state, k, strt);
+    for (int k=1; k <= xwrt; k++) solutionOutput(state, 0.0, k, strt); 
 
     int tstep = 1;
-    // Start the counter and start the clock.  Maybe should time it with MPI.  Still use cudaSynchronize for GPU nodes.
+    double timed, tfm;
+
     MPI_Barrier(MPI_COMM_WORLD);
-    cudaEvent_t start, stop;
-	float timed;
-	cudaEventCreate( &start );
-	cudaEventCreate( &stop );
-    cudaEventRecord( start, 0);
+    if (!ranks[1]) timed = MPI_Wtime();
+    cout << "Made it to Calling the function " << endl;
 
     // Call the correct function with the correct algorithm.
-    double tfm;
-
     if (!scheme.compare("C"))
     {
-        tfm = classicWrapper(state, xpts, &tstep);
+        tfm = classicWrapper(state, strt, &tstep);
     }
     else if  (!scheme.compare("S"))
     {
-       tfm = sweptWrapper(state, xpts, &tstep);
+        //tfm = sweptWrapper(state, strt, &tstep);
     }
     else
     {
         cerr << "Incorrect or no scheme given" << endl;
     }
 
+    if (cGlob.hasGpu)
+    {
+        cudaDeviceSynchronize();
+    }
+
     MPI_Barrier(MPI_COMM_WORLD);
+    if (!ranks[1]) timed = (MPI_Wtime() - timed);
 
-	// Show the time and write out the final condition.
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&timed, start, stop);
-
+    // Print out final solution.
+    #pragma omp parallel for
+    for (int k=1; k <= xwrt; k++) solutionOutput(state, tfm, k, strt); 
     endMPI();
 
     cudaError_t error = cudaGetLastError();
@@ -151,9 +151,7 @@ int main(int argc, char *argv[])
 
     if (!ranks[1])
     {
-        //READ OUT JSONS
-        
-        timed *= 1.e3;
+        timed *= 1.e6;
 
         double n_timesteps = tfm/cGlob.dt;
 
@@ -183,15 +181,12 @@ int main(int argc, char *argv[])
 
     if (cGlob.hasGpu)
     {
-        cudaDeviceSynchronize();
-        cudaEventDestroy( start );
-        cudaEventDestroy( stop );
         cudaFree(state);
         cudaDeviceReset();
     }
     else
     {
-        free(state);
+        cudaFreeHost(state);
     }
 	return 0;
 }

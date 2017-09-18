@@ -172,13 +172,14 @@ void initArgs()
 
 }
 
-void solutionOutput(states *outState, REAL tstamp, REAL xpt)
+void solutionOutput(states *outState, double tstamp, int idx, int strt)
 {
     std::string tsts = std::to_string(tstamp);
+    double xpt = (cGlob.dx*(idx+strt)) - cGlob.dx/2.0;
     std::string xpts = std::to_string(xpt);
     for (int k=0; k<NVARS; k++)
     {
-        solution[outVars[k]][tsts][xpts] = printout(k, outState);
+        solution[outVars[k]][tsts][xpts] = printout(outState[idx].Q[0], k);
     }
 }
 

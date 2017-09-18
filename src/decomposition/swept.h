@@ -243,7 +243,7 @@ static void inline passSwept(states *stateSend, states *stateRecv, int tstep)
 
 */
 
-double sweptWrapper(states *state, std::vector xpts, int *tstep)
+double sweptWrapper(states *state, int xpt, int *tstep)
 {
     if (!ranks[1]) std::cout << "Swept Decomposition" << std::endl;
 

@@ -131,9 +131,8 @@ REAL pressure(REALthree qH)
     return DIMS.mgamma * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }
 
-__host__ REAL printout(int i, states *state)
+__host__ REAL printout(REALthree subj, int i)
 {
-    REALthree subj = state->Q[0];
     REAL outs;
     switch(i)
     {
@@ -175,12 +174,12 @@ __host__ void equationSpecificArgs(jsons inJs)
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(jsons inJs, int xp, states *inl)
+__host__ void initialState(jsons inJs, states *inl, int idx, int strt)
 {
     double dxx = inJs["dx"].asDouble();
     double dxx2 = dxx/2.0;
     double lx = inJs["lx"].asDouble();
-    double xss = (dxx*xp) - dxx2;
+    double xss = (dxx*(idx+strt)) - dxx2;
     bool wh = inJs["IC"].asString() == "PARTITION";
     int side;
     if (wh)

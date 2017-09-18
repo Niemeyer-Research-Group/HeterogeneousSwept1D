@@ -6,6 +6,12 @@
 #include "swept.h"
 #include <iomanip>
 
+/*TODO
+  - Make all allocations with boost/thrust
+  - Use BoostMPI rather than regular mpi
+  - Make functors rather than kernels for CUDA part
+*/  
+
 /**
 ----------------------
     MAIN PART

@@ -70,7 +70,7 @@ struct states {
     REAL Pr; // Pressure ratio
 };
 
-std::string outVars[4] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------// 
+std::string outVars[NVARS] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------// 
 
 /*
 	============================================================

@@ -170,6 +170,7 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.dt_dx = dtx/dxx;
+    std::cout << "You're in Euler!" << std::endl;
 }
 
 // One of the main uses of global variables is the fact that you don't need to pass
@@ -213,6 +214,10 @@ __host__ void mpi_type(MPI_Datatype *dtype)
 
     MPI_Type_free(&vtype);
 }
+
+/*
+    // MARK : Equation procedure
+*/
 
 __device__ __host__ 
 __forceinline__
@@ -319,18 +324,19 @@ __forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR)
 __device__ __host__ void eulerStep(states *state, int idx, int tstep)
 {
     REALthree tempStateLeft, tempStateRight;
+    int itx = (tstep ^ 1);
 
-    tempStateLeft = limitor(state[idx-1].Q[tstep], state[idx].Q[tstep], state[idx-1].Pr);
-    tempStateRight = limitor(state[idx].Q[tstep], state[idx-1].Q[tstep], ONE/state[idx].Pr);
+    tempStateLeft = limitor(state[idx-1].Q[itx], state[idx].Q[itx], state[idx-1].Pr);
+    tempStateRight = limitor(state[idx].Q[itx], state[idx-1].Q[itx], ONE/state[idx].Pr);
     REALthree flux = eulerFlux(tempStateLeft,tempStateRight);
     flux += eulerSpectral(tempStateLeft,tempStateRight);
 
-    tempStateLeft = limitor(state[idx].Q[tstep], state[idx+1].Q[tstep], state[idx].Pr);
-    tempStateRight = limitor(state[idx+1].Q[tstep], state[idx].Q[tstep], ONE/state[idx+1].Pr);
+    tempStateLeft = limitor(state[idx].Q[itx], state[idx+1].Q[itx], state[idx].Pr);
+    tempStateRight = limitor(state[idx+1].Q[itx], state[idx].Q[itx], ONE/state[idx+1].Pr);
     flux -= eulerFlux(tempStateLeft,tempStateRight);
     flux -= eulerSpectral(tempStateLeft,tempStateRight);
 
-    state[idx].Q[tstep] = state[idx].Q[0] + ((QUARTER * (tstep+1)) * DIMS.dt_dx * flux);
+    state[idx].Q[tstep] = state[idx].Q[0] + ((QUARTER * (itx+1)) * DIMS.dt_dx * flux);
 }
 
 __device__ __host__ 

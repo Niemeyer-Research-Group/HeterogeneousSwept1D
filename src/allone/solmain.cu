@@ -1,6 +1,6 @@
 
 #include <fstream>
-#include "euler.h"
+#include "heads.h"
 #include "decomp.h"
 #include "classic.h"
 #include "swept.h"
@@ -25,6 +25,7 @@ std::vector<int> jsonP(jsons jp, size_t sz)
 	}
 	return outv;
 }
+
 
 int main(int argc, char *argv[])
 {   
@@ -65,12 +66,11 @@ int main(int argc, char *argv[])
         Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
-    std::cout << std::setw(2);
     int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; 
     states **state;
     double **xpts;
 
-    int exSpace = (scheme.compare("S")) ? cGlob.htp : 2;
+    int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
     int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
     int xalloc = xc + exSpace;
     int mon;
@@ -88,6 +88,10 @@ int main(int argc, char *argv[])
         cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
 
+        std::cout << "Str compare " << scheme.compare("S") << std::endl;
+        std::cout << "realcpu: " << cGlob.xcpu << " SCHEME " << scheme<< std::endl;
+        std::cout << "xc: " << xc << " extra space: " << exSpace << std::endl;
+        std::cout << "gpupts: " << cGlob.xg + exSpace << " cpuPts: " << xalloc << std::endl;
         int pone = (strt + xc);
         int ptwo = (pone + cGlob.xg);
         std::cout << pone << " " << ptwo << std::endl;
@@ -107,9 +111,9 @@ int main(int argc, char *argv[])
         {
             cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
         }
-        for (int k=1; k<=xc; k++) solutionOutput(state[0]+k, 0.0, xpts[0][k]);                
-        for (int k=1; k<=xc; k++) solutionOutput(state[2]+k, 0.0, xpts[2][k]);
-        for (int k=1; k<=cGlob.xg; k++) solutionOutput(state[1]+k, 0.0, xpts[1][k]);   
+        for (int k=1; k<=xc; k++) solutionOutput(state[0]+k, xpts[0][k], 0.0);                
+        for (int k=1; k<=xc; k++) solutionOutput(state[2]+k, xpts[2][k], 0.0);
+        for (int k=1; k<=cGlob.xg; k++) solutionOutput(state[1]+k, xpts[1][k], 0.0);   
     }
     else 
     {
@@ -118,21 +122,15 @@ int main(int argc, char *argv[])
         cudaHostAlloc((void **) &xpts[0], xalloc * sizeof(double), cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
         for (int k=0; k<=xalloc; k++) initialState(inJ, k, strt, state[0], xpts[0]); 
-        for (int k=1; k<=xc; k++) solutionOutput(state[0]+k, 0.0, xpts[0][k]);
+        for (int k=1; k<=xc; k++) solutionOutput(state[0]+k, xpts[0][k], 0.0);    
     }
 
-
     int tstep = 1;
-    // Start the counter and start the clock.
-    MPI_Barrier(MPI_COMM_WORLD);
-    cudaEvent_t start, stop;
-	float timed;
-	cudaEventCreate( &start );
-	cudaEventCreate( &stop );
-    cudaEventRecord( start, 0);
+    double timed, tfm;
 
-    // Call the correct function with the correct algorithm.
-    double tfm;
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (!ranks[1]) timed = MPI_Wtime();
+    cout << "Made it to Calling the function " << endl;
 
     if (!scheme.compare("C"))
     {
@@ -147,13 +145,17 @@ int main(int argc, char *argv[])
         std::cerr << "Incorrect or no scheme given" << std::endl;
     }
 
+    if (cGlob.hasGpu)
+    {
+        cudaDeviceSynchronize();
+    }
+
     MPI_Barrier(MPI_COMM_WORLD);
+    if (!ranks[1]) timed = (MPI_Wtime() - timed);
 
-	// Show the time and write out the final condition.
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&timed, start, stop);
-
+    for (int k=1; k<=xc; k++) solutionOutput(state[0]+k, xpts[0][k], 0.0);      
+    for (int k=1; k<=xc; k++) solutionOutput(state[2]+k, xpts[2][k], 0.0);
+    for (int k=1; k<=cGlob.xg; k++) solutionOutput(state[1]+k, xpts[1][k], 0.0);   
     endMPI();
 
     cudaError_t error = cudaGetLastError();
@@ -173,7 +175,7 @@ int main(int argc, char *argv[])
     {
         //READ OUT JSONS
         
-        timed *= 1.e3;
+        timed *= 1.e6;
 
         double n_timesteps = tfm/cGlob.dt;
 
@@ -204,8 +206,6 @@ int main(int argc, char *argv[])
     if (cGlob.hasGpu)
     {
         cudaDeviceSynchronize();
-        cudaEventDestroy( start );
-        cudaEventDestroy( stop );
 
         for (int k=0; k<3; k++)
         {

@@ -40,7 +40,7 @@
 #define TWO             2.0
 #define SQUAREROOT(x)   sqrt(x)
 
-#define NSTEPS              1
+#define NSTEPS              2
 #define NVARS               1
 
 // Since anyone would need to write a header and functions file, why not just hardwire this.  
@@ -65,7 +65,11 @@ struct eqConsts {
 #define AL 8.0e-5
 
 //---------------// 
-typedef states REAL;
+struct states{
+    REAL T[2];
+};
+
+typedef Json::Value jsons;
 
 std::string outVars[NVARS] = {"Temperature"}; //---------------// 
 
@@ -85,8 +89,6 @@ eqConsts heqConsts; //---------------//
 	============================================================
 */
 
-typedef Json::Value jsons;
-
 #ifdef __CUDA_ARCH__
     #define DIMS    deqConsts
 #else
@@ -95,7 +97,7 @@ typedef Json::Value jsons;
 
 __host__ REAL printout(int i, states *state)
 {
-    return state->T;
+    return state[i].T[0];
 }
 
 __host__ void equationSpecificArgs(jsons inJs)
@@ -103,6 +105,7 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.Fo = AL*dtx/(dxx*dxx);
+    std::cout << "You're in heat! " << heqConsts.Fo << std::endl;
 }
 
 
@@ -114,16 +117,23 @@ __host__ void initialState(jsons inJs, int idx, int xst, states *inl, double *xs
     double dxx = inJs["dx"].asDouble();
     double xss = dxx*((double)idx + (double)xst);
     xs[idx] = xss;
-    (inl+idx)->T = 50.0 * xss; //Just linear gradient
+    (inl+idx)->T[0] = 50.0 * xss; //Just linear gradient
 }
 
 __host__ void mpi_type(MPI_Datatype *dtype)
 { 
-    dtype = MPI_R;
+    MPI_Datatype typs[2] = {MPI_R, MPI_R};
+    int n[2] = {1};
+    MPI_Aint disp[2] = {0, sizeof(REAL)};
+
+    MPI_Type_create_struct(2, n, disp, typs, dtype);
+    MPI_Type_commit(dtype);
 }
 
 __device__ __host__ 
 void stepUpdate(states *heat, int idx, int tstep)
 {
-    return DIMS.Fo*(heat[idx-1] + heat[idx+1) + (1.0-2.0*DIMS.Fo) * heat[idx];
+    int otx = MODULA(tstep); //Modula is output place
+    int itx = (itx^1); //Opposite in input place.
+    heat[idx].T[otx] = DIMS.Fo*(heat[idx-1].T[itx] + heat[idx+1].T[itx]) + (1.0-2.0*DIMS.Fo) * heat[idx].T[itx];
 }

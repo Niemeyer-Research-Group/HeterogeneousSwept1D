@@ -3,7 +3,7 @@
     CLASSIC CORE
 ---------------------------
 */
-
+using namespace std;
 /**
     The Classic Functions for the stencil operation
 */
@@ -78,34 +78,34 @@ double classicWrapper(states *state, int xpt, int *tstep)
         const int xcr = xc + cGlob.xg;
         const int xwrt = cGlob.xg + cGlob.xcpu;
 
-        int nomar;
         printf("Before the first function calls\n");
 
         while (t_eq < cGlob.tf)
         {
-            // COMPUTE
-            // std::cout << state[0][5].Q[0].x << std::endl;
+            
+            classicStepCPU(state, xcp, tmine);
+
+            classicStepCPU(state + xcr, xcp, tmine);
+ 
             classicStep<<<cGlob.bks, cGlob.tpb>>> (state + xc, tmine);
 
-            #pragma omp parallel sections num_threads(2)
-            {
-                #pragma omp section
-                {
-                    classicStepCPU(state, xcp, tmine);
-                }
-                #pragma omp section
-                {
-                    classicStepCPU(state + xcr, xcp, tmine);
-                }
-            }
-            printf("Past the first function calls\n");
-            if (tmine<8) std::cout << tmine << std::endl;
+            // #pragma omp parallel sections num_threads(2)
+            // {
+            //     #pragma omp section
+            //     {
+            //         classicStepCPU(state, xcp, tmine);
+            //     }
+            //     #pragma omp section
+            //     {
+            //         classicStepCPU(state + xcr, xcp, tmine);
+            //     }
+            // }
+
             cudaError_t error = cudaGetLastError();
             if(error != cudaSuccess)
             {
                 // print the CUDA error message and exit
                 printf("CUDA error tstep: %i: msg %s\n", tmine, cudaGetErrorString(error));
-                std::cin >> nomar;
             }
 
             // Host to device first. PASS
@@ -120,7 +120,7 @@ double classicWrapper(states *state, int xpt, int *tstep)
                     classicPassLeft(state, xcp, tmine);
                 }
             }
-
+   
             // Increment Counter and timestep
             if (MODULA(tmine)) t_eq += cGlob.dt;
             tmine++;
@@ -131,6 +131,7 @@ double classicWrapper(states *state, int xpt, int *tstep)
                 for (int k=1; k<xcp; k++) solutionOutput(state, t_eq, k, xpt);
                 twrite += cGlob.freq;
             }
+            cudaDeviceSynchronize();
         }
     }
     else

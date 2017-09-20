@@ -169,7 +169,6 @@ void initArgs()
     // If BCTYPE == "Periodic"
         // Don't do anything.
     cout << inJ << endl;
-
 }
 
 void solutionOutput(states *outState, double tstamp, int idx, int strt)

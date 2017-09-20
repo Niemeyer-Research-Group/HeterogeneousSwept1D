@@ -316,18 +316,19 @@ __forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR)
 __device__ __host__ void eulerStep(states *state, int idx, int tstep)
 {
     REALthree tempStateLeft, tempStateRight;
+    int itx = (tstep ^ 1);
 
-    tempStateLeft = limitor(state[idx-1].Q[tstep], state[idx].Q[tstep], state[idx-1].Pr);
-    tempStateRight = limitor(state[idx].Q[tstep], state[idx-1].Q[tstep], ONE/state[idx].Pr);
+    tempStateLeft = limitor(state[idx-1].Q[itx], state[idx].Q[itx], state[idx-1].Pr);
+    tempStateRight = limitor(state[idx].Q[itx], state[idx-1].Q[itx], ONE/state[idx].Pr);
     REALthree flux = eulerFlux(tempStateLeft,tempStateRight);
     flux += eulerSpectral(tempStateLeft,tempStateRight);
 
-    tempStateLeft = limitor(state[idx].Q[tstep], state[idx+1].Q[tstep], state[idx].Pr);
-    tempStateRight = limitor(state[idx+1].Q[tstep], state[idx].Q[tstep], ONE/state[idx+1].Pr);
+    tempStateLeft = limitor(state[idx].Q[itx], state[idx+1].Q[itx], state[idx].Pr);
+    tempStateRight = limitor(state[idx+1].Q[itx], state[idx].Q[itx], ONE/state[idx+1].Pr);
     flux -= eulerFlux(tempStateLeft,tempStateRight);
     flux -= eulerSpectral(tempStateLeft,tempStateRight);
 
-    state[idx].Q[tstep] = state[idx].Q[0] + ((QUARTER * (tstep+1)) * DIMS.dt_dx * flux);
+    state[idx].Q[tstep] = state[idx].Q[0] + ((QUARTER * (itx+1)) * DIMS.dt_dx * flux);
 }
 
 __device__ __host__ 

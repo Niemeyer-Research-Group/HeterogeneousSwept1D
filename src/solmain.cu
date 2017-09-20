@@ -1,10 +1,18 @@
 
 #include <fstream>
+
+#define cudaCheckError(ans) { cudaCheck((ans), __FILE__, __LINE__); }
+inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false) {
+   if (code != cudaSuccess) {
+      fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 #include "eulerCF/eulerCF.h"
 #include "decomp.h"
 #include "classic.h"
-//#include "swept.h"
-#include <iomanip>
+// #include "swept.h"
 
 /**
 ----------------------
@@ -68,7 +76,7 @@ int main(int argc, char *argv[])
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
 
-    int exSpace = (scheme.compare("S")) ? cGlob.htp : 2;
+    int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
     int strt = cGlob.xcpu * ranks[1] + cGlob.xg * smGpu[ranks[1]]; 
     int xalloc, xwrt;
     states *state;
@@ -90,13 +98,14 @@ int main(int argc, char *argv[])
         // Add the other half of the CPU and the GPU alloc.
         xwrt = cGlob.xg + cGlob.xcpu;
         xalloc = exSpace + xwrt;
-        cudaMallocManaged((void **) &state, xalloc * cGlob.szState);              
+        cout << "Num pts: " << xalloc << endl;
+        cudaCheckError(cudaMallocManaged((void **) &state, xalloc * cGlob.szState));              
     }
     else 
     {
         xwrt = cGlob.xcpu;
         xalloc = exSpace + xwrt;
-        cudaHostAlloc((void **) &state, xalloc * cGlob.szState, cudaHostAllocDefault);
+        cudaCheckError(cudaHostAlloc((void **) &state, xalloc * cGlob.szState, cudaHostAllocDefault));
     }
     
     for (int k=0; k <= xalloc; k++) initialState(inJ, state, k, strt);

@@ -172,7 +172,7 @@ void initArgs()
 
 }
 
-void solutionOutput(states *outState, REAL tstamp, REAL xpt)
+void solutionOutput(states *outState, REAL xpt, REAL tstamp)
 {
     std::string tsts = std::to_string(tstamp);
     std::string xpts = std::to_string(xpt);

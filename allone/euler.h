@@ -71,6 +71,7 @@ struct states {
 };
 
 std::string outVars[NVARS] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------// 
+std::string fspec = "Euler";
 
 /*
 	============================================================
@@ -108,6 +109,13 @@ typedef Json::Value jsons;
     #define QMIN(x, y) std::min(x, y)
 #endif
 
+__host__ double indexer(double dx, int i, int x)
+{
+    int pt = i+x;
+    double dx2 = dx/2.0;
+    return dx*(double)pt - dx2;
+}
+
 __host__ REAL density(REALthree subj)
 {
     return subj.x;
@@ -131,18 +139,14 @@ REAL pressure(REALthree qH)
     return DIMS.mgamma * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }
 
-__host__ REAL printout(int i, states *state)
+__host__ REAL printout(states *state, int i)
 {
     REALthree subj = state->Q[0];
-    REAL outs;
-    switch(i)
-    {
-        case 0: outs = density(subj);
-        case 1: outs = velocity(subj);
-        case 2: outs = energy(subj);
-        case 3: outs = pressure(subj);
-    } 
-    return outs;
+
+    if (i == 0) return density(subj);
+    if (i == 1) return velocity(subj);
+    if (i == 2) return energy(subj);
+    if (i == 3) return pressure(subj);
 }
 
 /*
@@ -171,6 +175,9 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.dt_dx = dtx/dxx;
     std::cout << "You're in Euler!" << std::endl;
+    for(int k=0; k<2; k++) {
+        std::cout << hBounds[k].x << " " << hBounds[k].y << " " << hBounds[k].z << std::endl;
+    }
 }
 
 // One of the main uses of global variables is the fact that you don't need to pass
@@ -179,17 +186,18 @@ __host__ void equationSpecificArgs(jsons inJs)
 __host__ void initialState(jsons inJs, int idx, int xst, states *inl, double *xs)
 {
     double dxx = inJs["dx"].asDouble();
-    double dxx2 = dxx/2.0;
+    double xss = indexer(dxx, idx, xst);
     double lx = inJs["lx"].asDouble();
-    double xss = dxx*((double)idx + (double)xst) - dxx2;
     xs[idx] = xss;
     bool wh = inJs["IC"].asString() == "PARTITION";
     int side;
     if (wh)
     {
         side = (xss > HALF*lx);
-        (inl+idx)->Q[0] = hBounds[side];
-        // std::cout << hBounds[side].x << " " << hBounds[side].y << " " << hBounds[side].z << " | ";
+        (inl+idx)->Q[0].x = hBounds[side].x;
+        (inl+idx)->Q[0].y = hBounds[side].y;
+        (inl+idx)->Q[0].z = hBounds[side].z;
+
     }
 }
 

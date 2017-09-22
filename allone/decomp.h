@@ -81,9 +81,9 @@ void makeMPI(int argc, char* argv[])
 void parseArgs(int argc, char *argv[])
 {
     std::cout << argc << std::endl;
-    if (argc>5)
+    if (argc>4)
     {
-        for (int k=5; k<argc; k+=2)
+        for (int k=4; k<argc; k+=2)
         {
             inJ[argv[k]] = atof(argv[k+1]);   
         }
@@ -171,16 +171,27 @@ void initArgs()
     cout << inJ << endl;
 
 }
-void solutionOutput(states *outState, double tstamp, int idx, int strt)
+
+void solutionOutput(states *outState, double tstamp, double xpt)
 {
     std::string tsts = std::to_string(tstamp);
-    double xpt = indexer(cGlob.dx, idx, strt);
     std::string xpts = std::to_string(xpt);
     for (int k=0; k<NVARS; k++)
     {
-        solution[outVars[k]][tsts][xpts] = printout(outState[idx], k);
+        solution[outVars[k]][tsts][xpts] = printout(outState, k);
     }
 }
+
+// void solutionOutput(states *outState, double tstamp, int idx, int strt)
+// {
+//     std::string tsts = std::to_string(tstamp);
+//     double xpt = indexer(cGlob.dx, idx, strt);
+//     std::string xpts = std::to_string(xpt);
+//     for (int k=0; k<NVARS; k++)
+//     {
+//         solution[outVars[k]][tsts][xpts] = printout(outState[idx], k);
+//     }
+// }
 
 void endMPI()
 {

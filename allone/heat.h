@@ -70,7 +70,7 @@ struct states{
 };
 
 typedef Json::Value jsons;
-
+std::string fspec = "Heat";
 std::string outVars[NVARS] = {"Temperature"}; //---------------// 
 
 /*
@@ -100,9 +100,9 @@ __host__ double indexer(double dx, int i, int s)
     return dx*(i + s);
 }
 
-__host__ REAL (states state, int i)
+__host__ REAL printout(states *state, int i)
 {
-    return state[i].T[0];
+    return state->T[0];
 }
 
 __host__ void equationSpecificArgs(jsons inJs)
@@ -117,11 +117,12 @@ __host__ void equationSpecificArgs(jsons inJs)
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(jsons inJs, states *inl, int idx, int strt)
+__host__ void initialState(jsons inJs, int idx, int strt, states *inl, double *xs)
 {
     double dxx = inJs["dx"].asDouble();
-    double xss = indexer(dxx, idx, xst);
-    (inl+idx)->T[0] = 50.0 * xss; //Just linear gradient
+    double xss = indexer(dxx, idx, strt);
+    xs[idx] = xss;
+    (inl+idx)->T[0] = 12.0 * (1.0-xss)*(1.0-xss)*xss*xss; 
 }
 
 __host__ void mpi_type(MPI_Datatype *dtype)

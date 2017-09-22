@@ -33,10 +33,7 @@ def numerica(df):
 def dictframes(d, t):
     print(t)
     if t>3:
-        for dk in d.keys():
-            print(dk)
-            d = {dk: dictframes(d[dk], t-1)}
-            return d
+        return {dk: dictframes(d[dk], t-1) for dk in d.keys()}
     else:
         return numerica(pd.DataFrame(d))
 
@@ -45,22 +42,30 @@ def depth(d, level=1):
         return level
     return max(depth(d[k], level + 1) for k in d)
 
+def readj(f):
+    fobj = open(f, 'r')
+    fr = fobj.read()
+    fobj.close()
+    return j.loads(fr)
 
 class Solved(object):
    
     def __init__(self, vFile):
         self.ext = ".pdf"
-        fobj = open(vFile, 'r')
-        fr = fobj.read()
-        self.jdict = j.loads(fr)
+        if isinstance(vFile, str):
+            self.jdict = readj(vFile)
+        else:
+            self.jdict = vFile
+
         self.deep = depth(self.jdict)
-        self.datafilename = op.splitext(op.basename(vFile))[0]
-        fobj.close()
-        self.plotname = self.datafilename.split("_")[0]
         self.ddf = dictframes(self.jdict, self.deep)
         self.subpl = len(self.jdict.keys())
-        
 
+    def metaparse(self, probspec):
+        self.pr = list(probspec.keys())[0]
+        pdi = probspec[self.pr]
+        self.plotname = self.pr + "_" + str(pdi["nX"])
+        
         # self.vals = np.genfromtxt(dataTuple, skip_header=1)[:,2:]
         # self.varNames = np.genfromtxt(dataTuple, skip_header=1, dtype="string")[:,0]
         # self.tFinal = np.around(np.genfromtxt(dataTuple, skip_header=1)[:,1], decimals=7)

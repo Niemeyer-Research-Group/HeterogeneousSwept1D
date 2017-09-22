@@ -105,22 +105,10 @@ double classicWrapper(states **state, double **xpts, int *tstep)
 
         while (t_eq < cGlob.tf)
         {
-            // COMPUTE
-            // std::cout << state[0][5].Q[0].x << std::endl;
             classicStep<<<cGlob.bks, cGlob.tpb>>> (dState, tmine);
+            classicStepCPU(state[0], xcp, tmine);
+            classicStepCPU(state[2], xcp, tmine);
 
-            #pragma omp parallel sections num_threads(2)
-            {
-                #pragma omp section
-                {
-                    classicStepCPU(state[0], xcp, tmine);
-                }
-                #pragma omp section
-                {
-                    classicStepCPU(state[2], xcp, tmine);
-                }
-            }
-            if (tmine<8) std::cout << tmine << std::endl;
             cudaError_t error = cudaGetLastError();
             if(error != cudaSuccess)
             {
@@ -129,28 +117,14 @@ double classicWrapper(states **state, double **xpts, int *tstep)
                 std::cin >> nomar;
             }
 
-            // Host to device first. PASS
-            # pragma omp parallel sections num_threads(3)
-            {
-                #pragma omp section
-                {
-                    cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
-                    cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
-                    cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
-                    cudaMemcpyAsync(state[0], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4);
-                }
-                #pragma omp section
-                {
-                    classicPassRight(state[2], xcp, tmine);
-                }
-                #pragma omp section
-                {
-                    classicPassLeft(state[0], xcp, tmine);
-                }
-            }
+
+            cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
+            cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
+            cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
+            cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4);            classicPassRight(state[2], xcp, tmine);
+            classicPassLeft(state[0], xcp, tmine);
 
 
-        
             // Increment Counter and timestep
             if (MODULA(tmine)) t_eq += cGlob.dt;
             tmine++;
@@ -160,7 +134,7 @@ double classicWrapper(states **state, double **xpts, int *tstep)
             {
                 cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
 
-                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, t_eq, xpts[0][k]);                
+                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, t_eq, xpts[0][k]);      
                 for (int k=1; k<xcp; k++) solutionOutput(state[2]+k, t_eq, xpts[2][k]);
                 for (int k=1; k<xgp; k++) solutionOutput(state[1]+k, t_eq, xpts[1][k]);
 
@@ -175,7 +149,7 @@ double classicWrapper(states **state, double **xpts, int *tstep)
         cudaStreamDestroy(st3);
         cudaStreamDestroy(st4);
         
-        for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, t_eq, xpts[0][k]);                
+        for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, t_eq, xpts[0][k]);      
         for (int k=1; k<xcp; k++) solutionOutput(state[2]+k, t_eq, xpts[2][k]);
         for (int k=1; k<xgp; k++) solutionOutput(state[1]+k, t_eq, xpts[1][k]);
 
@@ -206,7 +180,7 @@ double classicWrapper(states **state, double **xpts, int *tstep)
 
             if (t_eq > twrite)
             
-                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k,t_eq, xpts[0][k]);
+                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, t_eq, xpts[0][k]);
                 twrite += cGlob.freq;
             }
 

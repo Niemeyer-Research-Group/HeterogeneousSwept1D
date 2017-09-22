@@ -1,5 +1,17 @@
+// ALLONE
+
+// Well we definitely need to get rid of the xpts.  Really I need to concentrate on getting the output right so I can check the answers.  Then, if they're right, we can worry about streamlining this. Partly main problem, the keys in the output json are strings. Could read each in and then make it a data frame from dict.
 
 #include <fstream>
+
+#define cudaCheckError(ans) { cudaCheck((ans), __FILE__, __LINE__); }
+inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false) {
+   if (code != cudaSuccess) {
+      fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 #include "heads.h"
 #include "decomp.h"
 #include "classic.h"
@@ -66,6 +78,7 @@ int main(int argc, char *argv[])
         Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
+    // Well we definitely need to get rid of the xpts.  Really I need to concentrate on getting the output right so I can check the answers.  Then, if they're right, we can worry about streamlining this. 
     int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; 
     states **state;
     double **xpts;

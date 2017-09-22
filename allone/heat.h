@@ -95,7 +95,12 @@ eqConsts heqConsts; //---------------//
     #define DIMS    heqConsts
 #endif
 
-__host__ REAL printout(int i, states *state)
+__host__ double indexer(double dx, int i, int s)
+{
+    return dx*(i + s);
+}
+
+__host__ REAL (states state, int i)
 {
     return state[i].T[0];
 }
@@ -112,11 +117,10 @@ __host__ void equationSpecificArgs(jsons inJs)
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(jsons inJs, int idx, int xst, states *inl, double *xs)
+__host__ void initialState(jsons inJs, states *inl, int idx, int strt)
 {
     double dxx = inJs["dx"].asDouble();
-    double xss = dxx*((double)idx + (double)xst);
-    xs[idx] = xss;
+    double xss = indexer(dxx, idx, xst);
     (inl+idx)->T[0] = 50.0 * xss; //Just linear gradient
 }
 

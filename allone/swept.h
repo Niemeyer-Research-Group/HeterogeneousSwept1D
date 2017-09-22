@@ -24,14 +24,6 @@ static int offSend[2];
 static int offRecv[2];
 static int cnt, turn;
 
-#define cudaCheckError(ans) { cudaCheck((ans), __FILE__, __LINE__); }
-inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false) {
-   if (code != cudaSuccess) {
-      fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
-
 void swIncrement()
 {
     cnt++;

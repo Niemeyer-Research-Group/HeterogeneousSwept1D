@@ -171,14 +171,14 @@ void initArgs()
     cout << inJ << endl;
 
 }
-
-void solutionOutput(states *outState, REAL xpt, REAL tstamp)
+void solutionOutput(states *outState, double tstamp, int idx, int strt)
 {
     std::string tsts = std::to_string(tstamp);
+    double xpt = indexer(cGlob.dx, idx, strt);
     std::string xpts = std::to_string(xpt);
     for (int k=0; k<NVARS; k++)
     {
-        solution[outVars[k]][tsts][xpts] = printout(k, outState);
+        solution[outVars[k]][tsts][xpts] = printout(outState[idx], k);
     }
 }
 

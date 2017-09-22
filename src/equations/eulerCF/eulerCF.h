@@ -131,8 +131,14 @@ REAL pressure(REALthree qH)
     return DIMS.mgamma * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }
 
-__host__ REAL printout(REALthree subj, int i)
+__host__ double indexer(double dx, int i, int s)
 {
+    return dx*(i + s) - dx/2.0;
+}
+
+__host__ REAL printout(states state, int i)
+{
+    REALthree st = state.Q[0];
     REAL outs;
     switch(i)
     {
@@ -179,7 +185,7 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int strt)
     double dxx = inJs["dx"].asDouble();
     double dxx2 = dxx/2.0;
     double lx = inJs["lx"].asDouble();
-    double xss = (dxx*(idx+strt)) - dxx2;
+    double xss = indexer(dxx, idx, strt);
     bool wh = inJs["IC"].asString() == "PARTITION";
     int side;
     if (wh)
@@ -309,9 +315,6 @@ __forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR)
 
     @param state  Reference to the working array in SHARED memory holding the dependent variables.
     @param idx  The indices of the stencil points.
-    @param flagLeft  True if the point is the first finite volume in the tube.
-    @param flagRight  True if the point is the last finite volume in the tube.
-    @return  The updated value at the current spatial point.
 */
 __device__ __host__ void eulerStep(states *state, int idx, int tstep)
 {

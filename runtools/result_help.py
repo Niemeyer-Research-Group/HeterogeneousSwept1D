@@ -7,13 +7,16 @@ import numpy as np
 import os
 import os.path as op
 import sys
+
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from cycler import cycler
+import json as j
 import pandas as pd
 import palettable.colorbrewer as pal
 import subprocess as sp
 import collections
+# import datetime.datetime as dt
 
 plt.rc("axes", prop_cycle=cycler("color", pal.qualitative.Dark2_8.mpl_colors))
 
@@ -21,22 +24,50 @@ mpl.rcParams["lines.linewidth"] = 3
 mpl.rcParams["grid.alpha"] = 0.5
 mpl.rcParams["axes.grid"] = True
 
+def numerica(df):
+    df.columns = pd.to_numeric(df.columns.values)
+    df.index = pd.to_numeric(df.index.values)
+    df.sort_index(inplace=True)
+    return df.sort_index(axis=1)
+
+def dictframes(d, t):
+    print(t)
+    if t>3:
+        for dk in d.keys():
+            print(dk)
+            d = {dk: dictframes(d[dk], t-1)}
+            return d
+    else:
+        return numerica(pd.DataFrame(d))
+
+def depth(d, level=1):
+    if not isinstance(d, dict) or not d:
+        return level
+    return max(depth(d[k], level + 1) for k in d)
+
+
 class Solved(object):
    
     def __init__(self, vFile):
         self.ext = ".pdf"
-        dataTuple = tuple(open(vFile))
-        strdimz = dataTuple[0].split()
+        fobj = open(vFile, 'r')
+        fr = fobj.read()
+        self.jdict = j.loads(fr)
+        self.deep = depth(self.jdict)
         self.datafilename = op.splitext(op.basename(vFile))[0]
-        self.xGrid = np.linspace(0,float(strdimz[0]),int(strdimz[1]))
-        self.numpts = int(strdimz[1])
-        self.vals = np.genfromtxt(dataTuple, skip_header=1)[:,2:]
-        self.varNames = np.genfromtxt(dataTuple, skip_header=1, dtype="string")[:,0]
-        self.tFinal = np.around(np.genfromtxt(dataTuple, skip_header=1)[:,1], decimals=7)
-        self.utFinal = np.unique(self.tFinal)
-        self.plotTitles = np.unique(self.varNames)
+        fobj.close()
         self.plotname = self.datafilename.split("_")[0]
-        self.subpl = "Euler" in self.plotname
+        self.ddf = dictframes(self.jdict, self.deep)
+        self.subpl = len(self.jdict.keys())
+        
+
+        # self.vals = np.genfromtxt(dataTuple, skip_header=1)[:,2:]
+        # self.varNames = np.genfromtxt(dataTuple, skip_header=1, dtype="string")[:,0]
+        # self.tFinal = np.around(np.genfromtxt(dataTuple, skip_header=1)[:,1], decimals=7)
+        # self.utFinal = np.unique(self.tFinal)
+        # self.plotTitles = np.unique(self.varNames)
+        # self.plotname = self.datafilename.split("_")[0]
+        # self.subpl = "Euler" in self.plotname            
 
     def stripInitial(self):
         stripped = collections.defaultdict(dict)
@@ -48,19 +79,34 @@ class Solved(object):
 
         return stripped
         
-    def plotResult(self, fh, ax):      
+    def plotResult(self, f, a):   
         
-        if not self.subpl:
-            for i, t in enumerate(self.tFinal):       
-                ax.plot(self.xGrid, self.vals[i,:], label="{:.3f} (s)".format(t))
+        if (type(a).__module__ != np.__name__):
+            a = np.array(a)
+            
+        a=a.ravel()
+            
+        for k, axx in zip(self.ddf.keys(), a):
+            dfg = self.ddf[k]
+            dfg.plot(ax=axx)
+            if self.subpl == 1:
+                axx.set_ylabel(k)
+            else:
+                axx.set_title(k)
                 
-        else:          
-            for axi, nm in zip(ax, self.plotTitles):
-                idx = np.where(self.varNames == nm)
-                vn = self.vals[idx, :].T
-                tn = self.tFinal[idx]
-                for i, tL in enumerate(tn):
-                    axi.plot(self.xGrid, vn[:,i], label="{:.3f} (s)".format(tL))
+#        hand, lbl = a[0].get_legend_handles_labels()
+#        f.legend(hand, lbl, loc="upper right", fontsize="medium")
+        if self.subpl == 1:
+            f.subplots_adjust(bottom=0.08, right=0.85, top=0.9, 
+                    wspace=0.15, hspace=0.25)
+
+#        else:          
+#            for axi, nm in zip(ax, self.plotTitles):
+#                idx = np.where(self.varNames == nm)
+#                vn = self.vals[idx, :].T
+#                tn = self.tFinal[idx]
+#                for i, tL in enumerate(tn):
+#                    axi.plot(self.xGrid, vn[:,i], label="{:.3f} (s)".format(tL))
 
 
     def annotatePlot(self, fh, ax):

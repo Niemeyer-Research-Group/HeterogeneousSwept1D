@@ -1,11 +1,21 @@
 
+
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+#include <thrust/generate.h>
+#include <thrust/sort.h>
+#include <thrust/copy.h>
+
+
+#include <algorithm>
+#include <cstdlib>
+
 #include <fstream>
 #include "euler.h"
 #include "decomp.h"
 #include "classic.h"
 #include "swept.h"
 #include <iomanip>
-
 /*TODO
   - Make all allocations with boost/thrust
   - Use BoostMPI rather than regular mpi
@@ -70,16 +80,29 @@ int main(int argc, char *argv[])
     initArgs();
 
     /*  
+int main(void)
+{
+    // H has storage for 4 integers
+    thrust::host_vector<int> H(4);
+
+    // initialize individual elements
+    H[0] = 14;
+    H[1] = 20;
+    H[2] = 38;
+    H[3] = 46;
+    
+    // H.size() returns the size of vector H
+    std::cout << "H has size " << H.size() << std::endl;
+
+    
         Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
 
     int exSpace = (scheme.compare("S")) ? cGlob.htp : 2;
     int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; 
-    states *state;
-    vector <int> xpts;
-    xpts.push_back(strt-1) // Basic vector will have all pass, start, and split points.
-    //The pattern is important. 
+    int xalloc = xalloc = exSpace + cGlob.hasGpu * cGlob.xg + cGlob.xcpu;
+    thrust::host_vector<states> state(xalloc) 
 
     int mon;
 
@@ -94,19 +117,11 @@ int main(int argc, char *argv[])
         cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts))
 
         // Add the other half of the CPU and the GPU alloc.
-        xalloc = exSpace + cGlob.xg + cGlob.xcpu;
-        cudaMallocManaged((void **) &state, xalloc * cGlob.szState);
-
-        for (int k=0; k <= xalloc; k++)  initialState(inJ, k + strt, state);
-        for (int k=1; k<=xalloc; k++) solutionOutput(state, 0.0, xpts);                  
+  
     }
-    else 
-    {
-        xalloc = exSpace + cGlob.xcpu;
-        malloc((void **) &state, xalloc * cGlob.szState);
-        for (int k=0; k <= xalloc; k++)  initialState(inJ, k + strt, state);  
-        for (int k=1; k<=xalloc-cGlob.ht; k++) solutionOutput(state, 0.0, xpts);
-    }
+    
+    for (int k=0; k <= xalloc; k++)  initialState(inJ, k + strt, state);
+    for (int k=1; k<=xalloc; k++) solutionOutput(state, 0.0, xpts);                
 
     int tstep = 1;
     // Start the counter and start the clock.  Maybe should time it with MPI.  Still use cudaSynchronize for GPU nodes.

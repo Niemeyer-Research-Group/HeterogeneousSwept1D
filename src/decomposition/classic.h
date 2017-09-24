@@ -81,20 +81,9 @@ double classicWrapper(states *state, std::vector xpts, int *tstep)
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
         const int gpusize =  cGlob.szState * xgpp;
         const int cpuzise = cGlob.szState * xcpp;
-
-        states *dState;
         
-        cudaMalloc((void **)&dState, gpusize);
-        // Copy the initial conditions to the device array.
-        // This is ok, the whole array has been malloced.
-        cudaMemcpy(dState, state[1], gpusize, cudaMemcpyHostToDevice);
+        thrust::device_vector <states> dState(state.begin()+xc, state.begin()+xc+xgpp);
 
-        // Four streams for four transfers to and from cpu.
-        cudaStream_t st1, st2, st3, st4;
-        cudaStreamCreate(&st1);
-        cudaStreamCreate(&st2);
-        cudaStreamCreate(&st3);
-        cudaStreamCreate(&st4);
         int nomar;
         
         if (!ranks[1]) 

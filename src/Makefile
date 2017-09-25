@@ -1,50 +1,10 @@
-# Simple makefile for all test problems for 1D Swept Rule
-# -maxrregcount=73 
+NATLIB := -lm -std=c++11 -gencode arch=compute_35,code=sm_35 -w
+# -restrict -O3
 
-MPICC=$(PREP) mpicc
-MPICP=$(PREP) mpic++
-NVCC=$(PREP) nvcc
+default: ./bin/heat ./bin/euler
 
-# It will put the compiled programs in the bin subdirectory within the directory
-# containing the makefile
-MPIPATH := /usr/include/mpi
-PROJECTDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-OUTDIR := $(PROJECTDIR)bin
-EQDIR := $(PROJECTDIR)equations
-COREDIR := $(PROJECTDIR)decomposition
-CONFS := $(PROJECTDIR)eqconf.conf
-EQS := $(shell cat $(CONFS))
-EQDIRS := $(addprefix $(EQDIR)/, $(EQS))
-UTILDIR := $(PROJECTDIR)utilities
+./bin/euler: solmain.cu jsoncpp.cpp euler.h heads.h decomp.h classic.h swept.h
+	nvcc solmain.cu jsoncpp.cpp -o ./bin/euler -DEULER=1 $(NATLIB) -I/usr/include/mpi -lmpi -Xcompiler -fopenmp 
 
-# MPICFLAGS=-I${MPI_HOME}/include
-# CUDACFLAGS=-I${CUDA_INSTALL_PATH}/include
-# EQDIRS := ${sort ${dir ${wildcard ${EQDIR}/*/}}}
-# EQHEAD = $(EQDIRS)*.h
-# APPOBJ := $(OUTDIR)/${lastword ${subst /, ,$(EQDIRS)}}
-
-# IFNVCC = -lmpi -Xcompiler -fopenmp -Xptxas=-v -restrict -march=native
-# GENCODE := -gencode arch=compute_35,code=sm_35
-
-PARALLELLIB := -fopenmp -lmpi -lcudart -lcuda
-NATLIB := -lm -O3 -std=c++11
-INC := -I$(UTILDIR) -I$(PROJECTDIR)equations -I$(MPIPATH)
-CUDAFLAGS := $(NATLIB) $(INC) $(PARALLELLIB) 
-
-COREDEP := $(PROJECTDIR)solver.cu $(wildcard $(COREDIR)/*.cu) $(wildcard $(COREDIR)/*.cpp)
-
-.PHONY: $(EQS)
-
-$(EQS): %:  $(COREDEP)
-	$(MPICP) $^ $(UTILDIR)/jsoncpp.cpp -o $(OUTDIR)/$@ -D=$@ $(CUDAFLAGS) 
-
-# all: $(EQS)
-# $(EQDIRS)/%.cu
-# define build_rule
-# $1: $(COREDEP) 
-# 	$(MPICC) $(COREDEP) $(EQDIR)/$1/$1.cu -o $(OUTDIR)/$1 -D=$1 $(CUDAFLAGS)
-# endef
-
-# $(foreach eq,$(EQS), $(eval $(call build_rule,$(eq))))
-
-# .PHONY: printvar 
+./bin/heat: solmain.cu jsoncpp.cpp heat.h heads.h decomp.h classic.h swept.h
+	nvcc solmain.cu jsoncpp.cpp -o ./bin/heat -DHEAT=1 $(NATLIB) -I/usr/include/mpi -lmpi -Xcompiler -fopenmp

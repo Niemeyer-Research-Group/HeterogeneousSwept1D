@@ -11,7 +11,6 @@
 #include <cuda_runtime_api.h>
 #include <device_functions.h>
 #include <mpi.h>
-#include <omp.h>
 
 #include <iostream>
 #include <fstream>

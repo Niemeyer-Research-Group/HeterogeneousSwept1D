@@ -21,7 +21,7 @@ int lastproc, nprocs, ranks[3];
 
 struct globalism {
 // Topology
-    int nThreads, nWaves, nGpu, nX;  
+    int nWaves, nGpu, nX;  
     int xg, xcpu, xWave;
     bool hasGpu;
     double gpuA;
@@ -54,36 +54,14 @@ void makeMPI(int argc, char* argv[])
     ranks[2] = (ranks[1]+1) % nprocs;
 }
 
-// void getDeviceInformation();
-// {
-//     cudaGetDeviceCount(nGpu);
-
-//     if (nGpu)
-//     {
-//         cudaGetDeviceProp(&props);
-//     }
-    
-//     nthreads = omp_get_num_procs();
-
-//     // From this I want what GPUs each proc can see, and how many threads they can make
-//     // This may require nvml to get the UUID of the GPUS, pass them all up to the 
-//     // Master proc to decide which proc gets which gpu.
-// }
-
-/* 
-    Takes any extra command line arguments which override json default args and inserts 
-    them into the json type which will be read into variables in the next step.
-
-    Arguments are key, value pairs all lowercase keys, no dash in front of arg.
-*/
 
 // I think this needs a try except for string inputs.
 void parseArgs(int argc, char *argv[])
 {
     std::cout << argc << std::endl;
-    if (argc>5)
+    if (argc>4)
     {
-        for (int k=5; k<argc; k+=2)
+        for (int k=4; k<argc; k+=2)
         {
             inJ[argv[k]] = atof(argv[k+1]);   
         }
@@ -169,18 +147,29 @@ void initArgs()
     // If BCTYPE == "Periodic"
         // Don't do anything.
     cout << inJ << endl;
+
 }
 
-void solutionOutput(states *outState, double tstamp, int idx, int strt)
+void solutionOutput(states *outState, double tstamp, double xpt)
 {
     std::string tsts = std::to_string(tstamp);
-    double xpt = (cGlob.dx*(idx+strt)) - cGlob.dx/2.0;
     std::string xpts = std::to_string(xpt);
     for (int k=0; k<NVARS; k++)
     {
-        solution[outVars[k]][tsts][xpts] = printout(outState[idx].Q[0], k);
+        solution[outVars[k]][tsts][xpts] = printout(outState, k);
     }
 }
+
+// void solutionOutput(states *outState, double tstamp, int idx, int strt)
+// {
+//     std::string tsts = std::to_string(tstamp);
+//     double xpt = indexer(cGlob.dx, idx, strt);
+//     std::string xpts = std::to_string(xpt);
+//     for (int k=0; k<NVARS; k++)
+//     {
+//         solution[outVars[k]][tsts][xpts] = printout(outState[idx], k);
+//     }
+// }
 
 void endMPI()
 {

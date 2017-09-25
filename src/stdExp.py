@@ -55,10 +55,11 @@ else:
 
 
 #Say iterate over gpuA at one size and tpb
-gpus = [k/2.0 for k in range(1, 11)]
+gpus = [k/2.0 for k in range(1, 11)] #GPU Affinity
 prog += " "
 eqspec += " "
-nX = [2**k for k in range(11,21,2)]
+nX = [2**k for k in range(11,21,2)] #Num spatial pts (Grid Size)
+tpb 
 
 for n in nX:
     for g in gpus:

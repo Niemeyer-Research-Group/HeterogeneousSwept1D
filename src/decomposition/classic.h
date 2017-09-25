@@ -3,7 +3,7 @@
     CLASSIC CORE
 ---------------------------
 */
-using namespace std;
+
 /**
     The Classic Functions for the stencil operation
 */
@@ -19,11 +19,12 @@ __global__ void classicStep(states *state, int ts)
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
 
     stepUpdate(state, gid, ts);
+    // if (gid==1) printf("GPU!: %d, at 51 Density: %.2f\n", ts, state[gid+50].Q[0].x);
 }
 
 void classicStepCPU(states *state, int numx, int tstep)
 {
-    // bool ornk = omp_get_thread_num() == 0;
+    bool ornk = omp_get_thread_num() == 0;
     // if (!ranks[1] && ornk) std::cout << "we're taking a classic step on the cpu: " << tstep << std::endl;
     for (int k=1; k<numx; k++)
     {
@@ -64,7 +65,7 @@ void classicPassRight(states *state, int idxend, int tstep)
 // We are working with the assumption that the parallelism is too fine to see any benefit.
 // Still struggling with the idea of the local vs parameter arrays.
 // Classic Discretization wrapper.
-double classicWrapper(states *state, int xpt, int *tstep)
+double classicWrapper(states **state, std::vector xpts, std::vector alen, int *tstep)
 {
     if (!ranks[1]) std::cout << "Classic Decomposition" << std::endl;
     int tmine = *tstep;
@@ -72,55 +73,58 @@ double classicWrapper(states *state, int xpt, int *tstep)
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
 
+    std::cout << cGlob.bCond[0] << " " << cGlob.bCond[1] << std::endl;
+
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
-        const int xc = cGlob.xcpu/2, xcp = xc+1;
-        const int xcr = xc + cGlob.xg;
-        const int xwrt = cGlob.xg + cGlob.xcpu;
+        const int xc = cGlob.xcpu/2, xcp = xc+1, xcpp = xc+2;
+        const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
+        const int gpusize =  cGlob.szState * xgpp;
+        const int cpuzise = cGlob.szState * xcpp;
 
-        printf("Before the first function calls\n");
+        states *dState;
+        
+        cudaMalloc((void **)&dState, gpusize);
+        // Copy the initial conditions to the device array.
+        // This is ok, the whole array has been malloced.
+        cudaMemcpy(dState, state[1], gpusize, cudaMemcpyHostToDevice);
+
+        // Four streams for four transfers to and from cpu.
+        cudaStream_t st1, st2, st3, st4;
+        cudaStreamCreate(&st1);
+        cudaStreamCreate(&st2);
+        cudaStreamCreate(&st3);
+        cudaStreamCreate(&st4);
+        int nomar;
+        
+        // if (!ranks[1]) 
+        // {
+        //     std::cout << "Just for fun: " << xcpp << " nums in cpu " << xgpp << " nums in GPU " << cGlob.hasGpu << std::endl; 
+        //     std::cout << "AND the ends of x: " << xpts[0][xc] << " " << xpts[1][xc] << " " << xpts[2][xc] << std::endl; 
+        // }
 
         while (t_eq < cGlob.tf)
         {
-            
-            classicStepCPU(state, xcp, tmine);
-
-            classicStepCPU(state + xcr, xcp, tmine);
- 
-            classicStep<<<cGlob.bks, cGlob.tpb>>> (state + xc, tmine);
-
-            // #pragma omp parallel sections num_threads(2)
-            // {
-            //     #pragma omp section
-            //     {
-            //         classicStepCPU(state, xcp, tmine);
-            //     }
-            //     #pragma omp section
-            //     {
-            //         classicStepCPU(state + xcr, xcp, tmine);
-            //     }
-            // }
+            classicStep<<<cGlob.bks, cGlob.tpb>>> (dState, tmine);
+            classicStepCPU(state[0], xcp, tmine);
+            classicStepCPU(state[2], xcp, tmine);
 
             cudaError_t error = cudaGetLastError();
             if(error != cudaSuccess)
             {
                 // print the CUDA error message and exit
                 printf("CUDA error tstep: %i: msg %s\n", tmine, cudaGetErrorString(error));
+                std::cin >> nomar;
             }
 
-            // Host to device first. PASS
-            # pragma omp parallel sections num_threads(2)
-            {
-                #pragma omp section
-                {
-                    classicPassRight(state + xcr, xcp, tmine);
-                }
-                #pragma omp section
-                {
-                    classicPassLeft(state, xcp, tmine);
-                }
-            }
-   
+
+            cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
+            cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
+            cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
+            cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4);            classicPassRight(state[2], xcp, tmine);
+            classicPassLeft(state[0], xcp, tmine);
+
+
             // Increment Counter and timestep
             if (MODULA(tmine)) t_eq += cGlob.dt;
             tmine++;
@@ -128,38 +132,50 @@ double classicWrapper(states *state, int xpt, int *tstep)
             // OUTPUT
             if (t_eq > twrite)
             {
-                for (int k=1; k<xcp; k++) solutionOutput(state, t_eq, k, xpt);
+                cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+
+                for (int i=0; i<nrows; i++)
+                {
+                    for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
+                }  
+
                 twrite += cGlob.freq;
             }
-            cudaDeviceSynchronize();
         }
+
+        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+
+        cudaStreamDestroy(st1);
+        cudaStreamDestroy(st2);
+        cudaStreamDestroy(st3);
+        cudaStreamDestroy(st4);
+        
+        cudaFree(dState);
     }
     else
     {
-        const int xcp = cGlob.xcpu + 1;
+        int xcp = cGlob.xcpu + 1;
+
         while (t_eq < cGlob.tf)
         {
-            classicStepCPU(state, xcp, tmine);
+
+            classicStepCPU(state[0], xcp, tmine);
             if (MODULA(tmine)) t_eq += cGlob.dt;
             tmine++;
 
-            #pragma omp parallel sections num_threads(2)
-            {
-                #pragma omp section
-                {
-                    classicPassRight(state, xcp, tmine);
-                }
-                #pragma omp section
-                {
-                    classicPassLeft(state, xcp, tmine);
-                }
-            }
+            classicPassRight(state[0], xcp, tmine);
+
+            classicPassLeft(state[0], xcp, tmine);
 
             if (t_eq > twrite)
             
-                for (int k=1; k<xcp; k++) solutionOutput(state, t_eq, k, xpt); 
+            for (int i=0; i<nrows; i++)
+            {
+                for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
+            }  
                 twrite += cGlob.freq;
             }
+
     }
     *tstep = tmine;
     return t_eq;

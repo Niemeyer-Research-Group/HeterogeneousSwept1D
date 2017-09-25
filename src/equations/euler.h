@@ -11,7 +11,6 @@
 #include <cuda_runtime_api.h>
 #include <device_functions.h>
 #include <mpi.h>
-#include <omp.h>
 
 #include <iostream>
 #include <fstream>
@@ -197,7 +196,6 @@ __host__ void initialState(jsons inJs, int idx, int xst, states *inl, double *xs
         (inl+idx)->Q[0].x = hBounds[side].x;
         (inl+idx)->Q[0].y = hBounds[side].y;
         (inl+idx)->Q[0].z = hBounds[side].z;
-
     }
 }
 

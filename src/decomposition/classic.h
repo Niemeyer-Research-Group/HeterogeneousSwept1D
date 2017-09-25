@@ -24,8 +24,6 @@ __global__ void classicStep(states *state, int ts)
 
 void classicStepCPU(states *state, int numx, int tstep)
 {
-    bool ornk = omp_get_thread_num() == 0;
-    // if (!ranks[1] && ornk) std::cout << "we're taking a classic step on the cpu: " << tstep << std::endl;
     for (int k=1; k<numx; k++)
     {
         stepUpdate(state, k, tstep);
@@ -65,15 +63,13 @@ void classicPassRight(states *state, int idxend, int tstep)
 // We are working with the assumption that the parallelism is too fine to see any benefit.
 // Still struggling with the idea of the local vs parameter arrays.
 // Classic Discretization wrapper.
-double classicWrapper(states **state, std::vector xpts, std::vector alen, int *tstep)
+double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> alen, int *tstep)
 {
     if (!ranks[1]) std::cout << "Classic Decomposition" << std::endl;
     int tmine = *tstep;
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
-
-    std::cout << cGlob.bCond[0] << " " << cGlob.bCond[1] << std::endl;
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
@@ -94,18 +90,11 @@ double classicWrapper(states **state, std::vector xpts, std::vector alen, int *t
         cudaStreamCreate(&st1);
         cudaStreamCreate(&st2);
         cudaStreamCreate(&st3);
-        cudaStreamCreate(&st4);
-        int nomar;
-        
-        // if (!ranks[1]) 
-        // {
-        //     std::cout << "Just for fun: " << xcpp << " nums in cpu " << xgpp << " nums in GPU " << cGlob.hasGpu << std::endl; 
-        //     std::cout << "AND the ends of x: " << xpts[0][xc] << " " << xpts[1][xc] << " " << xpts[2][xc] << std::endl; 
-        // }
+        cudaStreamCreate(&st4);        
 
         while (t_eq < cGlob.tf)
         {
-            classicStep<<<cGlob.bks, cGlob.tpb>>> (dState, tmine);
+            classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
             classicStepCPU(state[0], xcp, tmine);
             classicStepCPU(state[2], xcp, tmine);
 
@@ -114,14 +103,13 @@ double classicWrapper(states **state, std::vector xpts, std::vector alen, int *t
             {
                 // print the CUDA error message and exit
                 printf("CUDA error tstep: %i: msg %s\n", tmine, cudaGetErrorString(error));
-                std::cin >> nomar;
             }
 
 
             cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
             cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
             cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
-            cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4);            classicPassRight(state[2], xcp, tmine);
+            cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); classicPassRight(state[2], xcp, tmine);
             classicPassLeft(state[0], xcp, tmine);
 
 
@@ -134,14 +122,14 @@ double classicWrapper(states **state, std::vector xpts, std::vector alen, int *t
             {
                 cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
 
-                for (int i=0; i<nrows; i++)
+                for (int i=0; i<3; i++)
                 {
                     for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
                 }  
 
                 twrite += cGlob.freq;
             }
-        }
+        }       
 
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
 
@@ -158,7 +146,6 @@ double classicWrapper(states **state, std::vector xpts, std::vector alen, int *t
 
         while (t_eq < cGlob.tf)
         {
-
             classicStepCPU(state[0], xcp, tmine);
             if (MODULA(tmine)) t_eq += cGlob.dt;
             tmine++;
@@ -168,14 +155,11 @@ double classicWrapper(states **state, std::vector xpts, std::vector alen, int *t
             classicPassLeft(state[0], xcp, tmine);
 
             if (t_eq > twrite)
-            
-            for (int i=0; i<nrows; i++)
             {
-                for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
-            }  
+                for (int k=1; k<=cGlob.xcpu; k++)  solutionOutput(state[0], t_eq, k, xpts[0]);
                 twrite += cGlob.freq;
             }
-
+        }   
     }
     *tstep = tmine;
     return t_eq;

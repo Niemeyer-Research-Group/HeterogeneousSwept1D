@@ -116,11 +116,10 @@ __host__ void equationSpecificArgs(jsons inJs)
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
 // lxh is half the domain length assuming starting at 0.
-__host__ void initialState(jsons inJs, int idx, int strt, states *inl, double *xs)
+__host__ void initialState(jsons inJs, states *inl, int idx, int xst)
 {
     double dxx = inJs["dx"].asDouble();
-    double xss = indexer(dxx, idx, strt);
-    xs[idx] = xss;
+    double xss = indexer(dxx, idx, xst);
     (inl+idx)->T[0] = 12.0 * (1.0-xss)*(1.0-xss)*xss*xss; 
 }
 

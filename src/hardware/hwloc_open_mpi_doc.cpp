@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include <cuda.h>
-#include <mpi.h>
+#include <mpi/mpi.h>
 #include "hwloc.h"
  
 #define ABORT_ON_ERROR(func)                          \
@@ -23,7 +23,8 @@
 static hwloc_topology_t topology = NULL;
 static int gpuIndex = 0;
 static hwloc_obj_t gpus[16] = {0};
- 
+
+// nvcc ./hardware/hwloc_open_mpi_doc.cpp -o ./bin/hwloc -lm -O3 -lmpi
 /**
  * This function searches for all the GPUs that are hanging off a NUMA
  * node.  It walks through each of the PCI devices and looks for ones

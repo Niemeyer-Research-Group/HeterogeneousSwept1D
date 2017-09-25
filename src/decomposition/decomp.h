@@ -21,19 +21,21 @@ int lastproc, nprocs, ranks[3];
 
 struct globalism {
 // Topology
-    int nWaves, nGpu, nX;  
-    int xg, xcpu, xWave;
+    int nGpu, nX;  
+    int xg, xcpu;
     bool hasGpu;
     double gpuA;
 
 // Geometry
-    int tpb, tpbp, base, bks;
+    int tpb, tpbp, base;
+    int cBks, gBks;
     int ht, htm, htp;
     int szState;
 
 // Iterator
     double tf, freq, dt, dx, lx;
-    bool bCond[2] = {true, true}; // Initialize passing both sides.
+    bool bCond[2] = {true, true}; 
+    // Initialize passing both sides.
 };
 
 globalism cGlob;
@@ -68,74 +70,59 @@ void parseArgs(int argc, char *argv[])
     }
 }
 
+// gpuA = gBks/cBks
+
 void initArgs()
 {
     using namespace std;
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);
     cGlob.tpb = inJ["tpb"].asInt();
-    cGlob.gpuA = inJ["gpuA"].asDouble();
+    
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
-    cGlob.nX = inJ["nX"].asInt();
+    cGlob.gpuA = inJ["gpuA"].asDouble();
+    if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
+
+    if (inJ["nX"].asInt() == 0)
+    {
+        if (inJ["cBks"].asInt() == 0)
+        {
+            cGlob.gBks = inJ['gBks'].asInt();
+            cGlob.cBks = cGlob.gBks/cGlob.gpuA;
+        }
+        else 
+        {
+            cGlob.cBks = inJ['cBks'].asInt();
+            cGlob.gBks = cGlob.cBks*cGlob.gpuA;
+        }
+        if (cGlob.cBks<2) cGlob.cBks = 2; // Floor for cpu blocks per proc.
+        if (cGlob.cBks & 1) cGlob.cBks++;
+        cGlob.nX = cGlob.tpb * (nprocs * cGlob.cBks + cGlob.nGpu * cGlob.gBks);
+    }
+    else
+    {
+        cGlob.nX = inJ["nX"].asInt();
+        cGlob.cBks = cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA));
+        if (cGlob.cBks & 1) cGlob.cBks++;
+        cGlob.gBks = cGlob.gpuA*cGlob.cBks;
+    }
+    
     cGlob.base = cGlob.tpb+2;
     cGlob.tpbp = cGlob.tpb+1;
     cGlob.ht = cGlob.tpb/2;
     cGlob.htm = cGlob.ht-1;
-
+    cGlob.htp = cGlob.ht+1;
     // Derived quantities
-    cGlob.xcpu = cGlob.nThreads * cGlob.tpb;    // How many spatial points can fit on one wave on a CPU.
-    cGlob.bks = (((double)cGlob.xcpu * cGlob.gpuA)/cGlob.tpb); // How many blocks should be launched on a GPU.
-    cGlob.xg = cGlob.tpb * cGlob.bks;
-    cGlob.gpuA = (double)cGlob.xg/(double)cGlob.xcpu; // Adjusted gpuA.
-    cGlob.xWave = (nprocs * cGlob.xcpu + cGlob.nGpu * cGlob.xg); 
+    cGlob.xcpu = cGlob.cBks * cGlob.tpb;  
+    cGlob.xg = cGlob.gBks * cGlob.tpb;  
 
-    // Do it backward if you already know the waves. Else we get the waves from nX (which is just an approximation).
-    cout << "nX " << cGlob.nX << endl;
-    cout << "nprocs: " << nprocs << endl;
-    cout << "gpuA " << cGlob.gpuA << endl;
-    cout << "nGPU: " << cGlob.nGpu << endl;
-    cout << "xGPU: " << cGlob.xg << endl;
-    cout << "bks " << cGlob.bks << endl;
-    cout << "----------"  << endl;
+    inJ["gpuAA"] = (double)cGlob.cBks/(double)cGlob.gBks; // Adjusted gpuA.
 
-    if (inJ["nW"].asInt() == 0)
-    {
-        cGlob.nWaves = CEIL(cGlob.nX, cGlob.xWave);
-        cout << "No nWaves wasn't set previous" << endl;
-    }
-    else
-    {
-        cout << "Yes nWaves was set previous " << inJ["nW"].asInt() << endl;
-        cGlob.nWaves = inJ["nW"].asInt();
-    }
-
-    cGlob.nX = cGlob.nWaves*cGlob.xWave;
-    cGlob.ht = cGlob.tpb/2;
-    cGlob.htm = cGlob.ht - 1;
-    cGlob.htp = cGlob.ht + 1;
-
+        // Different schemes!
     cGlob.dx = cGlob.lx/((double)cGlob.nX - 2.0); // Spatial step
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
-
-    
-    cout << cGlob.dx << endl;
-    cGlob.xg *= cGlob.nWaves;
-    cGlob.bks = cGlob.xg/cGlob.tpb;
-    cGlob.xcpu *= cGlob.nWaves;
-
-    cout << "After:" << endl;
-    inJ["nX"] = cGlob.nX;
-    inJ["gpuA"] = cGlob.gpuA;
-    
-    cout << "nX " << cGlob.nX << endl;
-    cout << "xg + xc " << cGlob.xg + cGlob.xcpu << endl;
-    cout << "nWaves " << cGlob.nWaves << endl;
-    cout << "xWave " << cGlob.xWave << endl;
-    cout << "bks " << cGlob.bks << endl;
-    cout << "gpuA " << cGlob.gpuA << endl;
-    cout << "xGPU: " << cGlob.xg << endl;
 
     equationSpecificArgs(inJ);
 
@@ -150,9 +137,10 @@ void initArgs()
 
 }
 
-void solutionOutput(states *outState, double tstamp, double xpt)
+void solutionOutput(states *outState, double tstamp, int idx, int strt)
 {
     std::string tsts = std::to_string(tstamp);
+    double xpt = indexer(cGlob.dx, idx, strt);
     std::string xpts = std::to_string(xpt);
     for (int k=0; k<NVARS; k++)
     {

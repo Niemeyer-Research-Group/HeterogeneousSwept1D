@@ -1,5 +1,4 @@
 {
     "GPU" : [1],
-    "nThreads": [16],
     "gpuID" : [0]
 }

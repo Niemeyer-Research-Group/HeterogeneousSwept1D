@@ -5,8 +5,10 @@
 #include <fstream>
 
 #define cudaCheckError(ans) { cudaCheck((ans), __FILE__, __LINE__); }
-inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false) {
-   if (code != cudaSuccess) {
+inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false) 
+{
+   if (code != cudaSuccess) 
+   {
       fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);
    }
@@ -16,7 +18,6 @@ inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=f
 #include "decomp.h"
 #include "classic.h"
 #include "swept.h"
-#include <iomanip>
 
 /**
 ----------------------
@@ -25,7 +26,7 @@ inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=f
 */
 
 #ifndef HDW
-    #define HDW     "WORKSTATION.json"
+    #define HDW     "hardware/WORKSTATION.json"
 #endif
 
 std::vector<int> jsonP(jsons jp, size_t sz)
@@ -75,8 +76,6 @@ int main(int argc, char *argv[])
         Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
-
-    // Well we definitely need to get rid of the xpts.  Really I need to concentrate on getting the output right so I can check the answers.  Then, if they're right, we can worry about streamlining this. 
     int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; 
     states **state;
 
@@ -94,21 +93,20 @@ int main(int argc, char *argv[])
         cudaSetDevice(gpuID);
         
         state = new states* [3];
-        for 
         cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));
-        cudaCheckError(cudaCheckError(cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault));
-        cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault));
+        cudaCheckError(cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault));
+        cudaCheckError(cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault));
 
         xpts.push_back(strt + xc);
-        alen.push_back(cGlob.xg)
+        alen.push_back(cGlob.xg);
         xpts.push_back(strt + xc + cGlob.xg);
         alen.push_back(xalloc);
 
-        cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
+        cudaCheckError(cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts)));
 
         if (sizeof(REAL)>6) 
         {
-            cudaCheckError(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte)0;
+            cudaCheckError(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
         }
     }
     else 
@@ -121,16 +119,6 @@ int main(int argc, char *argv[])
     {
         for (int k=0; k<alen[i] + exSpace; k++)  initialState(inJ, state[i], k, xpts[i]);
         for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]); 
-
-    }
-
-    // Check CUDA alloc.
-    cudaError_t error = cudaGetLastError();
-    if(error != cudaSuccess)
-    {
-        // print the CUDA error message and exit
-        printf("CUDA error: %s\n", cudaGetErrorString(error));
-        exit(-1);
     }
 
     // If you have selected scheme I, it will only initialize and output the initial values.
@@ -219,27 +207,15 @@ int main(int argc, char *argv[])
 
     endMPI();
 
+    for (int k=0; k<nrows; k++)
+    {
+        cudaFreeHost(state[k]);
+    }
+    delete[] state;   
     if (cGlob.hasGpu)
     {
         cudaDeviceSynchronize();
-
-        for (int k=0; k<3; k++)
-        {
-            cudaFreeHost(xpts[k]);
-            cudaFreeHost(state[k]);
-        }
-        
-        delete[] xpts;
-        delete[] state;
         cudaDeviceReset();
     }
-    else
-    {
-        cudaFreeHost(xpts[0]);
-        cudaFreeHost(state[0]);
-        delete[] xpts;
-        delete[] state;
-    }
     return 0;
-
 }

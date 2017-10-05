@@ -17,9 +17,7 @@
 __global__ void classicStep(states *state, int ts)
 {
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
-
     stepUpdate(state, gid, ts);
-    // if (gid==1) printf("GPU!: %d, at 51 Density: %.2f\n", ts, state[gid+50].Q[0].x);
 }
 
 void classicStepCPU(states *state, int numx, int tstep)

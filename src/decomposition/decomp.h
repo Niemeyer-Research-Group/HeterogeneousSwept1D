@@ -124,7 +124,7 @@ void initArgs()
     cGlob.dx = cGlob.lx/((double)cGlob.nX - 2.0); // Spatial step
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
 
-    equationSpecificArgs(inJ);
+    equationSpecificArgs();
 
     // Swept Always Passes!
 
@@ -148,16 +148,7 @@ void solutionOutput(states *outState, double tstamp, int idx, int strt)
     }
 }
 
-// void solutionOutput(states *outState, double tstamp, int idx, int strt)
-// {
-//     std::string tsts = std::to_string(tstamp);
-//     double xpt = indexer(cGlob.dx, idx, strt);
-//     std::string xpts = std::to_string(xpt);
-//     for (int k=0; k<NVARS; k++)
-//     {
-//         solution[outVars[k]][tsts][xpts] = printout(outState[idx], k);
-//     }
-// }
+
 
 void endMPI()
 {

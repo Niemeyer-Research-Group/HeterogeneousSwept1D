@@ -271,7 +271,8 @@ REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
     @return  The combined flux from the function.
 */
 __device__ __host__ 
-__forceinline__ REALthree eulerFlux(REALthree qL, REALthree qR)
+__forceinline__ 
+REALthree eulerFlux(REALthree qL, REALthree qR)
 {
     REAL uLeft = qL.y/qL.x;
     REAL uRight = qR.y/qR.x;
@@ -295,7 +296,8 @@ __forceinline__ REALthree eulerFlux(REALthree qL, REALthree qR)
     @return  The spectral radius multiplied by the difference of the reconstructed values
 */
 __device__ __host__ 
-__forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR)
+__forceinline__ 
+REALthree eulerSpectral(REALthree qL, REALthree qR)
 {
     REALthree halfState;
     REAL rhoLeftsqrt = SQUAREROOT(qL.x);
@@ -312,21 +314,8 @@ __forceinline__ REALthree eulerSpectral(REALthree qL, REALthree qR)
     return (SQUAREROOT(pH * DIMS.gamma) + fabs(halfState.y)) * (qL - qR);
 }
 
-/**
-    The Final step of the finite volume scheme.
-
-    First: The pressure ratio calculation is decomposed to avoid division and calling the limitor unnecessarily.  Although 3 pressure ratios would be required, we can see that there are only 4 unique numerators and denominators in that calculation which can be calculated without using division or calling pressure (which uses division).  The edge values aren't guaranteed to have the correct conditions so the flags set the appropriate pressure values to 0 (Pressures are equal) at the edges.
-    Second:  The numerator and denominator are tested to see if the pressure ratio will be Nan or <=0. If they are, the limitor doesn't need to be called.  If they are not, call the limitor and calculate the pressure ratio.
-    Third:  Use the reconstructed values at the interfaces to get the flux at the interfaces using the spectral radius and flux functions and combine the results with the flux variable.
-    Fourth: Repeat for second interface and update current volume. 
-
-    @param state  Reference to the working array in SHARED memory holding the dependent variables.
-    @param idx  The indices of the stencil points.
-    @param flagLeft  True if the point is the first finite volume in the tube.
-    @param flagRight  True if the point is the last finite volume in the tube.
-    @return  The updated value at the current spatial point.
-*/
-__device__ __host__ void eulerStep(states *state, int idx, int tstep)
+__device__ __host__ 
+void eulerStep(states *state, int idx, int tstep)
 {
     REALthree tempStateLeft, tempStateRight;
     int itx = (tstep ^ 1);
@@ -347,7 +336,7 @@ __device__ __host__ void eulerStep(states *state, int idx, int tstep)
 __device__ __host__ 
 void stepUpdate(states *state, int idx, int tstep)
 {
-    if (tstep & 1) //Odd 0 for even numbers
+    if (tstep & 1) //Odd - Rslt is 0 for even numbers
     {
         pressureRatio(state, idx, DIVMOD(tstep));
     }

@@ -55,14 +55,20 @@ int main(int argc, char *argv[])
     hwjson >> hwJ;
     hwjson.close();
 
-    std::vector<int> gpuvec = jsonP(hwJ["GPU"], 1);
-    std::vector<int> smGpu(gpuvec.size());
-    cGlob.hasGpu = gpuvec[ranks[1]];
-    std::partial_sum(gpuvec.begin(), gpuvec.end(), smGpu.begin());
-    cGlob.nGpu = smGpu.back();
-    smGpu.insert(smGpu.begin(), 0);
-    std::vector <int> myGPU = jsonP(hwJ["gpuID"], 1);
-    int gpuID = myGPU[ranks[1]];
+    // However you coe by these vectors are somewhat immaterial.  Could do a test on the cluster before running.
+    cGlob.nGpu = hwJ["nGpu"].asInt();
+    std::vector<int> gpuvec = jsonP(hwJ["pGpu"], cGlob.nGpu);
+    std::vector<int> myGPU = jsonP(hwJ["gpuID"], cGlob.nGpu);
+    int gpuID = -1;
+    for (int k=0; k<cGlob.nGpu; k++)
+    {
+        if (ranks[1] == gpuvec[k])
+        {
+            cGlob.hasGpu = true;
+            gpuID = myGPU[k];
+        }
+    }
+    int smGpu = std::count_if(gpuvec.begin(), gpuvec.end(), [](int i){return i<ranks[1] == 1;});
     
     // Equation, grid, affinity data
     std::ifstream injson(argv[2], std::ifstream::in);
@@ -76,7 +82,7 @@ int main(int argc, char *argv[])
         Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
-    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.hasGpu * smGpu[ranks[1]]; 
+    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * smGpu; 
     states **state;
 
     int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;

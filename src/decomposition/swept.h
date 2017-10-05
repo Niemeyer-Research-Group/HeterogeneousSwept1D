@@ -265,8 +265,6 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    
-
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {

@@ -63,7 +63,6 @@ void classicPassRight(states *state, int idxend, int tstep)
 // Classic Discretization wrapper.
 double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> alen, int *tstep)
 {
-    if (!ranks[1]) std::cout << "Classic Decomposition" << std::endl;
     int tmine = *tstep;
 
     double t_eq = 0.0;
@@ -71,6 +70,7 @@ double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> al
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
+        std::cout << "Classic Decomposition GPU" << std::endl;
         const int xc = cGlob.xcpu/2, xcp = xc+1, xcpp = xc+2;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
         const int gpusize =  cGlob.szState * xgpp;
@@ -88,13 +88,16 @@ double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> al
         cudaStreamCreate(&st1);
         cudaStreamCreate(&st2);
         cudaStreamCreate(&st3);
-        cudaStreamCreate(&st4);        
+        cudaStreamCreate(&st4);      
+
+        std::cout << "Classic - streams initialized and memcpied." << std::endl;  
 
         while (t_eq < cGlob.tf)
         {
             classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
             classicStepCPU(state[0], xcp, tmine);
             classicStepCPU(state[2], xcp, tmine);
+            if (tmine<3)  std::cout << "Classic - Complete GPU timestep: " << tmine << std::endl;
 
             cudaError_t error = cudaGetLastError();
             if(error != cudaSuccess)
@@ -109,7 +112,7 @@ double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> al
             cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
             cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); classicPassRight(state[2], xcp, tmine);
             classicPassLeft(state[0], xcp, tmine);
-
+            if (tmine<3)  std::cout << "Classic - Complete GPU Pass: " << tmine << std::endl;
 
             // Increment Counter and timestep
             if (MODULA(tmine)) t_eq += cGlob.dt;
@@ -140,13 +143,16 @@ double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> al
     }
     else
     {
-        int xcp = cGlob.xcpu + 1;
+        if (!ranks[1])  std::cout << "Classic - Init CPU only: " << tmine << std::endl;
 
+        int xcp = cGlob.xcpu + 1;
         while (t_eq < cGlob.tf)
         {
             classicStepCPU(state[0], xcp, tmine);
             if (MODULA(tmine)) t_eq += cGlob.dt;
             tmine++;
+
+            if (!ranks[1] && tmine<3)  std::cout << "Classic - CPU Complete Timestep: " << tmine << std::endl;
 
             classicPassRight(state[0], xcp, tmine);
 

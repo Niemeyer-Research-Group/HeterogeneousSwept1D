@@ -128,6 +128,8 @@ int main(int argc, char *argv[])
     }
 
     // If you have selected scheme I, it will only initialize and output the initial values.
+    if (!ranks[1])  std::cout << "Initial Values Instantiated." << std::endl;
+
     if (scheme.compare("I"))
     {
         int tstep = 1;

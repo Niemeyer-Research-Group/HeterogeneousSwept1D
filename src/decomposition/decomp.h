@@ -133,7 +133,7 @@ void initArgs()
     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.
-    cout << inJ << endl;
+    if (!ranks[1])  cout << "Initialized Arguments" << endl;
 
 }
 

@@ -28,34 +28,26 @@ void classicStepCPU(states *state, int numx, int tstep)
     }
 }
 
-void classicPassLeft(states *state, int idxend, int tstep)
+// Blocks because one is called and then the other so the PASS blocks.
+void classicPass(states *stateL, states *stateR, int idxend, int tstep)
 {   
-    if (cGlob.bCond[0])
-    {
-        MPI_Isend(&state[1], 1, struct_type, ranks[0], TAGS(tstep),
-                MPI_COMM_WORLD, &req[0]);
-        
-        if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: "
-                << tstep << " " << ranks[1] << std::endl;
+    
+    
+    if (cGlob.bCond[0]) MPI_Isend(&stateL[1], 1, struct_type, ranks[0], TAGS(tstep),
+            MPI_COMM_WORLD, &req[0]);
 
-        MPI_Recv(&state[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
-                MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
-    }
-}
-
-void classicPassRight(states *state, int idxend, int tstep)
-{
-    if (cGlob.bCond[1]) 
-    {
-        MPI_Isend(&state[idxend-1], 1, struct_type, ranks[2], TAGS(tstep+100),
-                MPI_COMM_WORLD, &req[1]);
-
-        if (!ranks[1]) std::cout << "we're passing a classic step Right on the cpu: "
-                << tstep << " " << ranks[1] << std::endl;
-
-        MPI_Recv(&state[idxend], 1, struct_type, ranks[2], TAGS(tstep), 
+    if (cGlob.bCond[1]) MPI_Isend(&stateR[idxend-1], 1, struct_type, ranks[2], TAGS(tstep+100),
+            MPI_COMM_WORLD, &req[1]);
+    
+    if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: "
+            << tstep << " " << ranks[1] << std::endl;
+    
+    if (cGlob.bCond[0]) MPI_Recv(&stateR[idxend], 1, struct_type, ranks[2], TAGS(tstep), 
                 MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
-    }
+
+    if (cGlob.bCond[1]) MPI_Recv(&stateL[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
+            MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
+
 }
 
 // We are working with the assumption that the parallelism is too fine to see any benefit.
@@ -110,8 +102,8 @@ double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> al
             cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
             cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
             cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
-            cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); classicPassRight(state[2], xcp, tmine);
-            classicPassLeft(state[0], xcp, tmine);
+            cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); 
+            classicPass(state[0], state[2], xcp, tmine);
             if (tmine<3)  std::cout << "Classic - Complete GPU Pass: " << tmine << std::endl;
 
             // Increment Counter and timestep

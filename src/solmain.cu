@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
     int xalloc = xc + exSpace;
 
     std::string pth = string(argv[3]);
-    std::vector<int> xpts(strt); //
+    std::vector<int> xpts(strt); 
     std::vector<int> alen(xc);
 
     if (cGlob.hasGpu)
@@ -186,9 +186,10 @@ int main(int argc, char *argv[])
             std::cout << n_timesteps << " timesteps" << std::endl;
             std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
-            // Equation, grid, affinity data
+
+            std::string tpath = pth + "/t" + fspec + ext;
             try {
-                std::ifstream tjson(argv[4], std::ifstream::in);
+                std::ifstream tjson(tpath, std::ifstream::in);
                 tjson >> timing;
                 tjson.close();
             }
@@ -199,8 +200,8 @@ int main(int argc, char *argv[])
             std::string gpuAs = std::to_string(cGlob.gpuA);
             std::cout << cGlob.gpuA << std::endl;
 
-            std::string spath = pth + "/t" + fspec + ext;
-            std::ofstream timejson(spath.c_str(), std::ofstream::trunc);
+            
+            std::ofstream timejson(tpath.c_str(), std::ofstream::trunc);
             timing[tpbs][nXs][gpuAs] = per_ts;
             timejson << timing;
             timejson.close();

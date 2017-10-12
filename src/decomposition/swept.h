@@ -233,7 +233,7 @@ void splitDiamondCPU(states *state, int tstep)
     }
 }
 
-static void inline passSwept(states *stateSend, states *stateRecv, int tstep)
+void passSwept(states *stateSend, states *stateRecv, int tstep)
 {
     MPI_Isend(stateSend + offSend[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
             MPI_COMM_WORLD, &req[turn]);

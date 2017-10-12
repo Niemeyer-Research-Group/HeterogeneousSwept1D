@@ -40,7 +40,7 @@ std::vector<int> jsonP(jsons jp, size_t sz)
 }
 
 int main(int argc, char *argv[])
-{   
+{
     makeMPI(argc, argv);
 
     std::string ext = ".json";
@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
         }
     }
     int smGpu = std::count_if(gpuvec.begin(), gpuvec.end(), [](int i){return i<ranks[1] == 1;});
-    
+
     // Equation, grid, affinity data
     std::ifstream injson(argv[2], std::ifstream::in);
     injson >> inJ;
@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
     parseArgs(argc, argv);
     initArgs();
 
-    /*  
+    /*
         Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
@@ -91,44 +91,49 @@ int main(int argc, char *argv[])
     int xalloc = xc + exSpace;
 
     std::string pth = string(argv[3]);
-    std::vector<int> xpts(strt); 
-    std::vector<int> alen(xc);
-
+    std::vector<int> xpts(1,strt); //
+    std::vector<int> alen(1,xc);
+    if(!ranks[1]) std::cout << "Before initial values." << std::endl;
     if (cGlob.hasGpu)
     {
         cudaSetDevice(gpuID);
-        
+
         state = new states* [3];
         cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));
         cudaCheckError(cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault));
         cudaCheckError(cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault));
 
         xpts.push_back(strt + xc);
-        alen.push_back(cGlob.xg);
+        alen.push_back(cGlob.xg + exSpace);
         xpts.push_back(strt + xc + cGlob.xg);
         alen.push_back(xalloc);
 
         cudaCheckError(cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts)));
 
-        if (sizeof(REAL)>6) 
+        if (sizeof(REAL)>6)
         {
             cudaCheckError(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
         }
     }
-    else 
+    else
     {
         state = new states* [1];
-        cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));   
+        cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));
     }
 
     for (int i=0; i<nrows; i++)
     {
-        for (int k=0; k<alen[i] + exSpace; k++)  initialState(inJ, state[i], k, xpts[i]);
-        for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]); 
+	std::cout << ranks[1] << " " << i << " " << alen[i] << " " << nrows << " " << xpts[i] << " " << xalloc << " " << exSpace << " " << cGlob.xg << std::endl;
+        for (int k=0; k<alen[i]; k++)  initialState(inJ, state[i], k, xpts[i]);
+        for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]);
     }
 
     // If you have selected scheme I, it will only initialize and output the initial values.
-    if (!ranks[1])  std::cout << "Initial Values Instantiated." << std::endl;
+    if (!ranks[1])
+    {
+	std::cout << "Initial Values Instantiated." << std::endl;
+    }
+
 
     if (scheme.compare("I"))
     {
@@ -137,7 +142,7 @@ int main(int argc, char *argv[])
 
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = MPI_Wtime();
-        cout << "Made it to Calling the function " << endl;
+        if (!ranks[1]) cout << "Made it to Calling the function " << endl;
 
         if (!scheme.compare("C"))
         {
@@ -163,7 +168,7 @@ int main(int argc, char *argv[])
         for (int i=0; i<nrows; i++)
         {
             for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]);
-        }  
+        }
 
         cudaError_t error = cudaGetLastError();
         if(error != cudaSuccess)
@@ -176,7 +181,6 @@ int main(int argc, char *argv[])
         if (!ranks[1])
         {
             //READ OUT JSONS
-            
             timed *= 1.e6;
 
             double n_timesteps = tfm/cGlob.dt;

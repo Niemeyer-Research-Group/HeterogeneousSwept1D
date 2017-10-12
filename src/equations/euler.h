@@ -31,7 +31,7 @@
 #define REAL            double
 #define REALtwo         double2
 #define REALthree       double3
-#define MPI_R           MPI_DOUBLE    
+#define MPI_R           MPI_DOUBLE
 #define ZERO            0.0
 #define QUARTER         0.25
 #define HALF            0.5
@@ -45,11 +45,10 @@
 // Since anyone would need to write a header and functions file, why not just hardwire this.  
 // If the user's number of steps isn't a power of 2 use the other one.
 
-#define MODULA(x)           x & (NSTEPS-1)  
-// #define MODULA(x)           x % NSTEPS  
+#define MODULA(x)           x & (NSTEPS-1)
+// #define MODULA(x)           x % NSTEPS
 
-#define DIVMOD(x)           (MODULA(x)) >> 1   
-
+#define DIVMOD(x)           (MODULA(x)) >> 1
 /*
 	============================================================
 	DATA STRUCTURE PROTOTYPE
@@ -173,10 +172,6 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.dt_dx = dtx/dxx;
-    std::cout << "You're in Euler!" << std::endl;
-    for(int k=0; k<2; k++) {
-        std::cout << hBounds[k].x << " " << hBounds[k].y << " " << hBounds[k].z << std::endl;
-    }
 }
 
 // One of the main uses of global variables is the fact that you don't need to pass

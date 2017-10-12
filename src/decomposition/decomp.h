@@ -21,7 +21,7 @@ int lastproc, nprocs, ranks[3];
 
 struct globalism {
 // Topology
-    int nGpu, nX;  
+    int nGpu, nX;
     int xg, xcpu;
     bool hasGpu;
     double gpuA;
@@ -34,7 +34,7 @@ struct globalism {
 
 // Iterator
     double tf, freq, dt, dx, lx;
-    bool bCond[2] = {true, true}; 
+    bool bCond[2] = {true, true};
     // Initialize passing both sides.
 };
 
@@ -52,7 +52,7 @@ void makeMPI(int argc, char* argv[])
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
-	ranks[0] = (ranks[1]-1) % nprocs;
+    ranks[0] = ((ranks[1]-1)>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
 }
 
@@ -60,7 +60,6 @@ void makeMPI(int argc, char* argv[])
 // I think this needs a try except for string inputs.
 void parseArgs(int argc, char *argv[])
 {
-    std::cout << argc << std::endl;
     if (argc>4)
     {
         for (int k=4; k<argc; k+=2)
@@ -85,6 +84,9 @@ void initArgs()
     cGlob.gpuA = inJ["gpuA"].asDouble();
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
+    for (int k = 0; k<3; k++) std::cout << ranks[k] << " ";
+    std::cout << std::endl;
+
     if (inJ["nX"].asInt() == 0)
     {
         if (inJ["cBks"].asInt() == 0)
@@ -108,7 +110,7 @@ void initArgs()
         if (cGlob.cBks & 1) cGlob.cBks++;
         cGlob.gBks = cGlob.gpuA*cGlob.cBks;
     }
-    
+
     cGlob.base = cGlob.tpb+2;
     cGlob.tpbp = cGlob.tpb+1;
     cGlob.ht = cGlob.tpb/2;
@@ -124,7 +126,7 @@ void initArgs()
     cGlob.dx = cGlob.lx/((double)cGlob.nX - 2.0); // Spatial step
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
 
-    equationSpecificArgs();
+    equationSpecificArgs(inJ);
 
     // Swept Always Passes!
 

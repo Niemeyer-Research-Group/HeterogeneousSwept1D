@@ -109,7 +109,6 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.Fo = AL*dtx/(dxx*dxx);
-    std::cout << "You're in heat! " << heqConsts.Fo << std::endl;
 }
 
 

@@ -45,6 +45,9 @@ void classicPass(states *stateL, states *stateR, int idxend, int tstep)
 
     if (cGlob.bCond[1]) MPI_Recv(&stateL[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
         MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
+
+    MPI_Request_free(req[0]);
+    MPI_Request_free(req[1]);
 }
 
 // We are working with the assumption that the parallelism is too fine to see any benefit.

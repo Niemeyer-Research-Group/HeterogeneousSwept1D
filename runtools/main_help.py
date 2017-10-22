@@ -68,8 +68,7 @@ def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency,
     return None
 
 #Divisions and threads per block need to be lists (even singletons) at least.
-def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", varfile="tempSol.json ", 
-                timefile="tempTime.json ", eqopt=""):
+def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=""):
 
     # if n[-1] != " ": n += " " for each function input.
 
@@ -78,8 +77,7 @@ def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", varfile="tempSol.json ",
     print("Scheme equation args")
     print(scheme, eqfile, eqopt)
 
-    execut = runnr + "{0} ".format(nproc) + mpiopt + exece + scheme + \
-        eqfile + varfile + timefile + eqopt
+    execut = runnr + "{0} ".format(nproc) + mpiopt + exece + scheme + eqfile + outdir + eqopt
 
     exeStr = shlex.split(execut)
     proc = sp.Popen(exeStr)

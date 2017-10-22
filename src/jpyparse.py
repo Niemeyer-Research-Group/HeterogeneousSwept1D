@@ -1,5 +1,5 @@
 """
-    Parse the json and make some output.
+    Parse the json and make show results of numerical solver.
 """
 import os
 import os.path as op
@@ -31,6 +31,7 @@ def jmerge(pth, prob):
         dic.update(mdb)
         print(dic.keys())
     return dic
+
 bat=False
 
 if bat:

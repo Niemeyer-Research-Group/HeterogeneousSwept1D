@@ -16,6 +16,7 @@ toppath = op.dirname(thispath)
 pypath = op.join(toppath, "runtools")
 binpath = op.join(thispath, "bin")
 resultpath = op.join(thispath, "results")
+rawresultpath = op.join(thispath, "rslts") 
 
 sys.path.append(pypath)
 import result_help as rh
@@ -25,7 +26,8 @@ makr = "nvcc solmain.cu jsoncpp.cpp -o ./bin/euler -gencode arch=compute_35,code
 makr = shlex.split(makr)
 prog = op.join(binpath, "euler")
 
-mpiarg = "--bind-to socket "
+nproc = 8
+mpiarg = "" #"--bind-to socket "
 eqspec = op.join(thispath, "sod.json")
 schemes = ["C ", "S "]
 
@@ -64,6 +66,13 @@ tpb
 for n in nX:
     for g in gpus:
         exargs = "dt 1e-6 gpuA {:.4f} nX {:d}".format(g, n)
-        mh.runMPICUDA(prog, 1, schemes[0], eqspec, mpiopt=mpiarg, eqopt=exargs, timefile="timer.json ")
+        mh.runMPICUDA(prog, nproc, schemes[0], eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=rawresultpath)
 
+rd = os.listdir(rawresultpath)
 
+for f in rd:
+    if f.startswith("t"):
+        tfile=op.join(rawresultpath, f)
+
+tobj = rh.Solved(tfile)
+#Now plot it reasonably.

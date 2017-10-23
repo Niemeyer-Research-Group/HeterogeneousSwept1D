@@ -86,5 +86,3 @@ for s in schemes:
     res.plotframe(resultpath, eqn)
     
     
-
-

@@ -14,6 +14,9 @@
     @param States The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretization
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
+
+typedef std::vector<int> ivec;
+
 __global__ void classicStep(states *state, int ts)
 {
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
@@ -55,7 +58,7 @@ void classicPass(states *stateL, states *stateR, int idxend, int tstep)
 
 // We are working with the assumption that the parallelism is too fine to see any benefit.
 // Classic Discretization wrapper.
-double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> alen, int *tstep)
+double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 {
     int tmine = *tstep;
 

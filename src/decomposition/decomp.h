@@ -12,10 +12,12 @@
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
 */
 
+#ifdef MPIS
 // MPI process properties
 MPI_Datatype struct_type;
 MPI_Request req[2];
 int lastproc, nprocs, ranks[3];
+#endif
 
 struct globalism {
 // Topology
@@ -53,7 +55,6 @@ void makeMPI(int argc, char* argv[])
     ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
 }
-
 
 // I think this needs a try except for string inputs.
 void parseArgs(int argc, char *argv[])
@@ -152,7 +153,7 @@ void solutionOutput(states *outState, double tstamp, int idx, int strt)
     std::string xpts = std::to_string(xpt);
     for (int k=0; k<NVARS; k++)
     {
-        solution[outVars[k]][tsts][xpts] = printout(outState, k);
+        solution[outVars[k]][tsts][xpts] = printout(outState + idx, k);
     }
 }
 

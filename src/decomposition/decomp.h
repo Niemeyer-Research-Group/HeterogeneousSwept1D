@@ -8,8 +8,6 @@
 
 #define TAGS(x) x & 32767
 
-#define CEIL(x, y)  (x + y - 1) / y 
-
 /*
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
 */
@@ -52,7 +50,7 @@ void makeMPI(int argc, char* argv[])
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
-    ranks[0] = ((ranks[1]-1)>0) ? (ranks[1]-1) : (nprocs-1);
+    ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
 }
 
@@ -62,9 +60,11 @@ void parseArgs(int argc, char *argv[])
 {
     if (argc>4)
     {
+        std::string inarg;
         for (int k=4; k<argc; k+=2)
         {
-            inJ[argv[k]] = atof(argv[k+1]);   
+            inarg = argv[k];
+            inJ[inarg] = atof(argv[k+1]);   
         }
     }
 }
@@ -91,25 +91,26 @@ void initArgs()
     {
         if (inJ["cBks"].asInt() == 0)
         {
-            cGlob.gBks = inJ['gBks'].asInt();
+            cGlob.gBks = inJ["gBks"].asInt();
             cGlob.cBks = cGlob.gBks/cGlob.gpuA;
         }
         else 
         {
-            cGlob.cBks = inJ['cBks'].asInt();
+            cGlob.cBks = inJ["cBks"].asInt();
             cGlob.gBks = cGlob.cBks*cGlob.gpuA;
         }
         if (cGlob.cBks<2) cGlob.cBks = 2; // Floor for cpu blocks per proc.
         if (cGlob.cBks & 1) cGlob.cBks++;
-        cGlob.nX = cGlob.tpb * (nprocs * cGlob.cBks + cGlob.nGpu * cGlob.gBks);
     }
     else
     {
         cGlob.nX = inJ["nX"].asInt();
-        cGlob.cBks = cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA));
+        cGlob.cBks = std::round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
         if (cGlob.cBks & 1) cGlob.cBks++;
         cGlob.gBks = cGlob.gpuA*cGlob.cBks;
     }
+    // Need to reset this after figuring out partitions.
+    cGlob.nX = cGlob.tpb * (nprocs * cGlob.cBks + cGlob.nGpu * cGlob.gBks);
 
     cGlob.base = cGlob.tpb+2;
     cGlob.tpbp = cGlob.tpb+1;
@@ -120,10 +121,15 @@ void initArgs()
     cGlob.xcpu = cGlob.cBks * cGlob.tpb;  
     cGlob.xg = cGlob.gBks * cGlob.tpb;  
 
-    inJ["gpuAA"] = (double)cGlob.cBks/(double)cGlob.gBks; // Adjusted gpuA.
+    inJ["gpuAA"] = (double)cGlob.gBks/(double)cGlob.cBks; // Adjusted gpuA.
+    inJ["cBks"] = cGlob.cBks;
+    inJ["gBks"] = cGlob.gBks;
+    inJ["nX"] = cGlob.nX;
+    inJ["xGpu"] = cGlob.xg;
+    inJ["xCpu"] = cGlob.xcpu;
 
-        // Different schemes!
-    cGlob.dx = cGlob.lx/((double)cGlob.nX - 2.0); // Spatial step
+    // Different schemes!
+    cGlob.dx = cGlob.lx/(double)cGlob.nX; // Spatial step
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
 
     equationSpecificArgs(inJ);
@@ -149,8 +155,6 @@ void solutionOutput(states *outState, double tstamp, int idx, int strt)
         solution[outVars[k]][tsts][xpts] = printout(outState, k);
     }
 }
-
-
 
 void endMPI()
 {

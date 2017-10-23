@@ -136,6 +136,6 @@ __device__ __host__
 void stepUpdate(states *heat, int idx, int tstep)
 {
     int otx = MODULA(tstep); //Modula is output place
-    int itx = (itx^1); //Opposite in input place.
+    int itx = (otx^1); //Opposite in input place.
     heat[idx].T[otx] = DIMS.Fo*(heat[idx-1].T[itx] + heat[idx+1].T[itx]) + (1.0-2.0*DIMS.Fo) * heat[idx].T[itx];
 }

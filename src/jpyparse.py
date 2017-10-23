@@ -22,16 +22,6 @@ sys.path.append(pypath)
 import result_help as rh
 import main_help as mh
 
-def jmerge(pth, prob):
-    mys = os.listdir(pth)
-    thesef = [op.join(pth, k) for k in mys if prob in k and k.startswith("s")]
-    dic = dict()
-    for t in thesef:
-        mdb = rh.readj(t)
-        dic.update(mdb)
-        print(dic.keys())
-    return dic
-
 bat=False
 
 if bat:
@@ -43,7 +33,7 @@ else:
 
 # f = op.join(thispath, "solutes.json")
 
-dm = jmerge(rawresultpath, kj)
+dm, lemmesee = rh.jmerge(rawresultpath, kj)
 print(dm.keys())
 meta = {}
 if "meta" in dm.keys():
@@ -53,6 +43,6 @@ jdf = rh.Solved(dm)
 fg, axi = plt.subplots(sp[0], sp[1])
 jdf.metaparse(meta)
 jdf.plotResult(fg, axi)
-jdf.savePlot(fg, resultpath)
+#jdf.savePlot(fg, resultpath)
     
                 

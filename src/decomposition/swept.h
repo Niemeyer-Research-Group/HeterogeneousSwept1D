@@ -235,11 +235,18 @@ void splitDiamondCPU(states *state, int tstep)
 
 void passSwept(states *stateSend, states *stateRecv, int tstep)
 {
+    int rx = turn^1;
     MPI_Isend(stateSend + offSend[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
             MPI_COMM_WORLD, &req[turn]);
 
-    MPI_Recv(stateRecv + offRecv[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
+    std::cout << "Passed by rank: " << ranks[1] << std::endl;
+
+    MPI_Recv(stateRecv + offRecv[turn], cGlob.htp, struct_type, ranks[2*rx], TAGS(tstep),
             MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
+
+    MPI_Request_free(&req[turn]);
+    std::cout << "Received by rank: " << ranks[1] << std::endl;
+
 }
 
 // void applyBC(states *state, int ty, int pt)
@@ -258,6 +265,12 @@ void passSwept(states *stateSend, states *stateRecv, int tstep)
 */
 // Now we need to put the last value in a bucket, and append that to the start of the next array.
 
+void offsets(int xcf)
+{
+    offSend[0] = 1, offSend[1] = xcf; // {left, right}
+    offRecv[0] = xcf+1, offRecv[1] = 0;
+}
+
 double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen, int *tstep)
 {
     if (!ranks[1]) std::cout << "Swept Decomposition" << std::endl;
@@ -268,8 +281,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
-    
-        const int xc = cGlob.xcpu/2, xcp = xc+1, xcpp = xc+2;
+        const int xc = cGlob.xcpu/2;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
         const int cmid = cGlob.cBks/2;
         int ix;
@@ -279,8 +291,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         const size_t passsize =  cGlob.szState * cGlob.htp;
         const size_t smem = cGlob.szState * cGlob.base;
 
-        offSend[0] = 1, offSend[1] = xc; // {left, right}
-        offRecv[0] = xcp, offRecv[1] = 0;
+        offsets(xc);
 
         int gpupts = gpusize/cGlob.szState;
         int passpt = passsize/cGlob.szState;
@@ -326,8 +337,6 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
 
         cout << "After UPTRIANGLE " << endl;
 
-        cudaDeviceSynchronize();
-
         cudaCheckError(cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost));
 
         // ------------ Pass Edges ------------ // Give to 0, take from 2.
@@ -340,7 +349,6 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         cudaCheckError(cudaMemcpy(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost));
         cudaCheckError(cudaMemcpy(dState + xgp, state[2] + offSend[turn], passsize, cudaMemcpyHostToDevice));
         swIncrement();//Increment
-        cudaDeviceSynchronize();
 
         if(error != cudaSuccess)
         {
@@ -366,7 +374,6 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         }
         
         cudaCheckError(cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost));
-        cudaDeviceSynchronize();
         error = cudaGetLastError();
         if(error != cudaSuccess)
         {
@@ -375,7 +382,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         }
 
         // ------------ Pass Edges ------------ //
-
+        cout << "Pass from: " << offRecv[turn] << " to: " << offRecv[turn]+passpt << endl;
         passSwept(state[2], state[0], tmine);
         cudaCheckError(cudaMemcpy(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost));
         cudaCheckError(cudaMemcpy(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice));
@@ -517,12 +524,12 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
     // YES YOU CAN PASS THE SAME POINTER AS TWO DIFFERENT ARGS TO THE FUNCITON.
     else
     {
-        int xcp = cGlob.xcpu + cGlob.htp;
-        
+        offsets(cGlob.xcpu);
         for (int k=0; k<cGlob.cBks; k++)
         { 
             upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
         }
+
         passSwept(state[0], state[0], tmine); // Left first
         swIncrement();
 

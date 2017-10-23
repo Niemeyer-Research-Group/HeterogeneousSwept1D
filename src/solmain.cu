@@ -91,8 +91,8 @@ int main(int argc, char *argv[])
     int xalloc = xc + exSpace;
 
     std::string pth = string(argv[3]);
-    std::vector<int> xpts(1,strt); //
-    std::vector<int> alen(1,xc);
+    std::vector<int> xpts(1, strt); //
+    std::vector<int> alen(1, xc);
     if(!ranks[1]) std::cout << "Before initial values." << std::endl;
     if (cGlob.hasGpu)
     {
@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
         xpts.push_back(strt + xc);
         alen.push_back(cGlob.xg + exSpace);
         xpts.push_back(strt + xc + cGlob.xg);
-        alen.push_back(xalloc);
+        alen.push_back(xc);
 
         cudaCheckError(cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts)));
 
@@ -123,17 +123,13 @@ int main(int argc, char *argv[])
 
     for (int i=0; i<nrows; i++)
     {
-	std::cout << ranks[1] << " " << i << " " << alen[i] << " " << nrows << " " << xpts[i] << " " << xalloc << " " << exSpace << " " << cGlob.xg << std::endl;
+	std::cout << ranks[1] << " " << i << " " << alen[i] << " " << nrows << " " << xpts[i] << " " << " " << exSpace << " " << cGlob.xg << std::endl;
         for (int k=0; k<alen[i]; k++)  initialState(inJ, state[i], k, xpts[i]);
         for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]);
     }
 
     // If you have selected scheme I, it will only initialize and output the initial values.
-    if (!ranks[1])
-    {
-	std::cout << "Initial Values Instantiated." << std::endl;
-    }
-
+    if (!ranks[1])	std::cout << "Initial Values Instantiated." << std::endl;
 
     if (scheme.compare("I"))
     {
@@ -142,7 +138,6 @@ int main(int argc, char *argv[])
 
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = MPI_Wtime();
-        if (!ranks[1]) cout << "Made it to Calling the function " << endl;
 
         if (!scheme.compare("C"))
         {
@@ -167,7 +162,7 @@ int main(int argc, char *argv[])
 
         for (int i=0; i<nrows; i++)
         {
-            for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]);
+            for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], tfm, k, xpts[i]);
         }
 
         cudaError_t error = cudaGetLastError();
@@ -190,8 +185,7 @@ int main(int argc, char *argv[])
             std::cout << n_timesteps << " timesteps" << std::endl;
             std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
-
-            std::string tpath = pth + "/t" + fspec + ext;
+            std::string tpath = pth + "/t" + fspec + scheme + ext;
             try {
                 std::ifstream tjson(tpath, std::ifstream::in);
                 tjson >> timing;

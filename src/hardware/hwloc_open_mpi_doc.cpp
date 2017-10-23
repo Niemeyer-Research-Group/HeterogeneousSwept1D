@@ -7,10 +7,11 @@
  */
 #include <assert.h>
 #include <stdio.h>
+#include <iostream>
 #include <cuda_runtime.h>
 #include <cuda.h>
-#include <mpi/mpi.h>
-#include "hwloc.h"
+#include <mpi.h>
+#include <hwloc.h>
  
 #define ABORT_ON_ERROR(func)                          \
   { CUresult res;                                     \
@@ -55,7 +56,7 @@ int main(int argc, char *argv[])
     const unsigned long flags = HWLOC_TOPOLOGY_FLAG_IO_DEVICES | HWLOC_TOPOLOGY_FLAG_IO_BRIDGES;
     hwloc_cpuset_t newset;
     hwloc_obj_t node, bridge;
-    char pciBusId[16];
+    char pciBusId[256];
     CUdevice dev;
     char devName[256];
  
@@ -68,6 +69,8 @@ int main(int argc, char *argv[])
     /* Now decide which GPU to pick.  This requires hwloc to work properly.
      * We first see which CPU we are bound to, then try and find a GPU nearby.
      */
+
+    std::cout << "Initialized" << std::endl;
     retval = hwloc_topology_init(&topology);
     assert(retval == 0);
     retval = hwloc_topology_set_flags(topology, flags);
@@ -77,24 +80,32 @@ int main(int argc, char *argv[])
     newset = hwloc_bitmap_alloc();
     retval = hwloc_get_last_cpu_location(topology, newset, 0);
     assert(retval == 0);
+
+    std::cout << "Asserted" << std::endl;
  
     /* Get the object that contains the cpuset */
     node = hwloc_get_first_largest_obj_inside_cpuset(topology, newset);
- 
-    /* Climb up from that object until we find the HWLOC_OBJ_NODE */
-    while (node->type != HWLOC_OBJ_NODE) {
-        node = node->parent;
-    }
+
+    std::cout << "First Largest Obj " << node->type << " " << rank << " " << HWLOC_OBJ_NODE << " " << node->parent << std::endl;
+     
+    // /* Climb up from that object until we find the HWLOC_OBJ_NODE */
+    // while (node->type != HWLOC_OBJ_NODE) {
+    //     node = node->parent;
+    // }
+    std::cout << "Some Get" << std::endl;
  
     /* Now look for the HWLOC_OBJ_BRIDGE.  All PCI busses hanging off the
      * node will have one of these */
     bridge = hwloc_get_next_child(topology, node, NULL);
-    while (bridge->type != HWLOC_OBJ_BRIDGE) {
-        bridge = hwloc_get_next_child(topology, node, bridge);
-    }
+    // while (bridge->type != HWLOC_OBJ_BRIDGE) {
+    //     bridge = hwloc_get_next_child(topology, node, bridge);
+    // }
+    std::cout << "Find GPUS " << bridge->type << std::endl;
  
     /* Now find all the GPUs on this NUMA node and put them into an array */
     find_gpus(topology, bridge, NULL);
+
+    std::cout << "Find GPUS" << std::endl;
  
     ABORT_ON_ERROR(cuInit(0));
     /* Now select the first GPU that we find */

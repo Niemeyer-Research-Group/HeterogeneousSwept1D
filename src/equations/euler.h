@@ -109,9 +109,9 @@ typedef Json::Value jsons;
 
 __host__ double indexer(double dx, int i, int x)
 {
-    int pt = i+x;
+    double pt = i+x;
     double dx2 = dx/2.0;
-    return dx*(double)pt - dx2;
+    return dx*pt - dx2;
 }
 
 __host__ REAL density(REALthree subj)
@@ -140,11 +140,14 @@ REAL pressure(REALthree qH)
 __host__ REAL printout(states *state, int i)
 {
     REALthree subj = state->Q[0];
+    REAL ret;
 
-    if (i == 0) return density(subj);
-    if (i == 1) return velocity(subj);
-    if (i == 2) return energy(subj);
-    if (i == 3) return pressure(subj);
+    if (i == 0) ret = density(subj);
+    if (i == 1) ret = velocity(subj);
+    if (i == 2) ret = energy(subj);
+    if (i == 3) ret = pressure(subj);
+
+    return ret;
 }
 
 /*
@@ -201,7 +204,7 @@ __host__ void mpi_type(MPI_Datatype *dtype)
     int n[3] = {1};
     MPI_Aint disp[3] = {0, sizeof(REAL), 2*sizeof(REAL)};
 
-    MPI_Type_struct(3, n, disp, typs, &vtype);
+    MPI_Type_create_struct(3, n, disp, typs, &vtype);
     MPI_Type_commit(&vtype);
 
     typs[0] = vtype;
@@ -209,7 +212,7 @@ __host__ void mpi_type(MPI_Datatype *dtype)
     disp[1] = 3*sizeof(vtype);
     disp[2] = 4*sizeof(REAL);
 
-    MPI_Type_struct(3, n, disp, typs, dtype);
+    MPI_Type_create_struct(3, n, disp, typs, dtype);
     MPI_Type_commit(dtype);
 
     MPI_Type_free(&vtype);

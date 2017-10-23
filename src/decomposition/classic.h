@@ -36,22 +36,24 @@ void classicPass(states *stateL, states *stateR, int idxend, int tstep)
 
     if (cGlob.bCond[1]) MPI_Isend(&stateR[idxend-1], 1, struct_type, ranks[2], TAGS(tstep+100),
         MPI_COMM_WORLD, &req[1]);
-    
-    if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: "
-        << tstep << " " << ranks[1] << std::endl;
-    
-    if (cGlob.bCond[0]) MPI_Recv(&stateR[idxend], 1, struct_type, ranks[2], TAGS(tstep), 
-        MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
 
-    if (cGlob.bCond[1]) MPI_Recv(&stateL[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
-        MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
+    if (cGlob.bCond[1]) 
+    {
+        MPI_Recv(&stateR[idxend], 1, struct_type, ranks[2], TAGS(tstep),MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
+    }
 
-    MPI_Request_free(req[0]);
-    MPI_Request_free(req[1]);
+    if (cGlob.bCond[0]) 
+    {
+        MPI_Recv(&stateL[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
+            MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
+    }
+
+    if (cGlob.bCond[0]) MPI_Request_free(&req[0]);
+    if (cGlob.bCond[1]) MPI_Request_free(&req[1]);
+    
 }
 
 // We are working with the assumption that the parallelism is too fine to see any benefit.
-// Still struggling with the idea of the local vs parameter arrays.
 // Classic Discretization wrapper.
 double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> alen, int *tstep)
 {
@@ -63,10 +65,10 @@ double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> al
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
         std::cout << "Classic Decomposition GPU" << std::endl;
-        const int xc = cGlob.xcpu/2, xcp = xc+1, xcpp = xc+2;
+        const int xc = cGlob.xcpu/2;
+        int xcp = xc+1;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
         const int gpusize =  cGlob.szState * xgpp;
-        const int cpuzise = cGlob.szState * xcpp;
 
         states *dState;
         
@@ -89,7 +91,7 @@ double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> al
             classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
             classicStepCPU(state[0], xcp, tmine);
             classicStepCPU(state[2], xcp, tmine);
-            if (tmine<3)  std::cout << "Classic - Complete GPU timestep: " << tmine << std::endl;
+            if (tmine<3)  std::cout << "Classic - Complete GPU timestep: " << ranks[1] << " " << tmine << std::endl;
 
             cudaError_t error = cudaGetLastError();
             if(error != cudaSuccess)
@@ -104,11 +106,13 @@ double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> al
             cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); 
             classicPass(state[0], state[2], xcp, tmine);
             
-            if (tmine<3)  std::cout << "Classic - Complete GPU Pass: " << tmine << std::endl;
+            if (tmine<3)  std::cout << "Classic - Complete GPU Pass: " << ranks[1] << " " << tmine << std::endl;
 
             // Increment Counter and timestep
             if (MODULA(tmine)) t_eq += cGlob.dt;
             tmine++;
+
+            if (tmine % 1000 == 0) std::cout << t_eq << std::endl;
 
             // OUTPUT
             if (t_eq > twrite)
@@ -141,12 +145,13 @@ double classicWrapper(states **state, std::vector<int> xpts, std::vector<int> al
         while (t_eq < cGlob.tf)
         {
             classicStepCPU(state[0], xcp, tmine);
-            if (MODULA(tmine)) t_eq += cGlob.dt;
-            tmine++;
 
             if (!ranks[1] && tmine<3)  std::cout << "Classic - CPU Complete Timestep: " << tmine << std::endl;
 
             classicPass(state[0], state[0], xcp, tmine);
+
+            if (MODULA(tmine)) t_eq += cGlob.dt;
+            tmine++;
 
             if (t_eq > twrite)
             {

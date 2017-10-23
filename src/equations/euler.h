@@ -190,9 +190,9 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
     if (wh)
     {
         side = (xss > HALF*lx);
-        (inl+idx)->Q[0].x = hBounds[side].x;
-        (inl+idx)->Q[0].y = hBounds[side].y;
-        (inl+idx)->Q[0].z = hBounds[side].z;
+        (inl+idx)->Q[0] = hBounds[side];
+        (inl+idx)->Q[1] = hBounds[side];
+        (inl+idx)->Pr = 0.0;
     }
 }
 

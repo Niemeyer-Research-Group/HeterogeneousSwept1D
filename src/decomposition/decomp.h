@@ -12,12 +12,11 @@
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
 */
 
-#ifdef MPIS
 // MPI process properties
 MPI_Datatype struct_type;
 MPI_Request req[2];
+MPI_Status stat[2];
 int lastproc, nprocs, ranks[3];
-#endif
 
 struct globalism {
 // Topology
@@ -122,7 +121,7 @@ void initArgs()
     cGlob.xcpu = cGlob.cBks * cGlob.tpb;  
     cGlob.xg = cGlob.gBks * cGlob.tpb;  
 
-    inJ["gpuAA"] = (double)cGlob.gBks/(double)cGlob.cBks; // Adjusted gpuA.
+    // inJ["gpuAA"] = (double)cGlob.gBks/(double)cGlob.cBks; // Adjusted gpuA.
     inJ["cBks"] = cGlob.cBks;
     inJ["gBks"] = cGlob.gBks;
     inJ["nX"] = cGlob.nX;
@@ -138,7 +137,7 @@ void initArgs()
     // Swept Always Passes!
 
     // If BCTYPE == "Dirichlet"
-    if (!ranks[1]) cGlob.bCond[0] = false;
+    if (ranks[1] == 0) cGlob.bCond[0] = false;
     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.

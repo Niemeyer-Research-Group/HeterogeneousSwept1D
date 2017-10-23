@@ -91,8 +91,8 @@ int main(int argc, char *argv[])
     int xalloc = xc + exSpace;
 
     std::string pth = string(argv[3]);
-    std::vector<int> xpts(1, strt); //
-    std::vector<int> alen(1, xc);
+    std::vector<int> xpts(1, strt); //Index at which pointer array starts.
+    std::vector<int> alen(1, xc + 1); //Write out | Init args vector
     if(!ranks[1]) std::cout << "Before initial values." << std::endl;
     if (cGlob.hasGpu)
     {
@@ -104,9 +104,9 @@ int main(int argc, char *argv[])
         cudaCheckError(cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault));
 
         xpts.push_back(strt + xc);
-        alen.push_back(cGlob.xg + exSpace);
+        alen.push_back(cGlob.xg + 1);
         xpts.push_back(strt + xc + cGlob.xg);
-        alen.push_back(xc);
+        alen.push_back(xc + 1);
 
         cudaCheckError(cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts)));
 
@@ -123,9 +123,8 @@ int main(int argc, char *argv[])
 
     for (int i=0; i<nrows; i++)
     {
-	std::cout << ranks[1] << " " << i << " " << alen[i] << " " << nrows << " " << xpts[i] << " " << " " << exSpace << " " << cGlob.xg << std::endl;
-        for (int k=0; k<alen[i]; k++)  initialState(inJ, state[i], k, xpts[i]);
-        for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]);
+        for (int k=0; k<=alen[i]; k++)  initialState(inJ, state[i], k, xpts[i]-1);
+        for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]);
     }
 
     // If you have selected scheme I, it will only initialize and output the initial values.
@@ -152,17 +151,14 @@ int main(int argc, char *argv[])
             std::cerr << "Incorrect or no scheme given" << std::endl;
         }
 
-        if (cGlob.hasGpu)
-        {
-            cudaDeviceSynchronize();
-        }
 
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = (MPI_Wtime() - timed);
+        if (cGlob.hasGpu)  cudaDeviceSynchronize();
 
         for (int i=0; i<nrows; i++)
         {
-            for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], tfm, k, xpts[i]);
+            for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], tfm, k, xpts[i]);
         }
 
         cudaError_t error = cudaGetLastError();

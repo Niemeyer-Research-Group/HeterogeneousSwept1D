@@ -38,8 +38,7 @@ def mrgr(dBlob, dCons):
 
 def jmerge(pth, prob):
     mys = os.listdir(pth)
-    thesef = sorted([op.join(pth, k) for k in mys if prob in k and k.startswith("s")])
-    print(thesef)
+    thesef = sorted([op.join(pth, k) for k in mys if prob in k and k.startswith("s") and "_" in k])
     dic = readj(thesef[0])
     mdb = []
     dpth = depth(dic)
@@ -59,15 +58,23 @@ class Solved(object):
             self.jdict = readj(vFile)
         else:
             self.jdict = vFile
+            
+        if "meta" in self.jdict.keys():
+            self.meta = self.jdict.pop("meta")
 
         self.deep = depth(self.jdict)
         self.ddf = dictframes(self.jdict, self.deep)
         self.subpl = len(self.jdict.keys())
 
     def metaparse(self, probspec):
-        self.pr = list(probspec.keys())[0]
-        pdi = probspec[self.pr]
-        self.plotname = self.pr + "_" + str(pdi["nX"])
+        self.pr = list(probspec.keys())
+        if len(self.pr) > 1:
+            self.plotname = "Something" + "_" + str(probspec["nX"])
+        else:
+            pdi = probspec[self.pr[0]]
+            self.plotname = self.pr[0] + "_" + str(pdi["nX"])
+            
+        
         
         # self.vals = np.genfromtxt(dataTuple, skip_header=1)[:,2:]
         # self.varNames = np.genfromtxt(dataTuple, skip_header=1, dtype="string")[:,0]
@@ -76,16 +83,6 @@ class Solved(object):
         # self.plotTitles = np.unique(self.varNames)
         # self.plotname = self.datafilename.split("_")[0]
         # self.subpl = "Euler" in self.plotname            
-
-    def stripInitial(self):
-        stripped = collections.defaultdict(dict)
-        for i, t in enumerate(self.tFinal):
-            if t == 0:
-                continue
-            
-            stripped[self.varNames[i]][t] = self.vals[i,:]
-
-        return stripped
         
     def plotResult(self, f, a):   
         

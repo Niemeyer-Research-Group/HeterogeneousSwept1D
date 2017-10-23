@@ -37,22 +37,18 @@ void classicPass(states *stateL, states *stateR, int idxend, int tstep)
     if (cGlob.bCond[0]) MPI_Isend(&stateL[1], 1, struct_type, ranks[0], TAGS(tstep),
         MPI_COMM_WORLD, &req[0]);
 
-    if (cGlob.bCond[1]) MPI_Isend(&stateR[idxend-1], 1, struct_type, ranks[2], TAGS(tstep+100),
-        MPI_COMM_WORLD, &req[1]);
+    if (cGlob.bCond[1]) MPI_Isend(&stateR[idxend-1], 1, struct_type, ranks[2], TAGS(tstep+100), MPI_COMM_WORLD, &req[1]);
 
     if (cGlob.bCond[1]) 
     {
-        MPI_Recv(&stateR[idxend], 1, struct_type, ranks[2], TAGS(tstep),MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
+        MPI_Irecv(&stateR[idxend], 1, struct_type, ranks[2], TAGS(tstep),MPI_COMM_WORLD, &req[0]);
     }
-
     if (cGlob.bCond[0]) 
     {
-        MPI_Recv(&stateL[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
-            MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
+        MPI_Irecv(&stateL[0], 1, struct_type, ranks[0], TAGS(tstep+100), MPI_COMM_WORLD, &req[1]); 
     }
 
-    if (cGlob.bCond[0]) MPI_Request_free(&req[0]);
-    if (cGlob.bCond[1]) MPI_Request_free(&req[1]);
+    MPI_Waitall(2, req, MPI_STATUSES_IGNORE); 
     
 }
 
@@ -87,35 +83,23 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         cudaStreamCreate(&st3);
         cudaStreamCreate(&st4);      
 
-        std::cout << "Classic - streams initialized and memcpied." << std::endl;  
-
         while (t_eq < cGlob.tf)
         {
             classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
             classicStepCPU(state[0], xcp, tmine);
             classicStepCPU(state[2], xcp, tmine);
-            if (tmine<3)  std::cout << "Classic - Complete GPU timestep: " << ranks[1] << " " << tmine << std::endl;
-
-            cudaError_t error = cudaGetLastError();
-            if(error != cudaSuccess)
-            {
-                // print the CUDA error message and exit
-                printf("CUDA error tstep: %i: msg %s\n", tmine, cudaGetErrorString(error));
-            }
 
             cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
             cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
             cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
             cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); 
+            cudaDeviceSynchronize();
             classicPass(state[0], state[2], xcp, tmine);
             
-            if (tmine<3)  std::cout << "Classic - Complete GPU Pass: " << ranks[1] << " " << tmine << std::endl;
 
             // Increment Counter and timestep
-            if (MODULA(tmine)) t_eq += cGlob.dt;
+            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
             tmine++;
-
-            if (tmine % 1000 == 0) std::cout << t_eq << std::endl;
 
             // OUTPUT
             if (t_eq > twrite)
@@ -124,13 +108,14 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
                 for (int i=0; i<3; i++)
                 {
-                    for (int k=1; k<=alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
+                    for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
                 }  
 
                 twrite += cGlob.freq;
             }
         }       
 
+        if (!(tmine % 20000)) std::cout << tmine << " | " << t_eq << " | " << std::endl;
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
 
         cudaStreamDestroy(st1);
@@ -142,23 +127,18 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     }
     else
     {
-        if (!ranks[1])  std::cout << "Classic - Init CPU only: " << tmine << std::endl;
-
         int xcp = cGlob.xcpu + 1;
         while (t_eq < cGlob.tf)
         {
             classicStepCPU(state[0], xcp, tmine);
-
-            if (!ranks[1] && tmine<3)  std::cout << "Classic - CPU Complete Timestep: " << tmine << std::endl;
-
             classicPass(state[0], state[0], xcp, tmine);
 
-            if (MODULA(tmine)) t_eq += cGlob.dt;
+            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
             tmine++;
 
             if (t_eq > twrite)
             {
-                for (int k=1; k<=cGlob.xcpu; k++)  solutionOutput(state[0], t_eq, k, xpts[0]);
+                for (int k=1; k<alen[0]; k++)  solutionOutput(state[0], t_eq, k, xpts[0]);
                 twrite += cGlob.freq;
             }
         }   

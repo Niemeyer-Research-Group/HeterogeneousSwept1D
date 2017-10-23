@@ -109,6 +109,7 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.Fo = AL*dtx/(dxx*dxx);
+    std::cout << "Fourier " << heqConsts.Fo << std::endl;
 }
 
 
@@ -120,6 +121,7 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
     double dxx = inJs["dx"].asDouble();
     double xss = indexer(dxx, idx, xst);
     (inl+idx)->T[0] = 12.0 * (1.0-xss)*(1.0-xss)*xss*xss; 
+    (inl+idx)->T[1] = (inl+idx)->T[0];
 }
 
 __host__ void mpi_type(MPI_Datatype *dtype)

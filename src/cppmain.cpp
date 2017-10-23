@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <ctime> 
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -186,9 +187,9 @@ double lx; // Length of domain.
     if (wh)
     {
         side = (xss > HALF*lx);
-        (inl+idx)->Q[0].x = hBounds[side].x;
-        (inl+idx)->Q[0].y = hBounds[side].y;
-        (inl+idx)->Q[0].z = hBounds[side].z;
+        (inl+idx)->Q[0] = hBounds[side];
+        (inl+idx)->Q[1] = hBounds[side];
+        (inl+idx)->Pr = 0.0;
     }
 }
 
@@ -196,7 +197,6 @@ double lx; // Length of domain.
     // MARK : Equation procedure
 */
 
-  
 __forceinline__
 REAL pressureRoe(REALthree qH)
 {
@@ -437,9 +437,11 @@ double classicCPP(states *state, int xcp, int *tstep)
     while (t_eq < cGlob.tf)
     {
         classicStepCPU(state, xcp, tmine);
-        if (MODULA(tmine)) t_eq += cGlob.dt;
+        if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
         tmine++;
+	    if (tmine % 20000 == 0) std::cout <<  tmine << " " << t_eq << " | " << cGlob.tf << std::endl;
     }
+    *tstep = tmine;
     return t_eq;
 }
 
@@ -473,15 +475,28 @@ int main(int argc, char *argv[])
     // If you have selected scheme I, it will only initialize and output the initial values.
     int tstep = 1;
     double tfm;
+    clock_t t0, t1;
+    t0 = clock();
 
     tfm = classicCPP(state, cGlob.nX + 1, &tstep);
+
+    t1 = clock();
+
+    double tf = (double)(t1-t0)/(CLOCKS_PER_SEC*1.0e-6);
+    int tst = tstep/NSTEPS;
+
+    std::cout << "Sub - timesteps: " << tstep << " | timestep time: " << tst*cGlob.dt << std::endl; 
+    std::cout << "That took: " << tf/(double)tst << " (us) per timestep" << std::endl; 
 
     for (int k=1; k<nAlloc-1; k++)  solutionOutput(state, tfm, k, 0);
 
     std::string spath = pth + "/s" + fspec + ext;
+    std::cout << spath << std:: endl;
     std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
+    solution["meta"] = inJ;
     soljson << solution;
     soljson.close();
+    std::cout << state[0].Q[0].x << " " << state[0].Q[0].y << " " << state[0].Q[0].z << std::endl;
 
     delete[] state;
     return 0;

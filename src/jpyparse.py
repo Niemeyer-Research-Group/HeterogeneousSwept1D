@@ -10,6 +10,8 @@ import subprocess as sp
 import matplotlib.pyplot as plt
 import shlex
 
+pch = 1
+
 thispath = op.abspath(op.dirname(__file__))
 os.chdir(thispath)
 toppath = op.dirname(thispath)
@@ -20,18 +22,15 @@ rawresultpath = op.join(thispath, "rslts")
 
 sys.path.append(pypath)
 import result_help as rh
-import main_help as mh
 
-bat=False
+prob=["Euler", "Heat", "Const"]
 
-if bat:
-    kj = "Euler"
+if not pch:
     sp = (2, 2)
 else:
-    kj = "Heat"
     sp = (1, 1)
 
-# f = op.join(thispath, "solutes.json")
+kj = prob[pch]
 
 dm, lemmesee = rh.jmerge(rawresultpath, kj)
 print(dm.keys())
@@ -43,6 +42,8 @@ jdf = rh.Solved(dm)
 fg, axi = plt.subplots(sp[0], sp[1])
 jdf.metaparse(meta)
 jdf.plotResult(fg, axi)
-#jdf.savePlot(fg, resultpath)
-    
+jdf.savePlot(fg, resultpath)
+dff = jdf.ddf
+ddfk = list(dff.keys())
+dsam = dff[ddfk[0]]
                 

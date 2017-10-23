@@ -99,7 +99,7 @@ __host__ double indexer(double dx, int i, int s)
 
 __host__ REAL printout(states *state, int i)
 {
-    return state->T[0];
+    return state->u[0];
 }
 
 __host__ void equationSpecificArgs(jsons inJs)
@@ -111,8 +111,8 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
 {
     double dxx = inJs["dx"].asDouble();
     double xcc = inJs["xCpu"].asDouble();
-
     (inl+idx)->u[0] = ((double)idx*2.0)/xcc; 
+    (inl+idx)->u[1] = (inl+idx)->u[0]; 
 }
 
 __host__ void mpi_type(MPI_Datatype *dtype)
@@ -130,5 +130,5 @@ void stepUpdate(states *state, int idx, int tstep)
 {
     int otx = MODULA(tstep); //Modula is output place
     int itx = (otx^1); //Opposite in input place.
-    state[idx].T[otx] = DIMS.n*(state[idx].T[itx])
+    state[idx].u[otx] = DIMS.n*(state[idx].u[itx]);
 }

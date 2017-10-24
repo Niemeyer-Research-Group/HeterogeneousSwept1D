@@ -81,6 +81,7 @@ std::string fspec = "Euler";
 __constant__ eqConsts deqConsts;  //---------------// 
 eqConsts heqConsts; //---------------// 
 REALthree hBounds[2]; // Boundary Conditions
+states bound[2];
 
 /*
 	============================================================
@@ -150,16 +151,21 @@ __host__ REAL printout(states *state, int i)
     return ret;
 }
 
-/*
-dimensions heqConsts; //---------------// 
-REALthree hBound[2]; // Boundary Conditions
-double lx; // Length of domain.
-*/
+__host__ states icond(double xs, double lx)
+{
+    states s;
+    int side = (xs > HALF*lx);
+    s.Q[0] = hBounds[side];
+    s.Q[1] = hBounds[side];
+    s.Pr = 0.0;
+    return s;
+}
 
 __host__ void equationSpecificArgs(jsons inJs)
 {
     heqConsts.gamma = inJs["gamma"].asDouble();
     heqConsts.mgamma = heqConsts.gamma - 1;
+    double lx = inJs["lx"].asDouble();
     REAL rhoL = inJs["rhoL"].asDouble();
     REAL vL = inJs["vL"].asDouble();
     REAL pL = inJs["pL"].asDouble();
@@ -175,6 +181,8 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.dt_dx = dtx/dxx;
+    bound[0] = icond(0.0, lx);
+    bound[1] = icond(lx, lx);
 }
 
 // One of the main uses of global variables is the fact that you don't need to pass
@@ -186,13 +194,9 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
     double xss = indexer(dxx, idx, xst);
     double lx = inJs["lx"].asDouble();
     bool wh = inJs["IC"].asString() == "PARTITION";
-    int side;
     if (wh)
     {
-        side = (xss > HALF*lx);
-        (inl+idx)->Q[0] = hBounds[side];
-        (inl+idx)->Q[1] = hBounds[side];
-        (inl+idx)->Pr = 0.0;
+        inl[idx] = icond(xss, lx);
     }
 }
 

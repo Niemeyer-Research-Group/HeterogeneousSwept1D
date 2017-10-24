@@ -14,6 +14,7 @@
     @param States The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretization
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
+using namespace std;
 
 typedef std::vector<int> ivec;
 
@@ -29,6 +30,7 @@ void classicStepCPU(states *state, int numx, int tstep)
     {
         stepUpdate(state, k, tstep);
     }
+    if (tstep % 1000 == 5) cout << ranks[1] << " " << printout(state, 0) << " " << tstep << " " << printout(state + numx, 0) << endl; 
 }
 
 // Blocks because one is called and then the other so the PASS blocks.
@@ -36,17 +38,24 @@ void classicPass(states *putst, states *getst, int tstep)
 {   
     int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
 
-    MPI_Isend(putst[0], 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
+    MPI_Isend(putst, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
 
-    MPI_Isend(putst[1], 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
+    MPI_Isend(putst + 1, 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
 
-    MPI_Irecv(getst[1], 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &req[0]);
+    MPI_Recv(getst + 1, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    MPI_Irecv(getst[0], 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &req[1]); 
+    MPI_Recv(getst, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    
+    // if (tstep < 10 && ranks[0] < 2) 
+    // {
+    //     cout << "Exit Pass: " << tstep << " rnk: " << ranks[1] << "  p: " << printout(&putst[0], 0) << " " << printout(&putst[1], 0) << endl;
+    //     cout << "g: " << printout(&getst[0], 0) << " " << printout(&getst[1], 0) << endl;
+    // }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    MPI_Request_free(&req[0]);
-    MPI_Request_free(&req[1]);    
+    MPI_Wait(&req[0], MPI_STATUS_IGNORE);
+    MPI_Wait(&req[1], MPI_STATUS_IGNORE);
+    // MPI_Request_free(&req[0]);
+    // MPI_Request_free(&req[1]);    
 }
 
 /*   
@@ -60,7 +69,6 @@ MPI_Irecv(stateR + idxend, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &req[0]
 MPI_Irecv(stateL, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &req[1]); 
 */
 
-// We are working with the assumption that the parallelism is too fine to see any benefit.
 // Classic Discretization wrapper.
 double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 {
@@ -69,10 +77,11 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
     states putst[2], getst[2];
+    int t0, t1;
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
-        std::cout << "Classic Decomposition GPU" << std::endl;
+        cout << "Classic Decomposition GPU" << endl;
         const int xc = cGlob.xcpu/2;
         int xcp = xc+1;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
@@ -92,6 +101,8 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         cudaStreamCreate(&st3);
         cudaStreamCreate(&st4);      
 
+        cout << "Entering While" << endl;
+
         while (t_eq < cGlob.tf)
         {
             classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
@@ -102,12 +113,23 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
             cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
             cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); 
-            cudaDeviceSynchronize();
-            putst[0] = state[0][1], putst[1] = state[1][xc]; 
 
-            classicPass(&puts, &gets, tmine);
-            if (cGlob.bCond[0]) state[0][0] = gets[0]; 
-            if (cGlob.bCond[1]) state[2][xcp] = gets[1];
+            putst[0] = state[0][1];
+            putst[1] = state[2][xc]; 
+            classicPass(&putst[0], &getst[0], tmine);
+
+            if (cGlob.bCond[0]) state[0][0] = getst[0]; 
+            if (cGlob.bCond[1]) state[2][xcp] = getst[1];
+
+            // if (tmine > 50 && tmine < 53)
+            // {
+            //     for (int i=0; i<3; i++)
+            //     {
+            //         cout << "ARRAY " << i << endl;
+            //         for (int k=0; k<=xcp; k++) cout << " " << printout(state[i] + k, 0);
+            //         cout << endl;
+            //     }
+            // }
 
             // Increment Counter and timestep
             if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
@@ -120,8 +142,8 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
                 for (int i=0; i<3; i++)
                 {
-                    for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
-                }  
+                    for (int k=0; k<=alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
+                }          
 
                 twrite += cGlob.freq;
             }
@@ -140,16 +162,24 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     else
     {
         int xcp = cGlob.xcpu + 1;
+        int nomar;
         while (t_eq < cGlob.tf)
         {
             classicStepCPU(state[0], xcp, tmine);
 
-            putst[0] = state[0][1], putst[1] = state[1][xc]; 
-            classicPass(&puts, &gets, tmine);
-            if (cGlob.bCond[0]) state[0][0] = gets[0]; 
-            if (cGlob.bCond[1]) state[2][xcp] = gets[1];
+            putst[0] = state[0][1];
+            putst[1] = state[0][cGlob.xcpu]; 
+            classicPass(&putst[0], &getst[0], tmine);
+            if (cGlob.bCond[0]) state[0][0] = getst[0]; 
+            if (cGlob.bCond[1]) state[0][xcp] = getst[1];
 
-            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
+            // cout << "CPU ARRAY " << ranks[1]  << " | " << tmine << "\n" << "p: " << printout(&putst[0], 0) << " | " << printout(&putst[1], 1) << "\ng: " << printout(&getst[0], 0) << " | " << printout(&getst[1], 1) << endl;
+
+            if (!(tmine % NSTEPS)) 
+            {
+                t_eq += cGlob.dt;
+                // cin >> nomar;
+            }
             tmine++;
 
             if (t_eq > twrite)

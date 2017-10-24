@@ -81,6 +81,7 @@ std::string outVars[NVARS] = {"Temperature"}; //---------------//
 
 __constant__ eqConsts deqConsts;  //---------------// 
 eqConsts heqConsts; //---------------// 
+states bound[2];
 
 /*
 	============================================================
@@ -101,7 +102,15 @@ __host__ double indexer(double dx, int i, int s)
 
 __host__ REAL printout(states *state, int i)
 {
-    return state->T[0];
+    return state->T[1];
+}
+// 6.0 * sin(5.0 * M_PI * xs)
+__host__ states icond(double xs)
+{
+    states s;
+    s.T[0] = 12.0*rsqrt(xs+0.1) - xs*xs;
+    s.T[1] = s.T[0];
+    return s;
 }
 
 __host__ void equationSpecificArgs(jsons inJs)
@@ -109,9 +118,11 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.Fo = AL*dtx/(dxx*dxx);
-    std::cout << "Fourier " << heqConsts.Fo << std::endl;
+    if (heqConsts.Fo>.5) std::cout << "Fourier too high: " << heqConsts.Fo << std::endl;
+    double lxx = inJs["lx"].asDouble();
+    bound[0] = icond(0.0);
+    bound[1] = icond(lxx);
 }
-
 
 // One of the main uses of global variables is the fact that you don't need to pass
 // anything so you don't need variable args.
@@ -120,8 +131,7 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
 {
     double dxx = inJs["dx"].asDouble();
     double xss = indexer(dxx, idx, xst);
-    (inl+idx)->T[0] = 6.0 * sin(5.0 * M_PI * xss); 
-    (inl+idx)->T[1] = (inl+idx)->T[0];
+    inl[idx] = icond(xss); 
 }
 
 __host__ void mpi_type(MPI_Datatype *dtype)
@@ -139,5 +149,7 @@ void stepUpdate(states *heat, int idx, int tstep)
 {
     int otx = tstep % NSTEPS; //Modula is output place
     int itx = (otx^1); //Opposite in input place.
+    
     heat[idx].T[otx] = DIMS.Fo*(heat[idx-1].T[itx] + heat[idx+1].T[itx]) + (1.0-2.0*DIMS.Fo) * heat[idx].T[itx];
+    // if (abs(heat[idx].T[itx]) < 0.1) printf("tstep: %.i | loc: %.i | includes: %.2f, %.2f, %.2f \n", tstep, idx, heat[idx-1].T[itx], heat[idx].T[itx], heat[idx+1].T[itx]);
 }

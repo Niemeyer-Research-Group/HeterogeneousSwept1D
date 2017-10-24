@@ -5,6 +5,7 @@
 ---------------------------
 */
 
+// SET HBOUNDS!
 
 using namespace std;
 
@@ -17,6 +18,7 @@ using namespace std;
 //     cnt++;
 //     turn = cnt & 1;
 // }
+typedef std::vector<int> ivec;
 
 __global__ void upTriangle(states *state, int tstep)
 {
@@ -200,10 +202,10 @@ void wholeDiamondCPU(states *state, int tstep)
 void splitDiamondCPU(states *state, int tstep)
 {
     int tnow=tstep;
-    state ssLeft[3]; 
-    ssLeft[2] = {heqConsts[0]}; 
-    state ssRight[3]; 
-    ssRight[0] = {heqConsts[1]}; 
+    states ssLeft[3]; 
+    ssLeft[2] = bound[0]; 
+    states ssRight[3]; 
+    ssRight[0] = bound[1]; 
     for (int k=cGlob.ht; k>0; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
@@ -212,13 +214,13 @@ void splitDiamondCPU(states *state, int tstep)
             {
                 ssLeft[0] = state[n-1], ssLeft[1] = state[n];
                 stepUpdate(ssLeft, n, tnow);
-                state[n] = ssLeft
+                state[n] = ssLeft[1];
             }
             else if (n == cGlob.htp)
             {
                 ssRight[1] = state[n], ssRight[2] = state[n+1];
                 stepUpdate(ssRight, n, tnow);
-                state[n] = ssRight
+                state[n] = ssRight[1];
             }
             else
             {
@@ -236,13 +238,13 @@ void splitDiamondCPU(states *state, int tstep)
             {
                 ssLeft[0] = state[n-1], ssLeft[1] = state[n];
                 stepUpdate(ssLeft, n, tnow);
-                state[n] = ssLeft
+                state[n] = ssLeft[1];
             }
             else if (n == cGlob.htp)
             {
                 ssRight[1] = state[n], ssRight[2] = state[n+1];
                 stepUpdate(ssRight, n, tnow);
-                state[n] = ssRight
+                state[n] = ssRight[1];
             }
             else
             {
@@ -256,12 +258,14 @@ void splitDiamondCPU(states *state, int tstep)
 void passSwept(states *putst, states *getst, int tstep, int turn)
 {
     int rx = turn^1;
+    cout << "Entered Pass " << ranks[1] << endl;
     MPI_Isend(putst, cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
             MPI_COMM_WORLD, &req[0]);
 
     MPI_Recv(getst, cGlob.htp, struct_type, ranks[2*rx], TAGS(tstep),
             MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
 
+    cout << "Exit Pass " << ranks[1] << endl;
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Request_free(&req[0]);
 }
@@ -283,7 +287,7 @@ void passSwept(states *putst, states *getst, int tstep, int turn)
 // Now we need to put the last value in a bucket, and append that to the start of the next array.
 
 
-double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen, int *tstep)
+double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 {
     if (!ranks[1]) std::cout << "Swept Decomposition" << std::endl;
     int tmine = *tstep;
@@ -306,7 +310,6 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         const size_t smem = cGlob.szState * cGlob.base;
 
         int gpupts = gpusize/cGlob.szState;
-        int passpt = passsize/cGlob.szState;
 
         cudaStream_t st1, st2;
         cudaStreamCreate(&st1);
@@ -345,7 +348,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         cudaCheckError(cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice));
 
         for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
-        passSwept(&putst, &getst, tmine, 0);
+        passSwept(&putst[0], &getst[0], tmine, 0);
         for (int k=0; k<cGlob.htp; k++) getst[k] = state[2][k + xcp];
 
         //swIncrement();//Increment
@@ -376,15 +379,15 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         cudaCheckError(cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice));
 
         for (int k=0; k<cGlob.htp; k++) putst[k] = state[2][k+xc];
-        passSwept(&putst, &getst, tmine, 1);
+        passSwept(&putst[0], &getst[0], tmine, 1);
         for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
 
         // Increment Counter and timestep
         tmine += cGlob.ht;
         t_eq = cGlob.dt * (tmine/NSTEPS);
 
-        if (!ranks[1]) state[0][0] = heqConsts[0];
-        if (ranks[1]==lastproc) state[2][xcp] = heqConsts[1];
+        if (!ranks[1]) state[0][0] = bound[0];
+        if (ranks[1]==lastproc) state[2][xcp] = bound[1];
 
         while(t_eq < cGlob.tf)
         {
@@ -405,7 +408,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
             cudaCheckError(cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice));
     
             for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
-            passSwept(&putst, &getst, tmine, 0);
+            passSwept(&putst[0], &getst[0], tmine, 0);
             for (int k=0; k<cGlob.htp; k++) getst[k] = state[2][k + xcp];
 
             // Increment Counter and timestep
@@ -437,15 +440,15 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
             cudaCheckError(cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice));
 
             for (int k=0; k<cGlob.htp; k++) putst[k] = state[2][k+xc];
-            passSwept(&putst, &getst, tmine, 1);
+            passSwept(&putst[0], &getst[0], tmine, 1);
             for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
 
             // Increment Counter and timestep
             tmine += cGlob.ht;
             t_eq = cGlob.dt * (tmine/NSTEPS);
 
-            if (!ranks[1]) state[0][0] = heqConsts[0];
-            if (ranks[1]==lastproc) state[2][xcp] = heqConsts[1];
+            if (!ranks[1]) state[0][0] = bound[0];
+            if (ranks[1]==lastproc) state[2][xcp] = bound[1];
 
             if (t_eq > twrite)
             {
@@ -480,7 +483,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                 cudaCheckError(cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice));
         
                 for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
-                passSwept(&putst, &getst, tmine, 0);
+                passSwept(&putst[0], &getst[0], tmine, 0);
                 for (int k=0; k<cGlob.htp; k++) getst[k] = state[2][k + xcp];
 
                 // ------------ Step Forward ------------ //
@@ -508,15 +511,15 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                 cudaCheckError(cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice));
 
                 for (int k=0; k<cGlob.htp; k++) putst[k] = state[2][k+xc];
-                passSwept(&putst, &getst, tmine+1, 1);
+                passSwept(&putst[0], &getst[0], tmine+1, 1);
                 for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
 
                 // Increment Counter and timestep
                 tmine += cGlob.ht;
                 t_eq = cGlob.dt * (tmine/NSTEPS);
                 twrite += cGlob.freq;
-                if (!ranks[1]) state[0][0] = heqConsts[0];
-                if (ranks[1]==lastproc) state[2][xcp] = heqConsts[1];
+                if (!ranks[1]) state[0][0] = bound[0];
+                if (ranks[1]==lastproc) state[2][xcp] = bound[1];
             }
             if (tmine % 1000 == 0) std::cout << t_eq << " | " << cGlob.tf << std::endl;
         }
@@ -549,8 +552,8 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         }
 
         for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
-        passSwept(&putst, &getst, tmine, 0);
-        for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k + xcp];
+        passSwept(&putst[0], &getst[0], tmine, 0);
+        for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k+xcp];
 
         //Split
         for (int k=0; k<(cGlob.cBks); k++)
@@ -568,13 +571,13 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         // -- BACK TO FRONT -- //
 
         for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+xc];
-        passSwept(&putst, &getst, tmine+1, 1);
+        passSwept(&putst[0], &getst[0], tmine+1, 1);
         for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
 
         tmine += cGlob.ht;
         t_eq = cGlob.dt * (tmine/NSTEPS);
-        if (!ranks[1]) state[0][0] = heqConsts[0];
-        if (ranks[1]==lastproc) state[0][xcp] = heqConsts[1];
+        if (!ranks[1]) state[0][0] = bound[0];
+        if (ranks[1]==lastproc) state[0][xcp] = bound[1];
 
         while (t_eq < cGlob.tf)
         {
@@ -584,7 +587,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
             }
 
             for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
-            passSwept(&putst, &getst, tmine, 0);
+            passSwept(&putst[0], &getst[0], tmine, 0);
             for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k + xcp];
 
             tmine += cGlob.ht;
@@ -603,13 +606,13 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
             }
 
             for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+xc];
-            passSwept(&putst, &getst, tmine, 1);
+            passSwept(&putst[0], &getst[0], tmine, 1);
             for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
     
             tmine += cGlob.ht;
             t_eq = cGlob.dt * (tmine/NSTEPS);
-            if (!ranks[1]) state[0][0] = heqConsts[0];
-            if (ranks[1]==lastproc) state[0][xcp] = heqConsts[1];
+            if (!ranks[1]) state[0][0] = bound[0];
+            if (ranks[1]==lastproc) state[0][xcp] = bound[1];
 
             if (t_eq > twrite)
             {
@@ -630,7 +633,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                 }
 
                 for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
-                passSwept(&putst, &getst, tmine, 0);
+                passSwept(&putst[0], &getst[0], tmine, 0);
                 for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k + xcp];
 
                 // ------------ Step Forward ------------ //
@@ -649,15 +652,15 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                 }
 
                 for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+xc];
-                passSwept(&putst, &getst, tmine+1, 1);
+                passSwept(&putst[0], &getst[0], tmine+1, 1);
                 for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
         
                 // Increment Counter and timestep
                 tmine += cGlob.tpb;
                 t_eq = cGlob.dt * (tmine/NSTEPS);
                 twrite += cGlob.freq;
-                if (!ranks[1]) state[0][0] = heqConsts[0];
-                if (ranks[1]==lastproc) state[0][xcp] = heqConsts[1];
+                if (!ranks[1]) state[0][0] = bound[0];
+                if (ranks[1]==lastproc) state[0][xcp] = bound[1];
             }
         }
         for (int k=0; k<cGlob.cBks; k++)

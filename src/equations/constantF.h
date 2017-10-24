@@ -79,7 +79,7 @@ std::string outVars[NVARS] = {"NonDim"}; //---------------//
 
 __constant__ eqConsts deqConsts;  //---------------// 
 eqConsts heqConsts; //---------------// 
-
+states bound[2];
 /*
 	============================================================
 	EQUATION SPECIFIC FUNCTIONS
@@ -102,6 +102,14 @@ __host__ REAL printout(states *state, int i)
     return state->u[0];
 }
 
+__host__ states icond(double ix, double xs)
+{
+    states s;
+    s.u[0] = (ix*2.0)/xs;
+    s.u[1] = s.u[0];
+    return s;
+}
+
 __host__ void equationSpecificArgs(jsons inJs)
 {
     heqConsts.n = 1.0;
@@ -111,8 +119,7 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
 {
     double dxx = inJs["dx"].asDouble();
     double xcc = inJs["xCpu"].asDouble();
-    (inl+idx)->u[0] = ((double)idx*2.0)/xcc; 
-    (inl+idx)->u[1] = (inl+idx)->u[0]; 
+    inl[idx] = icond(idx, xcc);
 }
 
 __host__ void mpi_type(MPI_Datatype *dtype)

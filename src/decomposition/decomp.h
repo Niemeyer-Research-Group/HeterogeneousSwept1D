@@ -84,8 +84,8 @@ void initArgs()
     cGlob.gpuA = inJ["gpuA"].asDouble();
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
-    for (int k = 0; k<3; k++) std::cout << ranks[k] << " ";
-    std::cout << std::endl;
+    // for (int k = 0; k<3; k++) std::cout << ranks[k] << " ";
+    // std::cout << std::endl;
 
     if (inJ["nX"].asInt() == 0)
     {

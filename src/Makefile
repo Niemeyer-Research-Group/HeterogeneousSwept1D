@@ -1,5 +1,5 @@
 
-NATLIB := -lm -std=c++11 -gencode arch=compute_35,code=sm_35 -L$(LD_LIBRARY_PATH) -restrict -O3
+NATLIB := -lm -std=c++11 -gencode arch=compute_35,code=sm_35 -L$(LD_LIBRARY_PATH) -restrict -O3 -w
 CPREQ := solmain.cu utilities/jsoncpp.cpp
 
 default: ./bin/heat ./bin/euler ./bin/cons

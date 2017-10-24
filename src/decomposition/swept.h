@@ -5,30 +5,18 @@
 ---------------------------
 */
 
-/**
-    This file uses vector types to hold the dependent variables so fundamental operations on those types are defined as macros to accommodate different data types.  Also, keeping types consistent for common constants (0, 1, 2, etc) used in computation has an appreciable positive effect on performance.
-*/
-
-/**
-    Builds an upright triangle using the swept rule.
-
-    Upright triangle using the swept rule.  This function is called first using the initial conditions or after results are read out using downTriange.  In the latter case, it takes the result of down triangle as IC.
-
-    @param initial Initial condition.
-    @param tstep The timestep we're starting with.
-*/
 
 using namespace std;
 
-int offSend[2];
-int offRecv[2];
-int cnt, turn;
+// int offSend[2];
+// int offRecv[2];
+// int cnt, turn;
 
-void swIncrement()
-{
-    cnt++;
-    turn = cnt & 1;
-}
+// void swIncrement()
+// {
+//     cnt++;
+//     turn = cnt & 1;
+// }
 
 __global__ void upTriangle(states *state, int tstep)
 {
@@ -160,12 +148,14 @@ wholeDiamond(states *state, int tstep, int offset)
 
 void upTriangleCPU(states *state, int tstep)
 {
+    int tnow=tstep;
     for (int k=2; k<cGlob.htp; k++)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
-            stepUpdate(state, n, tstep + (k-1));
+            stepUpdate(state, n, tnow);
         }
+    tnow++;
     }
 }
 
@@ -205,14 +195,32 @@ void wholeDiamondCPU(states *state, int tstep)
     }
 }
 
+
+
 void splitDiamondCPU(states *state, int tstep)
 {
     int tnow=tstep;
+    state ssLeft[3]; 
+    ssLeft[2] = {heqConsts[0]}; 
+    state ssRight[3]; 
+    ssRight[0] = {heqConsts[1]}; 
     for (int k=cGlob.ht; k>0; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
-            if (n < cGlob.ht || n > cGlob.htp)
+            if (n == cGlob.ht)
+            {
+                ssLeft[0] = state[n-1], ssLeft[1] = state[n];
+                stepUpdate(ssLeft, n, tnow);
+                state[n] = ssLeft
+            }
+            else if (n == cGlob.htp)
+            {
+                ssRight[1] = state[n], ssRight[2] = state[n+1];
+                stepUpdate(ssRight, n, tnow);
+                state[n] = ssRight
+            }
+            else
             {
                 stepUpdate(state, n, tnow);
             }
@@ -224,7 +232,19 @@ void splitDiamondCPU(states *state, int tstep)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
-            if (n < cGlob.ht || n > cGlob.htp)
+            if (n == cGlob.ht)
+            {
+                ssLeft[0] = state[n-1], ssLeft[1] = state[n];
+                stepUpdate(ssLeft, n, tnow);
+                state[n] = ssLeft
+            }
+            else if (n == cGlob.htp)
+            {
+                ssRight[1] = state[n], ssRight[2] = state[n+1];
+                stepUpdate(ssRight, n, tnow);
+                state[n] = ssRight
+            }
+            else
             {
                 stepUpdate(state, n, tnow);
             }
@@ -233,7 +253,7 @@ void splitDiamondCPU(states *state, int tstep)
     }
 }
 
-void passSwept(states *stateSend, states *stateRecv, int tstep)
+void passSwept(states *putst, states *getst, int tstep, int turn)
 {
     int rx = turn^1;
     MPI_Isend(putst, cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
@@ -262,11 +282,6 @@ void passSwept(states *stateSend, states *stateRecv, int tstep)
 */
 // Now we need to put the last value in a bucket, and append that to the start of the next array.
 
-void offsets(int xcf)
-{
-    offSend[0] = 1, offSend[1] = xcf; // {left, right}
-    offRecv[0] = xcf+1, offRecv[1] = 0;
-}
 
 double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen, int *tstep)
 {
@@ -276,11 +291,11 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    states putst[cGlob.ht], getst[cGlob.ht];
+    states putst[cGlob.htp], getst[cGlob.htp];
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
-        const int xc = cGlob.xcpu/2;
+        const int xc = cGlob.xcpu/2, xcp=xc+1;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
         const int cmid = cGlob.cBks/2;
         int ix;
@@ -289,8 +304,6 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         const size_t ptsize = cGlob.szState * xgpp;
         const size_t passsize =  cGlob.szState * cGlob.htp;
         const size_t smem = cGlob.szState * cGlob.base;
-
-        offsets(xc);
 
         int gpupts = gpusize/cGlob.szState;
         int passpt = passsize/cGlob.szState;
@@ -325,49 +338,53 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
 
         cout << "After UPTRIANGLE " << endl;
 
-        // ------------ Pass Edges ------------ // Give to 0, take from 2.
-        // I'm doing it backward but it's the only way that really makes sense in this context.
-        // Before I really abstracted this process away.  But here I have to deal with it.
-        //If you pass left first, you need to start at ht rather than 0.  That's the problem.
+        // ------------ Pass Edges ------------ // 
+        // -- FRONT TO BACK -- //
 
-        cout << "Pass from: " << offRecv[turn] << " to: " << offRecv[turn]+passpt << endl;
-        passSwept(state[0], state[2], tmine);
-        cudaCheckError(cudaMemcpy(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost));
-        cudaCheckError(cudaMemcpy(dState + xgp, state[2] + offSend[turn], passsize, cudaMemcpyHostToDevice));
-        swIncrement();//Increment
+        cudaCheckError(cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost));
+        cudaCheckError(cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice));
+
+        for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
+        passSwept(&putst, &getst, tmine, 0);
+        for (int k=0; k<cGlob.htp; k++) getst[k] = state[2][k + xcp];
+
+        //swIncrement();//Increment
 
         // ------------ Step Forward ------------ //
         // ------------ SPLIT ------------ //
 
         wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
-        if (tmine % 1000 == 0) std::cout << t_eq << " | " << cGlob.tf << std::endl;
-
         for (int k=0; k<(cGlob.cBks); k++)
         {
             ix = 2*(k/cmid);
-            if ((ranks[1] == lastproc) && (k ==bkL))
+            if ((ranks[1] == lastproc) && (k == bkL))
             {
                 splitDiamondCPU(state[ix] + cGlob.ht + k*cGlob.tpb, tmine);
+                cout << "Yes Split Diamond occurred " << ranks[1] << " " << k << endl;
             }
             else
             {
                 wholeDiamondCPU(state[ix] + cGlob.ht + k*cGlob.tpb, tmine);
             }
-        }
-        
-        cudaCheckError(cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost));
+        }      
 
         // ------------ Pass Edges ------------ //
-        cout << "Pass from: " << offRecv[turn] << " to: " << offRecv[turn]+passpt << endl;
-        passSwept(state[2], state[0], tmine+1);
-        cudaCheckError(cudaMemcpy(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost));
-        cudaCheckError(cudaMemcpy(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice));
-        swIncrement();
+        // -- BACK TO FRONT -- //
+
+        cudaCheckError(cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost));
+        cudaCheckError(cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice));
+
+        for (int k=0; k<cGlob.htp; k++) putst[k] = state[2][k+xc];
+        passSwept(&putst, &getst, tmine, 1);
+        for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
 
         // Increment Counter and timestep
         tmine += cGlob.ht;
-        t_eq += cGlob.dt * (tmine/NSTEPS);
+        t_eq = cGlob.dt * (tmine/NSTEPS);
+
+        if (!ranks[1]) state[0][0] = heqConsts[0];
+        if (ranks[1]==lastproc) state[2][xcp] = heqConsts[1];
 
         while(t_eq < cGlob.tf)
         {
@@ -384,14 +401,16 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
             
             // ------------ Pass Edges ------------ //
             
-            passSwept(state[0], state[2], tmine);
-            cudaMemcpyAsync(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost, st1);
-            cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
-            swIncrement();//Increment
+            cudaCheckError(cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost));
+            cudaCheckError(cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice));
+    
+            for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
+            passSwept(&putst, &getst, tmine, 0);
+            for (int k=0; k<cGlob.htp; k++) getst[k] = state[2][k + xcp];
 
             // Increment Counter and timestep
             tmine += cGlob.ht;
-            t_eq += cGlob.dt * (tmine/NSTEPS);
+            t_eq = cGlob.dt * (tmine/NSTEPS);
 
             // ------------ Step Forward ------------ //
             // ------------ SPLIT ------------ //
@@ -412,15 +431,21 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
             }
 
             // ------------ Pass Edges ------------ //
-            
-            passSwept(state[2], state[0], tmine);
-            cudaMemcpyAsync(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost, st1);
-            cudaMemcpyAsync(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
-            swIncrement();
+            // -- BACK TO FRONT -- //
+
+            cudaCheckError(cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost));
+            cudaCheckError(cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice));
+
+            for (int k=0; k<cGlob.htp; k++) putst[k] = state[2][k+xc];
+            passSwept(&putst, &getst, tmine, 1);
+            for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
 
             // Increment Counter and timestep
             tmine += cGlob.ht;
-            t_eq += cGlob.dt * (tmine/NSTEPS);
+            t_eq = cGlob.dt * (tmine/NSTEPS);
+
+            if (!ranks[1]) state[0][0] = heqConsts[0];
+            if (ranks[1]==lastproc) state[2][xcp] = heqConsts[1];
 
             if (t_eq > twrite)
             {
@@ -434,7 +459,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                 
                 // Increment Counter and timestep
                 tmine += cGlob.ht;
-                t_eq += cGlob.dt * (tmine/NSTEPS);
+                t_eq = cGlob.dt * (tmine/NSTEPS);
 
                 cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
                                 
@@ -451,10 +476,12 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                     upTriangleCPU(state[ix] + k*cGlob.tpb, tmine);
                 }
 
-                passSwept(state[0], state[2], tmine);
-                cudaMemcpyAsync(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost, st1);
-                cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
-                swIncrement();//Increment
+                cudaCheckError(cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost));
+                cudaCheckError(cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice));
+        
+                for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
+                passSwept(&putst, &getst, tmine, 0);
+                for (int k=0; k<cGlob.htp; k++) getst[k] = state[2][k + xcp];
 
                 // ------------ Step Forward ------------ //
                 // ------------ SPLIT ------------ //
@@ -475,37 +502,60 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                 }
 
                 // ------------ Pass Edges ------------ //
-                
-                passSwept(state[2], state[0], tmine+1);
-                cudaMemcpyAsync(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost, st1);
-                cudaMemcpyAsync(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
-                swIncrement();
+                // -- BACK TO FRONT -- //
+
+                cudaCheckError(cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost));
+                cudaCheckError(cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice));
+
+                for (int k=0; k<cGlob.htp; k++) putst[k] = state[2][k+xc];
+                passSwept(&putst, &getst, tmine+1, 1);
+                for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
 
                 // Increment Counter and timestep
                 tmine += cGlob.ht;
-                t_eq += cGlob.dt * (tmine/NSTEPS);
+                t_eq = cGlob.dt * (tmine/NSTEPS);
                 twrite += cGlob.freq;
+                if (!ranks[1]) state[0][0] = heqConsts[0];
+                if (ranks[1]==lastproc) state[2][xcp] = heqConsts[1];
             }
+            if (tmine % 1000 == 0) std::cout << t_eq << " | " << cGlob.tf << std::endl;
         }
+
+        downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
+        
+        for (int k=0; k<cGlob.cBks; k++)
+        {
+            ix = 2*(k/cmid);
+            downTriangleCPU(state[ix] + k*cGlob.tpb, tmine);
+        }
+        
+        // Increment Counter and timestep
+        tmine += cGlob.ht;
+        t_eq = cGlob.dt * (tmine/NSTEPS);
+
+        cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
+
         cudaFree(dState);
         cudaStreamDestroy(st1);
         cudaStreamDestroy(st2);
     }
-    // YES YOU CAN PASS THE SAME POINTER AS TWO DIFFERENT ARGS TO THE FUNCITON.
+
     else
     {
-        offsets(cGlob.xcpu);
+        const int xc = cGlob.xcpu, xcp = xc+1;
         for (int k=0; k<cGlob.cBks; k++)
         { 
             upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
         }
 
-        passSwept(state[0], state[0], tmine); // Left first
-        swIncrement();
+        for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
+        passSwept(&putst, &getst, tmine, 0);
+        for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k + xcp];
 
+        //Split
         for (int k=0; k<(cGlob.cBks); k++)
         {
-            if ((ranks[1] == lastproc) && (k ==bkL))
+            if ((ranks[1] == lastproc) && (k == bkL))
             {
                 splitDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
             }
@@ -515,10 +565,16 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
             }
         }
 
-        passSwept(state[0], state[0], tmine+1); 
-        swIncrement();
+        // -- BACK TO FRONT -- //
+
+        for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+xc];
+        passSwept(&putst, &getst, tmine+1, 1);
+        for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
+
         tmine += cGlob.ht;
-        t_eq += cGlob.dt * (tmine/NSTEPS);
+        t_eq = cGlob.dt * (tmine/NSTEPS);
+        if (!ranks[1]) state[0][0] = heqConsts[0];
+        if (ranks[1]==lastproc) state[0][xcp] = heqConsts[1];
 
         while (t_eq < cGlob.tf)
         {
@@ -527,10 +583,12 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                 wholeDiamondCPU(state[0] + k*cGlob.tpb, tmine);
             }
 
-            passSwept(state[0], state[0], tmine); 
-            swIncrement();
+            for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
+            passSwept(&putst, &getst, tmine, 0);
+            for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k + xcp];
+
             tmine += cGlob.ht;
-            t_eq += cGlob.dt * (tmine/NSTEPS);
+            t_eq = cGlob.dt * (tmine/NSTEPS);
 
             for (int k=0; k<(cGlob.cBks); k++)
             {
@@ -544,10 +602,14 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                 }
             }
 
-            passSwept(state[0], state[0], tmine); 
-            swIncrement();
+            for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+xc];
+            passSwept(&putst, &getst, tmine, 1);
+            for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
+    
             tmine += cGlob.ht;
-            t_eq += cGlob.dt * (tmine/NSTEPS);
+            t_eq = cGlob.dt * (tmine/NSTEPS);
+            if (!ranks[1]) state[0][0] = heqConsts[0];
+            if (ranks[1]==lastproc) state[0][xcp] = heqConsts[1];
 
             if (t_eq > twrite)
             {
@@ -558,7 +620,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
 
                 // Increment Counter and timestep
                 tmine += cGlob.tpb;
-                t_eq += cGlob.dt * (tmine/NSTEPS);
+                t_eq = cGlob.dt * (tmine/NSTEPS);
 
                 for (int k=1; k<alen[0]; k++)  solutionOutput(state[0], t_eq, k, xpts[0]);
 
@@ -567,8 +629,9 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                     upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
                 }
 
-                passSwept(state[0], state[0], tmine);
-                swIncrement();//Increment
+                for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+1];
+                passSwept(&putst, &getst, tmine, 0);
+                for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k + xcp];
 
                 // ------------ Step Forward ------------ //
                 // ------------ SPLIT ------------ //
@@ -585,14 +648,21 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                     }
                 }
 
-                passSwept(state[0], state[0], tmine+1);
-                swIncrement();//Increment
-
+                for (int k=0; k<cGlob.htp; k++) putst[k] = state[0][k+xc];
+                passSwept(&putst, &getst, tmine+1, 1);
+                for (int k=0; k<cGlob.htp; k++) getst[k] = state[0][k];
+        
                 // Increment Counter and timestep
                 tmine += cGlob.tpb;
-                t_eq += cGlob.dt * (tmine/NSTEPS);
+                t_eq = cGlob.dt * (tmine/NSTEPS);
                 twrite += cGlob.freq;
+                if (!ranks[1]) state[0][0] = heqConsts[0];
+                if (ranks[1]==lastproc) state[0][xcp] = heqConsts[1];
             }
+        }
+        for (int k=0; k<cGlob.cBks; k++)
+        {
+            downTriangleCPU(state[0] + k*cGlob.tpb, tmine);
         }
     }
     *tstep = tmine;

@@ -125,9 +125,9 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
                 twrite += cGlob.freq;
             }
+            if (!(tmine % 20000)) std::cout << tmine << " | " << t_eq << " | " << std::endl;
         }       
 
-        if (!(tmine % 20000)) std::cout << tmine << " | " << t_eq << " | " << std::endl;
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
 
         cudaStreamDestroy(st1);

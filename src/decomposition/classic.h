@@ -32,25 +32,33 @@ void classicStepCPU(states *state, int numx, int tstep)
 }
 
 // Blocks because one is called and then the other so the PASS blocks.
-void classicPass(states *stateL, states *stateR, int idxend, int tstep)
+void classicPass(states *putst, states *getst, int tstep)
 {   
-    if (cGlob.bCond[0]) MPI_Isend(&stateL[1], 1, struct_type, ranks[0], TAGS(tstep),
-        MPI_COMM_WORLD, &req[0]);
+    int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
 
-    if (cGlob.bCond[1]) MPI_Isend(&stateR[idxend-1], 1, struct_type, ranks[2], TAGS(tstep+100), MPI_COMM_WORLD, &req[1]);
+    MPI_Isend(putst[0], 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
 
-    if (cGlob.bCond[1]) 
-    {
-        MPI_Irecv(&stateR[idxend], 1, struct_type, ranks[2], TAGS(tstep),MPI_COMM_WORLD, &req[0]);
-    }
-    if (cGlob.bCond[0]) 
-    {
-        MPI_Irecv(&stateL[0], 1, struct_type, ranks[0], TAGS(tstep+100), MPI_COMM_WORLD, &req[1]); 
-    }
+    MPI_Isend(putst[1], 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
 
-    MPI_Waitall(2, req, MPI_STATUSES_IGNORE); 
-    
+    MPI_Irecv(getst[1], 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &req[0]);
+
+    MPI_Irecv(getst[0], 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &req[1]); 
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Request_free(&req[0]);
+    MPI_Request_free(&req[1]);    
 }
+
+/*   
+if (tstep < 5) std::cout << "Start: " << ranks[1] << " " << tstep << " " << stateL[0].T[0] << " " << stateR[idxend].T[0] << std::endl; 
+
+if (tstep < 5) std::cout << "End: " << ranks[1] << " " << tstep << " " << stateL[0].T[0]  << " " << stateR[idxend].T[0]  << std::endl;
+/*
+MPI_Isend(stateL + 1, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
+MPI_Isend(stateR + (idxend-1), 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
+MPI_Irecv(stateR + idxend, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &req[0]);
+MPI_Irecv(stateL, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &req[1]); 
+*/
 
 // We are working with the assumption that the parallelism is too fine to see any benefit.
 // Classic Discretization wrapper.
@@ -60,6 +68,7 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
+    states putst[2], getst[2];
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
@@ -94,8 +103,11 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
             cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); 
             cudaDeviceSynchronize();
-            classicPass(state[0], state[2], xcp, tmine);
-            
+            putst[0] = state[0][1], putst[1] = state[1][xc]; 
+
+            classicPass(&puts, &gets, tmine);
+            if (cGlob.bCond[0]) state[0][0] = gets[0]; 
+            if (cGlob.bCond[1]) state[2][xcp] = gets[1];
 
             // Increment Counter and timestep
             if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
@@ -131,7 +143,11 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         while (t_eq < cGlob.tf)
         {
             classicStepCPU(state[0], xcp, tmine);
-            classicPass(state[0], state[0], xcp, tmine);
+
+            putst[0] = state[0][1], putst[1] = state[1][xc]; 
+            classicPass(&puts, &gets, tmine);
+            if (cGlob.bCond[0]) state[0][0] = gets[0]; 
+            if (cGlob.bCond[1]) state[2][xcp] = gets[1];
 
             if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
             tmine++;

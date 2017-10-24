@@ -120,7 +120,7 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
 {
     double dxx = inJs["dx"].asDouble();
     double xss = indexer(dxx, idx, xst);
-    (inl+idx)->T[0] = 12.0 * (1.0-xss)*(1.0-xss)*xss*xss; 
+    (inl+idx)->T[0] = 6.0 * sin(5.0 * M_PI * xss); 
     (inl+idx)->T[1] = (inl+idx)->T[0];
 }
 
@@ -137,7 +137,7 @@ __host__ void mpi_type(MPI_Datatype *dtype)
 __device__ __host__ 
 void stepUpdate(states *heat, int idx, int tstep)
 {
-    int otx = MODULA(tstep); //Modula is output place
+    int otx = tstep % NSTEPS; //Modula is output place
     int itx = (otx^1); //Opposite in input place.
     heat[idx].T[otx] = DIMS.Fo*(heat[idx-1].T[itx] + heat[idx+1].T[itx]) + (1.0-2.0*DIMS.Fo) * heat[idx].T[itx];
 }

@@ -10,7 +10,7 @@ import subprocess as sp
 import matplotlib.pyplot as plt
 import shlex
 
-pch = 1
+pch = 0
 
 thispath = op.abspath(op.dirname(__file__))
 os.chdir(thispath)
@@ -46,4 +46,5 @@ jdf.savePlot(fg, resultpath)
 dff = jdf.ddf
 ddfk = list(dff.keys())
 dsam = dff[ddfk[0]]
+dsk = dsam.columns.values.tolist()
                 

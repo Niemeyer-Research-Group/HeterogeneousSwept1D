@@ -236,14 +236,14 @@ void splitDiamondCPU(states *state, int tstep)
 void passSwept(states *stateSend, states *stateRecv, int tstep)
 {
     int rx = turn^1;
-    MPI_Isend(stateSend + offSend[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
-            MPI_COMM_WORLD, &req[turn]);
+    MPI_Isend(putst, cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
+            MPI_COMM_WORLD, &req[0]);
 
-    MPI_Recv(stateRecv + offRecv[turn], cGlob.htp, struct_type, ranks[2*rx], TAGS(tstep),
+    MPI_Recv(getst, cGlob.htp, struct_type, ranks[2*rx], TAGS(tstep),
             MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
 
-    MPI_Request_free(&req[turn]);
-
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Request_free(&req[0]);
 }
 
 // void applyBC(states *state, int ty, int pt)
@@ -276,6 +276,7 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
+    states putst[cGlob.ht], getst[cGlob.ht];
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
@@ -308,13 +309,8 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
 
         cudaCheckError(cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice));
 
-        cudaError_t error = cudaGetLastError();
-        if(error != cudaSuccess)
-        {
-            printf("CUDA error MEMCPY: %s\n", cudaGetErrorString(error));
-        }
-        /* -- DOWN MUST FOLLOW A SPLIT AND UP CANNOT BE IN WHILE LOOP SO DO UP AND FIRST SPLIT OUTSIDE OF LOOP 
-            THEN LOOP CAN BE WITH WHOLE - DIAMOND - CHECK DOWN.
+        /* 
+        -- DOWN MUST FOLLOW A SPLIT AND UP CANNOT BE IN WHILE LOOP SO DO UP AND FIRST SPLIT OUTSIDE OF LOOP THEN LOOP CAN BE WITH WHOLE - DIAMOND - CHECK DOWN.
         */
         // ------------ Step Forward ------------ //
         // ------------ UP ------------ //
@@ -340,11 +336,6 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         cudaCheckError(cudaMemcpy(dState + xgp, state[2] + offSend[turn], passsize, cudaMemcpyHostToDevice));
         swIncrement();//Increment
 
-        if(error != cudaSuccess)
-        {
-            printf("CUDA error UPPASS: %s\n", cudaGetErrorString(error));
-        }
-
         // ------------ Step Forward ------------ //
         // ------------ SPLIT ------------ //
 
@@ -366,12 +357,6 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
         }
         
         cudaCheckError(cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost));
-        error = cudaGetLastError();
-        if(error != cudaSuccess)
-        {
-            // print the CUDA error message and exit
-            printf("CUDA error SPLIT: %s\n", cudaGetErrorString(error));
-        }
 
         // ------------ Pass Edges ------------ //
         cout << "Pass from: " << offRecv[turn] << " to: " << offRecv[turn]+passpt << endl;
@@ -397,13 +382,6 @@ double sweptWrapper(states **state, std::vector<int> xpts, std::vector<int> alen
                 wholeDiamondCPU(state[ix] + k*cGlob.tpb, tmine);
             }
             
-            error = cudaGetLastError();
-            if(error != cudaSuccess)
-            {
-                // print the CUDA error message and exit
-                printf("CUDA error WHOLE: %s\n", cudaGetErrorString(error));
-                exit(-1);
-            }
             // ------------ Pass Edges ------------ //
             
             passSwept(state[0], state[2], tmine);

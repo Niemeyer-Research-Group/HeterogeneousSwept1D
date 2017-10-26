@@ -41,6 +41,7 @@
 
 #define NSTEPS              2
 #define NVARS               1
+#define NSTATES             2 // How many numbers in the struct.
 
 // Since anyone would need to write a header and functions file, why not just hardwire this.  
 // If the user's number of steps isn't a power of 2 use the other one.
@@ -61,7 +62,7 @@ struct eqConsts {
     REAL Fo;
 };
 
-#define AL 8.0e-5
+#define AL 8.0e-6
 
 //---------------// 
 struct states{
@@ -82,6 +83,7 @@ std::string outVars[NVARS] = {"Temperature"}; //---------------//
 __constant__ eqConsts deqConsts;  //---------------// 
 eqConsts heqConsts; //---------------// 
 states bound[2];
+int stPass, numPass; // Number of Passing states, total numbers in passing states.
 
 /*
 	============================================================
@@ -104,11 +106,37 @@ __host__ REAL printout(states *state, int i)
 {
     return state->T[1];
 }
+
+
+// Make the struct an array.
+__host__ inline void unstructify(states *putSt, REAL *putReal)
+{
+    int gap;
+    for (int k=0; k<stPass; k++)
+    {
+        gap = k*NSTATES;
+        putReal[gap] = putSt[k].T[0];
+        putReal[gap+1] = putSt[k].T[1];
+    }
+}
+
+// Make the struct an array a struct.
+__host__ inline void restructify(states *getSt, REAL *getReal)
+{
+    int gap;                \
+    for (int k=0; k<stPass; k++)
+    {
+        gap = k*NSTATES;
+        getSt[k].T[0] = getReal[gap];
+        getSt[k].T[1]= getReal[gap+1];
+    }
+}
+// 12.0*rsqrt(xs+0.1) - xs*xs;
 // 6.0 * sin(5.0 * M_PI * xs)
 __host__ states icond(double xs)
 {
     states s;
-    s.T[0] = 12.0*rsqrt(xs+0.1) - xs*xs;
+    s.T[0] = 6.0 * sin(5.0 * M_PI * xs);
     s.T[1] = s.T[0];
     return s;
 }
@@ -118,7 +146,12 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.Fo = AL*dtx/(dxx*dxx);
-    if (heqConsts.Fo>.5) std::cout << "Fourier too high: " << heqConsts.Fo << std::endl;
+    std::cout << heqConsts.Fo << std::endl;
+    if (heqConsts.Fo>.5) 
+    {
+        std::cout << "Fourier too high: " << heqConsts.Fo << std::endl;
+        std::cin >> stPass;
+    }
     double lxx = inJs["lx"].asDouble();
     bound[0] = icond(0.0);
     bound[1] = icond(lxx);

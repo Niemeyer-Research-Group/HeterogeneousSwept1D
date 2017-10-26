@@ -41,7 +41,7 @@
 
 #define NSTEPS              2
 #define NVARS               1
-
+#define NSTATES             2 // How many numbers in the struct.
 // Since anyone would need to write a header and functions file, why not just hardwire this.  
 // If the user's number of steps isn't a power of 2 use the other one.
 
@@ -80,6 +80,7 @@ std::string outVars[NVARS] = {"NonDim"}; //---------------//
 __constant__ eqConsts deqConsts;  //---------------// 
 eqConsts heqConsts; //---------------// 
 states bound[2];
+int stPass, numPass; // Number of Passing states, total numbers in passing states.
 /*
 	============================================================
 	EQUATION SPECIFIC FUNCTIONS
@@ -101,6 +102,30 @@ __host__ REAL printout(states *state, int i)
 {
     return state->u[0];
 }
+
+__host__ inline void unstructify(states *putSt, REAL *putReal)
+{
+    int gap;
+    for (int k=0; k<numPass; k+=NSTATES)
+    {
+        gap = k*NSTATES;
+        putReal[gap] = putSt[k].u[0];
+        putReal[gap+1] = putSt[k].u[1];
+    }
+}
+
+// Make the struct an array a struct.
+__host__ inline void restructify(states *getSt, REAL *getReal)
+{
+    int gap;
+    for (int k=0; k<numPass; k+=NSTATES)
+    {
+        gap = k*NSTATES;
+        getSt[k].u[0] = getReal[gap];
+        getSt[k].u[1]= getReal[gap+1];
+    }
+}
+
 
 __host__ states icond(double ix, double xs)
 {

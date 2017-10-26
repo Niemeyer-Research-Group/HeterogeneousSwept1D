@@ -30,44 +30,58 @@ void classicStepCPU(states *state, int numx, int tstep)
     {
         stepUpdate(state, k, tstep);
     }
-    if (tstep % 1000 == 5) cout << ranks[1] << " " << printout(state, 0) << " " << tstep << " " << printout(state + numx, 0) << endl; 
+    // if (tstep % 5000 == 5) cout << numx << " " << ranks[1] << " " << printout(state, 0) << " " << printout(state+1, 0) << " " << tstep << " " << printout(state+numx-1, 0) << " " << printout(state + numx, 0) << endl; 
 }
+
+// void classicDPass(double *putSt, double *getSt, int tstep)
+// {   
+//     int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
+//     int rnk;
+
+//     MPI_Isend(putSt, 1, MPI_DOUBLE, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
+
+//     MPI_Isend(putSt + 1, 1, MPI_DOUBLE, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
+
+//     MPI_Irecv(getSt + 1, 1, MPI_DOUBLE, ranks[2], t0, MPI_COMM_WORLD, &req[0]);
+
+//     MPI_Irecv(getSt, 1, MPI_DOUBLE, ranks[0], t1, MPI_COMM_WORLD, &req[1]);
+
+//     MPI_Barrier(MPI_COMM_WORLD);
+//     // // MPI_Request_free(&req[0]);
+//     // // MPI_Request_free(&req[1]); 
+
+//     MPI_Wait(&req[0], &stat[0]);
+//     MPI_Wait(&req[1], &stat[1]);
+//     MPI_Get_count(&stat[0], MPI_DOUBLE, &t0);
+//     MPI_Get_count(&stat[1], MPI_DOUBLE, &t1);
+//     if (tstep < 10) 
+//     {
+//         cout << "Exit Pass: " << tstep << " rnk: " << ranks[1] << "  p: " << putSt[0] << " " << putSt[1] << "\ng: " << getSt[0] << " " << getSt[1] << endl;
+//         cout << "Exit Status: " << tstep << " rnk: " << ranks[1] << "  0: " << t0 << " 1: " << t1 << endl;
+//     }    
+// }
 
 // Blocks because one is called and then the other so the PASS blocks.
-void classicPass(states *putst, states *getst, int tstep)
+void passClassic(REAL *puti, REAL *geti, int tstep)
 {   
     int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
+    int rnk;
 
-    MPI_Isend(putst, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
+    MPI_Barrier(MPI_COMM_WORLD);
 
-    MPI_Isend(putst + 1, 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
+    MPI_Isend(puti, NSTATES, MPI_R, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
 
-    MPI_Recv(getst + 1, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Isend(puti + NSTATES, NSTATES, MPI_R, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
 
-    MPI_Recv(getst, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    
-    // if (tstep < 10 && ranks[0] < 2) 
-    // {
-    //     cout << "Exit Pass: " << tstep << " rnk: " << ranks[1] << "  p: " << printout(&putst[0], 0) << " " << printout(&putst[1], 0) << endl;
-    //     cout << "g: " << printout(&getst[0], 0) << " " << printout(&getst[1], 0) << endl;
-    // }
+    MPI_Recv(geti + NSTATES, NSTATES, MPI_R, ranks[2], t0, MPI_COMM_WORLD, &stat[0]);
 
-    MPI_Wait(&req[0], MPI_STATUS_IGNORE);
-    MPI_Wait(&req[1], MPI_STATUS_IGNORE);
-    // MPI_Request_free(&req[0]);
-    // MPI_Request_free(&req[1]);    
+    MPI_Recv(geti, NSTATES, MPI_R, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Wait(&req[0], &stat[0]);
+    MPI_Wait(&req[1], &stat[1]);
 }
 
-/*   
-if (tstep < 5) std::cout << "Start: " << ranks[1] << " " << tstep << " " << stateL[0].T[0] << " " << stateR[idxend].T[0] << std::endl; 
-
-if (tstep < 5) std::cout << "End: " << ranks[1] << " " << tstep << " " << stateL[0].T[0]  << " " << stateR[idxend].T[0]  << std::endl;
-/*
-MPI_Isend(stateL + 1, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
-MPI_Isend(stateR + (idxend-1), 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
-MPI_Irecv(stateR + idxend, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &req[0]);
-MPI_Irecv(stateL, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &req[1]); 
-*/
 
 // Classic Discretization wrapper.
 double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
@@ -76,9 +90,17 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    states putst[2], getst[2];
-    int t0, t1;
+    // Must be declared global in equation specific header.
+    stPass = 2; 
+    numPass = NSTATES * stPass;
 
+    states putSt[stPass];
+    states getSt[stPass];
+    REAL putRe[numPass];
+    REAL getRe[numPass];
+ 
+    int t0, t1;
+    int nomar;
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
         cout << "Classic Decomposition GPU" << endl;
@@ -101,7 +123,7 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         cudaStreamCreate(&st3);
         cudaStreamCreate(&st4);      
 
-        cout << "Entering While" << endl;
+        cout << "Entering Loop" << endl;
 
         while (t_eq < cGlob.tf)
         {
@@ -114,12 +136,13 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
             cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); 
 
-            putst[0] = state[0][1];
-            putst[1] = state[2][xc]; 
-            classicPass(&putst[0], &getst[0], tmine);
-
-            if (cGlob.bCond[0]) state[0][0] = getst[0]; 
-            if (cGlob.bCond[1]) state[2][xcp] = getst[1];
+            putSt[0] = state[0][1];
+            putSt[1] = state[2][xc]; 
+            unstructify(&putSt[0], &putRe[0]);
+            passClassic(&putRe[0], &getRe[0], tmine);
+            restructify(&getSt[0], &getRe[0]);
+            if (cGlob.bCond[0]) state[0][0] = getSt[0]; 
+            if (cGlob.bCond[1]) state[2][xcp] = getSt[1];
 
             // if (tmine > 50 && tmine < 53)
             // {
@@ -147,7 +170,7 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
                 twrite += cGlob.freq;
             }
-            if (!(tmine % 20000)) std::cout << tmine << " | " << t_eq << " | " << std::endl;
+            if (!(tmine % 200000)) std::cout << tmine << " | " << t_eq << " | " << std::endl;
         }       
 
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
@@ -162,23 +185,23 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     else
     {
         int xcp = cGlob.xcpu + 1;
-        int nomar;
         while (t_eq < cGlob.tf)
         {
             classicStepCPU(state[0], xcp, tmine);
 
-            putst[0] = state[0][1];
-            putst[1] = state[0][cGlob.xcpu]; 
-            classicPass(&putst[0], &getst[0], tmine);
-            if (cGlob.bCond[0]) state[0][0] = getst[0]; 
-            if (cGlob.bCond[1]) state[0][xcp] = getst[1];
+            putSt[0] = state[0][1];
+            putSt[1] = state[0][cGlob.xcpu]; 
+            unstructify(&putSt[0], &putRe[0]);
+            passClassic(&putRe[0], &getRe[0], tmine);
+            restructify(&getSt[0], &getRe[0]);
+            if (cGlob.bCond[0]) state[0][0] = getSt[0]; 
+            if (cGlob.bCond[1]) state[0][xcp] = getSt[1];
 
-            // cout << "CPU ARRAY " << ranks[1]  << " | " << tmine << "\n" << "p: " << printout(&putst[0], 0) << " | " << printout(&putst[1], 1) << "\ng: " << printout(&getst[0], 0) << " | " << printout(&getst[1], 1) << endl;
+            // cout << "CPU ARRAY " << ranks[1]  << " | " << tmine << "\n" << "p: " << printout(&putSt[0], 0) << " | " << printout(&putSt[1], 1) << "\ng: " << printout(&getSt[0], 0) << " | " << printout(&getSt[1], 1) << endl;
 
             if (!(tmine % NSTEPS)) 
             {
                 t_eq += cGlob.dt;
-                // cin >> nomar;
             }
             tmine++;
 

@@ -73,11 +73,10 @@ def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=
 
     runnr = "mpirun -np "
     print("---------------------")
-    print("Scheme equation args")
-    print(scheme, eqfile, eqopt)
 
     execut = runnr + "{0} ".format(nproc) + mpiopt + exece + scheme + eqfile + outdir + eqopt
 
+    print(execut)
     exeStr = shlex.split(execut)
     proc = sp.Popen(exeStr)
     sp.Popen.wait(proc)

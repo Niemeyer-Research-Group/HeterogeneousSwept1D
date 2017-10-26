@@ -10,7 +10,7 @@ import subprocess as sp
 import matplotlib.pyplot as plt
 import shlex
 
-pch = 1
+pch = 0
 
 thispath = op.abspath(op.dirname(__file__))
 os.chdir(thispath)

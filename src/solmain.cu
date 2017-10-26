@@ -192,7 +192,6 @@ int main(int argc, char *argv[])
             std::string tpbs = std::to_string(cGlob.tpb);
             std::string nXs = std::to_string(cGlob.nX);
             std::string gpuAs = std::to_string(cGlob.gpuA);
-            std::cout << cGlob.gpuA << std::endl;
 
             
             std::ofstream timejson(tpath.c_str(), std::ofstream::trunc);

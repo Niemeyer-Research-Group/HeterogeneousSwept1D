@@ -16,7 +16,8 @@ toppath = op.dirname(thispath)
 pypath = op.join(toppath, "runtools")
 binpath = op.join(thispath, "bin")
 resultpath = op.join(thispath, "results")
-rawresultpath = op.join(thispath, "rslts") 
+rawresultpath = op.join(thispath, "rslts")
+testpath = op.join(thispath, "tests")
 
 sys.path.append(pypath)
 
@@ -24,15 +25,15 @@ from main_help import *
 import result_help as rh
 import timing_help as th
 
-eq = "euler"
+eq = "heat"
 
 #makr = "nvcc solmain.cu jsoncpp.cpp -o ./bin/euler -gencode arch=compute_35,code=sm_35 -O3 -restrict -std=c++11 -I/usr/include/mpi -lmpi -Xcompiler -fopenmp -lm -w --ptxas-options=-v"
 #makr = shlex.split(makr)
 prog = op.join(binpath, eq)
 
 nproc = 8
-mpiarg = "" #"--bind-to socket "
-eqspec = op.join(thispath, "sod.json")
+mpiarg = "" #"--bind-to socket
+eqspec = op.join(testpath, "heatTest.json")
 schemes = ["C ", "S "]
 schD = {schemes[0]: "Classic", schemes[1]: "Swept"}
 
@@ -66,18 +67,21 @@ gpus = [k/2.0 for k in range(1, 11)] #GPU Affinity
 prog += " "
 eqspec += " "
 nX = [2**k for k in range(11,21,2)] #Num spatial pts (Grid Size)
-#tpb 
+tpb = [2**k for k in range(6,10)]
 
-for s in schemes:
-    for n in nX:
-        for g in gpus:
-            exargs = "dt 1e-6 gpuA {:.4f} nX {:d}".format(g, n)
-            runMPICUDA(prog, nproc, s, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=rawresultpath)
+for s in schemes[1:]:
+    for t in tpb:
+        for n in nX:
+            xl = int(n/10000) + 1
+            for g in gpus:
+                exargs =  " freq 200 dt 0.0001 gpuA {:.4f} nX {:d} tpb {:d} lx {:d}".format(g, n, t, xl)
+                runMPICUDA(prog, nproc, s, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=rawresultpath)
 
     rd = os.listdir(rawresultpath)
+    rd = [k for k in rd if k.startswith('t')] # t for timing
     
     for f in rd:
-        if f.startswith("t") and s in f:
+        if s in f:
             tfile = op.join(rawresultpath, f)
             break
     

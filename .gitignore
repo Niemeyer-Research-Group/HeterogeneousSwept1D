@@ -8,9 +8,12 @@
 *.dat
 *.cmake
 *.pyc
+*.asv
 bin/
 cubin/
 /misc/
 .vscode/
 tempSol.json
-/rslts/
+src/rslts/*.json
+main.pdf
+*~*

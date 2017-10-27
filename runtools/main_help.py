@@ -12,32 +12,31 @@ import palettable.colorbrewer as pal
 import shlex
 import subprocess as sp
 import collections
+import json as j
 
-class Perform(object):
-    
-    def __init__(self,dataset):
-        self.dataMatrix = pd.read_table(dataset, delim_whitespace=True)
-        self.textfile = op.abspath(dataset)
-        self.datafilename = op.splitext(op.basename(dataset))[0]
-        self.fileLocation = op.dirname(dataset)
-        self.headers = [h.replace("_"," ") for h in self.dataMatrix.columns.values.tolist()]
-        self._pivotparse()
+def numerica(df):
+    df.columns = pd.to_numeric(df.columns.values)
+    df.index = pd.to_numeric(df.index.values)
+    df.sort_index(inplace=True)
+    df = df.interpolate()
+    return df.sort_index(axis=1)
 
-    def _pivotparse(self):
-        self.dataMatrix.columns = self.headers
-        self.dataMatrix = self.dataMatrix.pivot(self.headers[0],self.headers[1],self.headers[2])
-        
-    def plotframe(self, plotpath, shower):
-        plotname = op.join(plotpath, self.datafilename + ".pdf")
-        plt.rc('axes', prop_cycle=cycler('color', pal.qualitative.Dark2_8.mpl_colors))
-        self.dataMatrix.plot(logx = True, logy=True, grid=True, linewidth=2)
-        plt.ylabel(self.headers[2])
-        plt.xlabel(self.headers[0].replace("_"," "))
-        plotstr = self.datafilename.replace("_"," ")
-        plt.title(plotstr)
-        plt.savefig(plotname, dpi=1000, bbox_inches="tight")
-        if shower:
-            plt.show()
+def dictframes(d, t):
+    if t>3:
+        return {dk: dictframes(d[dk], t-1) for dk in d.keys()}
+    else:
+        return numerica(pd.DataFrame(d))
+
+def depth(d, level=1):
+    if not isinstance(d, dict) or not d:
+        return level
+    return max(depth(d[k], level + 1) for k in d)
+
+def readj(f):
+    fobj = open(f, 'r')
+    fr = fobj.read()
+    fobj.close()
+    return j.loads(fr)
 
 def makeList(v):
     if isinstance(v, collections.Iterable):
@@ -68,19 +67,16 @@ def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency,
     return None
 
 #Divisions and threads per block need to be lists (even singletons) at least.
-def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", varfile="tempSol.json ", 
-                timefile="tempTime.json ", eqopt=""):
+def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=""):
 
     # if n[-1] != " ": n += " " for each function input.
 
     runnr = "mpirun -np "
     print("---------------------")
-    print("Scheme equation args")
-    print(scheme, eqfile, eqopt)
 
-    execut = runnr + "{0} ".format(nproc) + mpiopt + exece + scheme + \
-        eqfile + varfile + timefile + eqopt
+    execut = runnr + "{0} ".format(nproc) + mpiopt + exece + scheme + eqfile + outdir + eqopt
 
+    print(execut)
     exeStr = shlex.split(execut)
     proc = sp.Popen(exeStr)
     sp.Popen.wait(proc)

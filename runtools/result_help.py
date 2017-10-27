@@ -16,6 +16,7 @@ import pandas as pd
 import palettable.colorbrewer as pal
 import subprocess as sp
 import collections
+from main_help import *
 # import datetime.datetime as dt
 
 plt.rc("axes", prop_cycle=cycler("color", pal.qualitative.Dark2_8.mpl_colors))
@@ -24,29 +25,30 @@ mpl.rcParams["lines.linewidth"] = 3
 mpl.rcParams["grid.alpha"] = 0.5
 mpl.rcParams["axes.grid"] = True
 
-def numerica(df):
-    df.columns = pd.to_numeric(df.columns.values)
-    df.index = pd.to_numeric(df.index.values)
-    df.sort_index(inplace=True)
-    return df.sort_index(axis=1)
+#This is unfortunately situation specific
 
-def dictframes(d, t):
-    print(t)
-    if t>3:
-        return {dk: dictframes(d[dk], t-1) for dk in d.keys()}
-    else:
-        return numerica(pd.DataFrame(d))
+def mrgr(dBlob, dCons):
+    for d0 in dBlob.keys():
+        if d0 in dCons.keys():
+            for d1 in dBlob[d0].keys():
+                dBlob[d0][d1].update(dCons[d0][d1])
+    
+    return dBlob
 
-def depth(d, level=1):
-    if not isinstance(d, dict) or not d:
-        return level
-    return max(depth(d[k], level + 1) for k in d)
 
-def readj(f):
-    fobj = open(f, 'r')
-    fr = fobj.read()
-    fobj.close()
-    return j.loads(fr)
+def jmerge(pth, prob):
+    mys = os.listdir(pth)
+    thesef = sorted([op.join(pth, k) for k in mys if prob in k and k.startswith("s") and "_" in k])
+    dic = readj(thesef[0])
+    mdb = []
+    dpth = depth(dic)
+    for t in thesef[1:]:
+        mdb.append(readj(t))
+
+    for m in mdb:
+        dic = mrgr(dic, m)
+
+    return dic, mdb
 
 class Solved(object):
    
@@ -56,15 +58,23 @@ class Solved(object):
             self.jdict = readj(vFile)
         else:
             self.jdict = vFile
+            
+        if "meta" in self.jdict.keys():
+            self.meta = self.jdict.pop("meta")
 
         self.deep = depth(self.jdict)
         self.ddf = dictframes(self.jdict, self.deep)
         self.subpl = len(self.jdict.keys())
 
     def metaparse(self, probspec):
-        self.pr = list(probspec.keys())[0]
-        pdi = probspec[self.pr]
-        self.plotname = self.pr + "_" + str(pdi["nX"])
+        self.pr = list(probspec.keys())
+        if len(self.pr) > 1:
+            self.plotname = "Something" + "_" + str(probspec["nX"])
+        else:
+            pdi = probspec[self.pr[0]]
+            self.plotname = self.pr[0] + "_" + str(pdi["nX"])
+            
+        
         
         # self.vals = np.genfromtxt(dataTuple, skip_header=1)[:,2:]
         # self.varNames = np.genfromtxt(dataTuple, skip_header=1, dtype="string")[:,0]
@@ -73,16 +83,6 @@ class Solved(object):
         # self.plotTitles = np.unique(self.varNames)
         # self.plotname = self.datafilename.split("_")[0]
         # self.subpl = "Euler" in self.plotname            
-
-    def stripInitial(self):
-        stripped = collections.defaultdict(dict)
-        for i, t in enumerate(self.tFinal):
-            if t == 0:
-                continue
-            
-            stripped[self.varNames[i]][t] = self.vals[i,:]
-
-        return stripped
         
     def plotResult(self, f, a):   
         

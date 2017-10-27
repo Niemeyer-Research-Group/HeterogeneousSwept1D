@@ -1,18 +1,23 @@
+// ALLONE
+
+// Well we definitely need to get rid of the xpts.  Really I need to concentrate on getting the output right so I can check the answers.  Then, if they're right, we can worry about streamlining this. Partly main problem, the keys in the output json are strings. Could read each in and then make it a data frame from dict.
 
 #include <fstream>
 
 #define cudaCheckError(ans) { cudaCheck((ans), __FILE__, __LINE__); }
-inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false) {
-   if (code != cudaSuccess) {
+inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false) 
+{
+   if (code != cudaSuccess) 
+   {
       fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);
    }
 }
 
-#include "eulerCF/eulerCF.h"
+#include "heads.h"
 #include "decomp.h"
 #include "classic.h"
-// #include "swept.h"
+#include "swept.h"
 
 /**
 ----------------------
@@ -24,11 +29,9 @@ inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=f
     #define HDW     "hardware/WORKSTATION.json"
 #endif
 
-using namespace std;
-
-vector<int> jsonP(jsons jp, size_t sz)
+std::vector<int> jsonP(jsons jp, size_t sz)
 {
-	vector <int> outv;
+	std::vector <int> outv;
 	for(int i=0; i<sz; i++)
 	{
 		outv.push_back(jp[i].asInt());
@@ -37,165 +40,184 @@ vector<int> jsonP(jsons jp, size_t sz)
 }
 
 int main(int argc, char *argv[])
-{   
+{
     makeMPI(argc, argv);
 
-    string ext = ".json";
-    string myrank = std::to_string(ranks[1]);
-    string sout = argv[3];
+    std::string ext = ".json";
+    std::string myrank = std::to_string(ranks[1]);
+    std::string sout = argv[3];
     sout.append(myrank);
     sout.append(ext); 
-    string scheme = argv[1];
+    std::string scheme = argv[1];
 
-    ifstream hwjson(HDW, ifstream::in);
+    std::ifstream hwjson(HDW, std::ifstream::in);
     jsons hwJ;
     hwjson >> hwJ;
     hwjson.close();
 
-    vector<int> gpuvec = jsonP(hwJ["GPU"], 1);
-    vector<int> smGpu(gpuvec.size());
-    vector<int> threadv =  jsonP(hwJ["nThreads"], 1);
-    cGlob.nThreads=threadv[ranks[1]]; // Potetntial for non constant
-    cGlob.hasGpu = gpuvec[ranks[1]];
-    std::partial_sum(gpuvec.begin(), gpuvec.end(), smGpu.begin());
-    cGlob.nGpu = smGpu.back();
-    smGpu.insert(smGpu.begin(), 0);
-    vector <int> myGPU = jsonP(hwJ["gpuID"], 1);
-    int gpuID = myGPU[ranks[1]];
-    
+    // However you coe by these vectors are somewhat immaterial.  Could do a test on the cluster before running.
+    cGlob.nGpu = hwJ["nGpu"].asInt();
+    std::vector<int> gpuvec = jsonP(hwJ["pGpu"], cGlob.nGpu);
+    std::vector<int> myGPU = jsonP(hwJ["gpuID"], cGlob.nGpu);
+    int gpuID = -1;
+    for (int k=0; k<cGlob.nGpu; k++)
+    {
+        if (ranks[1] == gpuvec[k])
+        {
+            cGlob.hasGpu = true;
+            gpuID = myGPU[k];
+        }
+    }
+    int smGpu = std::count_if(gpuvec.begin(), gpuvec.end(), [](int i){return i<ranks[1] == 1;});
+
     // Equation, grid, affinity data
-    ifstream injson(argv[2], ifstream::in);
+    std::ifstream injson(argv[2], std::ifstream::in);
     injson >> inJ;
     injson.close();
 
     parseArgs(argc, argv);
     initArgs();
 
-    /*  
+    /*
         Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
+    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * smGpu; 
+    states **state;
 
     int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
-    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * smGpu[ranks[1]]; 
-    int xalloc, xwrt;
-    states *state;
+    int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
+    int nrows = (cGlob.hasGpu) ? 3 : 1;
+    int xalloc = xc + exSpace;
 
-    int mon;
-    cout << "Made it to allocation flow " << endl;
-
+    std::string pth = string(argv[3]);
+    std::vector<int> xpts(1, strt); //Index at which pointer array starts.
+    std::vector<int> alen(1, xc + 1); //Write out | Init args vector
+    if(!ranks[1]) std::cout << "Before initial values." << std::endl;
     if (cGlob.hasGpu)
     {
-        //GPU set up. Which device, what precision, copy constants to device.
         cudaSetDevice(gpuID);
-        if (sizeof(REAL)>6) 
+
+        state = new states* [3];
+        cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));
+        cudaCheckError(cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault));
+        cudaCheckError(cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault));
+
+        xpts.push_back(strt + xc);
+        alen.push_back(cGlob.xg + 1);
+        xpts.push_back(strt + xc + cGlob.xg);
+        alen.push_back(xc + 1);
+
+        cudaCheckError(cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts)));
+
+        if (sizeof(REAL)>6)
         {
-            cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+            cudaCheckError(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
         }
-
-        cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
-
-        // Add the other half of the CPU and the GPU alloc.
-        xwrt = cGlob.xg + cGlob.xcpu;
-        xalloc = exSpace + xwrt;
-        cout << "Num pts: " << xalloc << endl;
-        cudaCheckError(cudaMallocManaged((void **) &state, xalloc * cGlob.szState));              
-    }
-    else 
-    {
-        xwrt = cGlob.xcpu;
-        xalloc = exSpace + xwrt;
-        cudaCheckError(cudaHostAlloc((void **) &state, xalloc * cGlob.szState, cudaHostAllocDefault));
-    }
-    
-    for (int k=0; k <= xalloc; k++) initialState(inJ, state, k, strt);
-    for (int k=1; k <= xwrt; k++) solutionOutput(state, 0.0, k, strt); 
-
-    int tstep = 1;
-    double timed, tfm;
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    if (!ranks[1]) timed = MPI_Wtime();
-    cout << "Made it to Calling the function " << endl;
-
-    // Call the correct function with the correct algorithm.
-    if (!scheme.compare("C"))
-    {
-        tfm = classicWrapper(state, strt, &tstep);
-    }
-    else if  (!scheme.compare("S"))
-    {
-        //tfm = sweptWrapper(state, strt, &tstep);
     }
     else
     {
-        cerr << "Incorrect or no scheme given" << endl;
+        state = new states* [1];
+        cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));
     }
 
-    if (cGlob.hasGpu)
+    for (int i=0; i<nrows; i++)
     {
-        cudaDeviceSynchronize();
+        for (int k=0; k<=alen[i]; k++)  initialState(inJ, state[i], k, xpts[i]-1);
+        for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]);
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    if (!ranks[1]) timed = (MPI_Wtime() - timed);
+    // If you have selected scheme I, it will only initialize and output the initial values.
+    if (!ranks[1])	std::cout << "Initial Values Instantiated." << std::endl;
 
-    // Print out final solution.
-    #pragma omp parallel for
-    for (int k=1; k <= xwrt; k++) solutionOutput(state, tfm, k, strt); 
-    endMPI();
-
-    cudaError_t error = cudaGetLastError();
-    if(error != cudaSuccess)
+    if (scheme.compare("I"))
     {
-        // print the CUDA error message and exit
-        printf("CUDA error: %s\n", cudaGetErrorString(error));
-        exit(-1);
+        int tstep = 1;
+        double timed, tfm;
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (!ranks[1]) timed = MPI_Wtime();
+
+        if (!scheme.compare("C"))
+        {
+            tfm = classicWrapper(state, xpts, alen, &tstep);
+        }
+        else if  (!scheme.compare("S"))
+        {
+            tfm = sweptWrapper(state, xpts, alen, &tstep);
+        }
+        else
+        {
+            std::cerr << "Incorrect or no scheme given" << std::endl;
+        }
+
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        if (!ranks[1]) timed = (MPI_Wtime() - timed);
+        if (cGlob.hasGpu)  cudaDeviceSynchronize();
+
+        for (int i=0; i<nrows; i++)
+        {
+            for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], tfm, k, xpts[i]);
+        }
+
+        cudaError_t error = cudaGetLastError();
+        if(error != cudaSuccess)
+        {
+            // print the CUDA error message and exit
+            printf("CUDA error: %s\n", cudaGetErrorString(error));
+            exit(-1);
+        }
+
+        if (!ranks[1])
+        {
+            //READ OUT JSONS
+            timed *= 1.e6;
+
+            double n_timesteps = tfm/cGlob.dt;
+
+            double per_ts = timed/n_timesteps;
+
+            std::cout << n_timesteps << " timesteps" << std::endl;
+            std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
+
+            std::string tpath = pth + "/t" + fspec + scheme + ext;
+            try {
+                std::ifstream tjson(tpath, std::ifstream::in);
+                tjson >> timing;
+                tjson.close();
+            }
+            catch (...) {}
+
+            std::string tpbs = std::to_string(cGlob.tpb);
+            std::string nXs = std::to_string(cGlob.nX);
+            std::string gpuAs = std::to_string(cGlob.gpuA);
+
+            
+            std::ofstream timejson(tpath.c_str(), std::ofstream::trunc);
+            timing[tpbs][nXs][gpuAs] = per_ts;
+            timejson << timing;
+            timejson.close();
+        }
     }
 
-    int nomar;
-    ofstream soljson(argv[3]);
+    std::string spath = pth + "/s" + fspec + "_" + std::to_string(ranks[1]) + ext;
+    std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
+    if (!ranks[1]) solution["meta"] = inJ;
     soljson << solution;
     soljson.close();
 
-    if (!ranks[1])
+    endMPI();
+
+    for (int k=0; k<nrows; k++)
     {
-        timed *= 1.e6;
-
-        double n_timesteps = tfm/cGlob.dt;
-
-        double per_ts = timed/n_timesteps;
-
-        cout << n_timesteps << " timesteps" << endl;
-        cout << "Averaged " << per_ts << " microseconds (us) per timestep" << endl;
-
-        // Equation, grid, affinity data
-        try {
-            ifstream tjson(argv[4], ifstream::in);
-            tjson >> timing;
-            tjson.close();
-        }
-        catch (...) {}
-
-        string tpbs = std::to_string(cGlob.tpb);
-        string nXs = std::to_string(cGlob.nX);
-        string gpuAs = std::to_string(cGlob.gpuA);
-        cout << cGlob.gpuA << endl;
-
-        ofstream timejson(argv[4], ofstream::trunc);
-        timing[tpbs][nXs][gpuAs] = per_ts;
-        timejson << timing;
-        timejson.close();
+        cudaFreeHost(state[k]);
     }
-
+    delete[] state;   
     if (cGlob.hasGpu)
     {
-        cudaFree(state);
+        cudaDeviceSynchronize();
         cudaDeviceReset();
     }
-    else
-    {
-        cudaFreeHost(state);
-    }
-	return 0;
+    return 0;
 }

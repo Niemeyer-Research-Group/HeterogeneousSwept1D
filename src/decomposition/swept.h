@@ -5,28 +5,10 @@
 ---------------------------
 */
 
-/**
-    This file uses vector types to hold the dependent variables so fundamental operations on those types are defined as macros to accommodate different data types.  Also, keeping types consistent for common constants (0, 1, 2, etc) used in computation has an appreciable positive effect on performance.
-*/
 
-/**
-    Builds an upright triangle using the swept rule.
+using namespace std;
 
-    Upright triangle using the swept rule.  This function is called first using the initial conditions or after results are read out using downTriange.  In the latter case, it takes the result of down triangle as IC.
-
-    @param initial Initial condition.
-    @param tstep The timestep we're starting with.
-*/
-
-static int offSend[2];
-static int offRecv[2];
-static int cnt, turn;
-
-void swIncrement()
-{
-    cnt++;
-    turn = cnt & 1;
-}
+typedef std::vector<int> ivec;
 
 __global__ void upTriangle(states *state, int tstep)
 {
@@ -74,10 +56,10 @@ downTriangle(states *state, int tstep, int offset)
     int tidx = tid + 1;
 
     int tnow = tstep; // read tstep into register.
+
     if (tid<2) temper[tid] = state[gid]; 
     __syncthreads();
     temper[tid+2] = state[gid+2];
-
     __syncthreads();
 
 	for (int k=mid; k>0; k--)
@@ -92,6 +74,13 @@ downTriangle(states *state, int tstep, int offset)
     state[gid] = temper[tidx];
 }
 
+// __global__
+// void
+// printgpu(states *state, int n, int on)
+// {
+//     printf("%i\n", on);
+//     for (int k=0; k<n; k++) printf("%i %.2f\n", k, state[k].T[on]);
+// }
 
 /**
     Builds an diamond using the swept rule after a left pass.
@@ -124,58 +113,61 @@ wholeDiamond(states *state, int tstep, int offset)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-        	        stepUpdate(temper, tidx, tnow);
+        	stepUpdate(temper, tidx, tnow);
 		}
 		tnow++;
 		__syncthreads();
 	}
+
 
 	for (int k=2; k<=mid; k++)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-            		stepUpdate(temper, tidx, tnow);
+            stepUpdate(temper, tidx, tnow);
 		}
 		tnow++;
 		__syncthreads();
-	}
+    }
+    
     state[gid + 1] = temper[tidx];
 }
 
-// HOST SWEPT ROUTINES
+/*
+    MARK : HOST SWEPT ROUTINES
+*/
+
 void upTriangleCPU(states *state, int tstep)
 {
+    int tnow=tstep;
     for (int k=2; k<cGlob.htp; k++)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
-            stepUpdate(state, n, tstep + (k-1));
+            stepUpdate(state, n, tnow);
         }
+    tnow++;
     }
 }
 
-void downTriangleCPU(states *state, int tstep, int zi, int zf)
+void downTriangleCPU(states *state, int tstep)
 {
     int tnow=tstep;
-    for (int k=cGlob.ht; k>1; k--)
+    for (int k=cGlob.ht; k>0; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
             stepUpdate(state, n, tnow);
         }
 	tnow++;
-    }
-    for (int n=zi; n<zf; n++)
-    {
-        stepUpdate(state, n, tnow);
     }
 }
 
 // Now you can call this on a split for all proc/threads except (0,0)
-void wholeDiamondCPU(states *state, int tstep, int zi, int zf)
+void wholeDiamondCPU(states *state, int tstep)
 {
     int tnow=tstep;
-    for (int k=cGlob.ht; k>1; k--)
+    for (int k=cGlob.ht; k>0; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
@@ -183,12 +175,6 @@ void wholeDiamondCPU(states *state, int tstep, int zi, int zf)
         }
 	tnow++;
     }
-
-    for (int n=zi; n<zf; n++)
-    {
-        stepUpdate(state, n, tnow);
-    }
-    tnow++;
 
     for (int k=2; k<cGlob.htp; k++)
     {
@@ -203,11 +189,27 @@ void wholeDiamondCPU(states *state, int tstep, int zi, int zf)
 void splitDiamondCPU(states *state, int tstep)
 {
     int tnow=tstep;
+    states ssLeft[3]; 
+    ssLeft[2] = bound[0]; 
+    states ssRight[3]; 
+    ssRight[0] = bound[1]; 
     for (int k=cGlob.ht; k>0; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
-            if (n < cGlob.ht || n > cGlob.htp)
+            if (n == cGlob.ht)
+            {
+                ssLeft[0] = state[n-1], ssLeft[1] = state[n];
+                stepUpdate(ssLeft, n, tnow);
+                state[n] = ssLeft[1];
+            }
+            else if (n == cGlob.htp)
+            {
+                ssRight[1] = state[n], ssRight[2] = state[n+1];
+                stepUpdate(ssRight, n, tnow);
+                state[n] = ssRight[1];
+            }
+            else
             {
                 stepUpdate(state, n, tnow);
             }
@@ -219,7 +221,19 @@ void splitDiamondCPU(states *state, int tstep)
     {
         for (int n=k; n<(cGlob.base-k); n++)
         {
-            if (n < cGlob.ht || n > cGlob.htp)
+            if (n == cGlob.ht)
+            {
+                ssLeft[0] = state[n-1], ssLeft[1] = state[n];
+                stepUpdate(ssLeft, n, tnow);
+                state[n] = ssLeft[1];
+            }
+            else if (n == cGlob.htp)
+            {
+                ssRight[1] = state[n], ssRight[2] = state[n+1];
+                stepUpdate(ssRight, n, tnow);
+                state[n] = ssRight[1];
+            }
+            else
             {
                 stepUpdate(state, n, tnow);
             }
@@ -228,60 +242,69 @@ void splitDiamondCPU(states *state, int tstep)
     }
 }
 
-static void inline passSwept(states *stateSend, states *stateRecv, int tstep)
+void passSwept(REAL *passer, REAL *getter, int tstep, int turn)
 {
-    MPI_Isend(stateSend + offSend[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
-            MPI_COMM_WORLD, &req[turn]);
+    int rx = turn^1;
+    int t0;
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Isend(passer, numPass, MPI_R, ranks[2*turn], TAGS(tstep),
+            MPI_COMM_WORLD, &req[0]);
 
-    MPI_Recv(stateRecv + offRecv[turn], cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
-            MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
+    MPI_Recv(getter, numPass, MPI_R, ranks[2*rx], TAGS(tstep),
+            MPI_COMM_WORLD, &stat[0]);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Wait(&req[0], &stat[0]);
 }
 
-/*
-    The idea of the timestep counter is: the timestep you're on is the timestep you would export
-    if you called downTriangle NEXT.
+// void applyBC(states *state, int ty, int pt)
+// {
+//     // Like if-dirichilet
+//     // Works for whole 
+//     state[ty*pt] = sBound[ty]; 
+//     // If reflective
+//     // state[ty*pt] = state[pt-2] or state[pt+2]
+// }
 
-*/
 
-double sweptWrapper(states *state, int xpt, int *tstep)
+// Now we need to put the last value in a bucket, and append that to the start of the next array.
+double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 {
     if (!ranks[1]) std::cout << "Swept Decomposition" << std::endl;
+    int tmine = *tstep;
+    int t0;
+    const int bkL = cGlob.cBks - 1;
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    int tmine = *tstep;
+    
+    // Must be declared global in equation specific header.
+    stPass = cGlob.htp; 
+    numPass = NSTATES * stPass;
 
-    states *staten = new states* [cGlob.nThreads];
-    int ar1, ptin, tid, strt;
-    const int lastThread = cGlob.nThreads-1, lastWave = cGlob.nWaves-1;
-    int sw[2] = {!ranks[1], ranks[1] == lastproc}; // {First node, last node}
-    int stride;
+    states *putSt = new states[stPass];
+    states *getSt = new states[stPass];
+    REAL *putRe = new REAL[numPass];
+    REAL *getRe = new REAL[numPass];
+    int tou = 2000;
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
-        int tps = cGlob.nThreads/2; // Threads per side.
-        for (int k=0; k<cGlob.nThreads; k++)
-        {
-            ptin = (k % tps) * cGlob.tpb;
-            staten[k] = (state + ptin); // ptr + offset
-        }
-
-        stride = tps * cGlob.tpb;
-        const int xc =cGlob.xcpu/2, xcp = xc+1, xcpp = xc+2;
+        const int xc = cGlob.xcpu/2, xcp=xc+1;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
+        const int cmid = cGlob.cBks/2;
+        int bx, ix;
 
-        const size_t gpusize = cGlob.szState * (xgpp + cGlob.htp);
+        const size_t gpusize = cGlob.szState * (xgpp + cGlob.ht);
         const size_t ptsize = cGlob.szState * xgpp;
         const size_t passsize =  cGlob.szState * cGlob.htp;
         const size_t smem = cGlob.szState * cGlob.base;
 
-        offSend[0] = 1, offSend[1] = xc; // {left, right}
-        offRecv[0] = xcp, offRecv[1] = 0;
+        int gpupts = gpusize/cGlob.szState;
 
         cudaStream_t st1, st2;
         cudaStreamCreate(&st1);
         cudaStreamCreate(&st2);
-        std::cout << "GPU threads launched: " << cGlob.tpb*cGlob.bks << " GpuSize: " << gpusize/cGlob.szState << "  " << ptsize/cGlob.szState << " node ht: " << cGlob.ht << std::endl;
 
         states *dState;
 
@@ -289,297 +312,405 @@ double sweptWrapper(states *state, int xpt, int *tstep)
 
         cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
 
-        cudaError_t error = cudaGetLastError();
-        if(error != cudaSuccess)
-        {
-            printf("CUDA error MEMCPY: %s\n", cudaGetErrorString(error));
-        }
-        /* -- DOWN MUST FOLLOW A SPLIT AND UP CANNOT BE IN WHILE LOOP SO DO UP AND FIRST SPLIT OUTSIDE OF LOOP 
-            THEN LOOP CAN BE WITH WHOLE - DIAMOND - CHECK DOWN.
+        /* 
+        -- DOWN MUST FOLLOW A SPLIT AND UP CANNOT BE IN WHILE LOOP SO DO UP AND FIRST SPLIT OUTSIDE OF LOOP THEN LOOP CAN BE WITH WHOLE - DIAMOND - CHECK DOWN.
         */
         // ------------ Step Forward ------------ //
         // ------------ UP ------------ //
 
-        upTriangle <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine);
-        error = cudaGetLastError();
-        if(error != cudaSuccess)
-        {
-            // print the CUDA error message and exit
-            printf("CUDA error UPTRIANGLE: %s\n", cudaGetErrorString(error));
+        upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
+
+        for (int k=0; k<cGlob.cBks; k++)
+        { 
+            bx = (k/cmid);
+            ix = 2*bx;
+            upTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
         }
 
-        // The pointers are already strided, now we stride each wave of pointers.
-        #pragma parallel num_threads(cGlob.nThreads) private(strt, tid)
-        {
-            tid = omp_get_thread_num();
-            for (int k=0; k<cGlob.nWaves; k++)
-            {
-                strt = k*stride;
-                upTriangleCPU(staten[tid] + strt, tmine);
-            }
-        }
+        cout << "UP " << endl;
 
-        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
-        for (int k=xgpp; k<xgpp+cGlob.htp; k++) std::cout << state[1][k].Q[0].z << " ";
-        std::cout << " | turn: " << turn << std::endl;
+        // ------------ Pass Edges ------------ // 
+        // -- FRONT TO BACK -- //
 
-        // ------------ Pass Edges ------------ // Give to 0, take from 2.
-        // I'm doing it backward but it's the only way that really makes sense in this context.
-        // Before I really abstracted this process away.  But here I have to deal with it.
-        //If you pass left first, you need to start at ht rather than 0.  That's the problem.
+        cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
+        cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
 
-        passSwept(state[0], state[2], tmine);
-        cudaMemcpy(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost);
-        cudaMemcpy(dState + xgp, state[2] + offSend[turn], passsize, cudaMemcpyHostToDevice);
-        swIncrement();//Increment
+        for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+        unstructify(&putSt[0], &putRe[0]);
 
-        if(error != cudaSuccess)
-        {
-            // print the CUDA error message and exit
-            printf("CUDA error UPPASS: %s\n", cudaGetErrorString(error));
-        }
+        passSwept(&putRe[0], &getRe[0], tmine, 0);
+
+        restructify(&getSt[0], &getRe[0]);
+        for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
 
         // ------------ Step Forward ------------ //
         // ------------ SPLIT ------------ //
-        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
-	std::cout << "GPU Content " << std::endl;
-        for (int k=xgp; k<xgpp+cGlob.htp; k++) std::cout << state[1][k].Q[0].z << " ";
-        std::cout << "End cpu: " << std::endl;
-	for (int k=1; k<cGlob.htp; k++) std::cout << state[2][k].Q[0].z << " ";
-	std::cout << "CPU To Pass" << std::endl;
-        wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
-        #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
+        wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
+
+        for (int k=0; k<(cGlob.cBks); k++)
         {
-            tid = omp_get_thread_num();
-            sw[1] = (sw[1] && tid == lastThread); // Only true for last proc and last thread.
-            for (int k=0; k<cGlob.nWaves; k++)
+            bx = (k/cmid);
+            ix = 2*bx;
+            if ((ranks[1] == lastproc) && (k == bkL))
             {
-                sw[1] = (sw[1] && k == lastWave);
-                strt = k*stride + cGlob.ht;
-                if (sw[1])
-                {
-                    splitDiamondCPU(staten[0] + strt, tmine);
-                }
-                else
-                {
-                    wholeDiamondCPU(staten[tid] + strt, tmine, 1, cGlob.tpbp);
-                }
+                splitDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
             }
-        }
-        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
-        for (int k=xgpp; k<xgpp+cGlob.htp; k++) std::cout << state[1][k].Q[0].z << " ";
-        std::cout << "Split" << std::endl;
-        std::cout << cGlob.ht << " " << smem << " " << cGlob.bks << " " << cGlob.tpb << std::endl;
-
-        error = cudaGetLastError();
-        if(error != cudaSuccess)
-        {
-            // print the CUDA error message and exit
-            printf("CUDA error SPLIT: %s\n", cudaGetErrorString(error));
-        }
+            else
+            {
+                wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
+            }
+        }      
 
         // ------------ Pass Edges ------------ //
+        // -- BACK TO FRONT -- //
 
-        passSwept(state[2], state[0], tmine);
-        cudaMemcpy(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
-        cudaMemcpy(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice);
-        swIncrement();
+        cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
+        cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
+
+        for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
+        unstructify(&putSt[0], &putRe[0]);
+        
+        passSwept(&putRe[0], &getRe[0], tmine+1, 1);
+        
+        restructify(&getSt[0], &getRe[0]);
+        for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
         // Increment Counter and timestep
-        tmine += cGlob.tpb;
-        t_eq += cGlob.dt * (tmine/NSTEPS);
+        tmine += cGlob.ht;
+        t_eq = cGlob.dt * (tmine/NSTEPS);
 
-        if (!ranks[1])
-        {
-            std::cout << "Just for fun: " << xcpp << " nums in cpu " << xgpp << " nums in GPU " << cGlob.hasGpu << std::endl; 
-            std::cout << "AND the ends of x: " << xpts[0][xc] << " " << xpts[1][xc] << " " << xpts[2][xc] << std::endl; 
-        }
+        if (!ranks[1]) state[0][0] = bound[0];
+        if (ranks[1]==lastproc) state[2][xcp] = bound[1];
+        cout << "WHILE " << endl;
 
         while(t_eq < cGlob.tf)
         {
             // ------------ Step Forward ------------ //
             // ------------ WHOLE ------------ //
 
-            wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, 0);
+            wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
 
-            #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
+            for (int k=0; k<cGlob.cBks; k++)
             {
-                tid = omp_get_thread_num();
-                sw[0] = (sw[0] && !tid);
-                sw[1] = (sw[1] && tid == lastThread);
-                for (int k=0; k<cGlob.nWaves; k++)
-                {
-                    sw[0] = (sw[0] && !k);
-                    sw[1] = (sw[1] && tid == lastWave);   
-                    strt = k*stride;
-                    wholeDiamondCPU(staten[tid] + strt, tmine, sw[0] + 1,  cGlob.tpbp-sw[1]);
-                }
-            }   
-            error = cudaGetLastError();
-            if(error != cudaSuccess)
-            {
-                // print the CUDA error message and exit
-                printf("CUDA error WHOLE: %s\n", cudaGetErrorString(error));
-                exit(-1);
+                bx = (k/cmid);
+                ix = 2*(k/cmid);
+                wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
             }
+            
             // ------------ Pass Edges ------------ //
             
-            passSwept(state[0], state[2], tmine);
-            cudaMemcpyAsync(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost, st1);
-            cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
-            swIncrement();//Increment
+            cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
+            cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
+    
+            for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+            unstructify(&putSt[0], &putRe[0]);
+            
+            passSwept(&putRe[0], &getRe[0], tmine, 0);
+            
+            restructify(&getSt[0], &getRe[0]);
+            for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
 
             // Increment Counter and timestep
-            tmine += cGlob.tpb;
-            t_eq += cGlob.dt * (tmine/NSTEPS);
+            tmine += cGlob.ht;
+            t_eq = cGlob.dt * (tmine/NSTEPS);
 
             // ------------ Step Forward ------------ //
             // ------------ SPLIT ------------ //
 
-            wholeDiamond <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
-
-            #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
+            wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
+            
+            for (int k=0; k<(cGlob.cBks); k++)
             {
-                tid = omp_get_thread_num();
-                sw[1] = (sw[1] && tid == lastThread); // Only true for last proc and last thread.
-                for (int k=0; k<cGlob.nWaves; k++)
+                bx = (k/cmid);
+                ix = 2*bx;
+                if ((ranks[1] == lastproc) && (k == bkL))
                 {
-                    sw[1] = (sw[1] && k == lastWave);
-                    strt = k*stride + cGlob.ht;
-                    if (sw[1])
-                    {
-                        splitDiamondCPU(staten[0] + strt, tmine);
-                    }
-                    else
-                    {
-                        wholeDiamondCPU(staten[tid] + strt, tmine, 1, cGlob.tpbp);
-                    }
+                    splitDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
                 }
-            }   
+                else
+                {
+                    wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
+                }
+            }
 
             // ------------ Pass Edges ------------ //
+            // -- BACK TO FRONT -- //
+
+            cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
+            cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
+    
+            for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
+            unstructify(&putSt[0], &putRe[0]);
             
-            passSwept(state[2], state[0], tmine);
-            cudaMemcpyAsync(state[2] + offRecv[turn], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost, st1);
-            cudaMemcpyAsync(dState, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
-            swIncrement();
+            passSwept(&putRe[0], &getRe[0], tmine, 1);
+            
+            restructify(&getSt[0], &getRe[0]);
+            for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
             // Increment Counter and timestep
-            tstep += cGlob.tpb;
-            t_eq += cGlob.dt * (tmine/NSTEPS);
+            tmine += cGlob.ht;
+            t_eq = cGlob.dt * (tmine/NSTEPS);
+
+            if (!ranks[1]) state[0][0] = bound[0];
+            if (ranks[1]==lastproc) state[2][xcp] = bound[1];
 
             if (t_eq > twrite)
             {
-                downTriangle <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine, 0);
+                downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
 
-                #pragma parallel num_threads(cGlob.nThreads) private(strt, tid, sw)
+                for (int k=0; k<cGlob.cBks; k++)
                 {
-                    tid = omp_get_thread_num();
-                    sw[0] = (sw[0] && !tid);
-                    sw[1] = (sw[1] && tid == lastThread);
-                    for (int k=0; k<cGlob.nWaves; k++)
-                    {
-                        sw[0] = (sw[0] && !k);
-                        sw[1] = (sw[1] && tid == lastWave);   
-                        strt = k*stride;
-                        downTriangleCPU(staten[tid] + strt, tmine, sw[0] + 1,  cGlob.tpbp-sw[1]);
-                    }
-                }   
+                    bx = (k/cmid);
+                    ix = 2*bx;
+                    downTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
+                }
+                
+                // Increment Counter and timestep
+                tmine += cGlob.ht;
+                t_eq = cGlob.dt * (tmine/NSTEPS);
 
                 cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
                                 
-                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, xpts[0][k], t_eq);                
-                for (int k=1; k<xcp; k++) solutionOutput(state[2]+k, xpts[2][k], t_eq);
-                for (int k=1; k<xgp; k++) solutionOutput(state[1]+k, xpts[1][k], t_eq);
-
-                upTriangle <<<cGlob.bks, cGlob.tpb, smem>>> (dState, tmine);
-
-                // The pointers are already strided, now we stride each wave of pointers.
-                #pragma parallel num_threads(cGlob.nThreads) private(strt, tid)
+                for (int i=0; i<3; i++)
                 {
-                    tid = omp_get_thread_num();
-                    for (int k=0; k<cGlob.nWaves; k++)
+                    for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
+                }  
+
+                upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
+
+                for (int k=0; k<cGlob.cBks; k++)
+                { 
+                    bx = (k/cmid);
+                    ix = 2*bx;
+                    upTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
+                }
+
+                cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
+                cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
+        
+                for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+                unstructify(&putSt[0], &putRe[0]);
+                
+                passSwept(&putRe[0], &getRe[0], tmine, 0);
+                
+                restructify(&getSt[0], &getRe[0]);
+                for (int k=0; k<cGlob.htp; k++) state[2][k + xcp] = getSt[k];
+
+                // ------------ Step Forward ------------ //
+                // ------------ SPLIT ------------ //
+
+                wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
+                
+                for (int k=0; k<(cGlob.cBks); k++)
+                {
+                    bx = (k/cmid);
+                    ix = 2*bx;
+                    if ((ranks[1] == lastproc) && (k ==bkL))
                     {
-                        strt = k*stride;
-                        upTriangleCPU(staten[tid] + strt, tmine);
+                        splitDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
+                    }
+                    else
+                    {
+                        wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
                     }
                 }
 
-                passSwept(state[0], state[2], tmine);
-                cudaMemcpyAsync(state[0] + offRecv[turn], dState + 1, passsize, cudaMemcpyDeviceToHost, st1);
-                cudaMemcpyAsync(dState + xgp, state[0] + offSend[turn], passsize, cudaMemcpyHostToDevice, st2);
-                swIncrement();//Increment
+                // ------------ Pass Edges ------------ //
+                // -- BACK TO FRONT -- //
+                cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
+                cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
+        
+                for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
+                unstructify(&putSt[0], &putRe[0]);
+                
+                passSwept(&putRe[0], &getRe[0], tmine, 1);
+                
+                restructify(&getSt[0], &getRe[0]);
+                for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
                 // Increment Counter and timestep
-                tstep += cGlob.tpb;
-                t_eq += cGlob.dt * (tmine/NSTEPS);
-
+                tmine += cGlob.ht;
+                t_eq = cGlob.dt * (tmine/NSTEPS);
                 twrite += cGlob.freq;
+                if (!ranks[1]) state[0][0] = bound[0];
+                if (ranks[1]==lastproc) state[2][xcp] = bound[1];
             }
+
         }
+
+        downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
+        
+        for (int k=0; k<cGlob.cBks; k++)
+        {
+            bx = (k/cmid);
+            ix = 2*bx;
+            downTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
+        }
+        
+        // Increment Counter and timestep
+        tmine += cGlob.ht;
+        t_eq = cGlob.dt * (tmine/NSTEPS);
+
+        cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
+
         cudaFree(dState);
         cudaStreamDestroy(st1);
         cudaStreamDestroy(st2);
     }
-    // YES YOU CAN PASS THE SAME POINTER AS TWO DIFFERENT ARGS TO THE FUNCITON.
     else
     {
-        int xcp = cGlob.xcpu + cGlob.htp;
-        
-        for (int k=0; k<cGlob.nThreads; k++)
-        {
-            ptin = k * cGlob.tpb; 
-            staten[k] = (state[0] + ptin); // ptr + offset
-        }
+        const int xc = cGlob.xcpu, xcp = xc+1;
+        for (int k=0; k<cGlob.cBks; k++)
+        { 
+            upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
+        }        
 
-        #pragma parallel num_threads(cGlob.nThreads) private(strt, tid)
+        for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+        unstructify(&putSt[0], &putRe[0]);
+        
+        passSwept(&putRe[0], &getRe[0], tmine, 0);
+        
+        restructify(&getSt[0], &getRe[0]);
+        for (int k=0; k<cGlob.htp; k++) state[0][k + xcp] = getSt[k];
+
+        //Split
+        for (int k=0; k<(cGlob.cBks); k++)
         {
-            tid = omp_get_thread_num();
-            for (int k=0; k<cGlob.nWaves; k++)
+            if ((ranks[1] == lastproc) && (k == bkL))
             {
-                strt = k*stride;
-                upTriangleCPU(staten[tid] + strt, tmine);
+                splitDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
+            }
+            else
+            {
+                wholeDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
             }
         }
 
-        passSwept(state[0], state[0], tmine); // Left first
-        swIncrement();
+        // -- BACK TO FRONT -- //
+
+        for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
+        unstructify(&putSt[0], &putRe[0]);
+        
+        passSwept(&putRe[0], &getRe[0], tmine+1, 1);
+        
+        restructify(&getSt[0], &getRe[0]);
+        for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
+
+        tmine += cGlob.ht;
+        t_eq = cGlob.dt * (tmine/NSTEPS);
+        if (!ranks[1]) state[0][0] = bound[0];
+        if (ranks[1]==lastproc) state[0][xcp] = bound[1];
 
         while (t_eq < cGlob.tf)
         {
-
-            #pragma parallel num_threads(cGlob.nThreads) private(strt, tid)
+            for (int k=0; k<cGlob.cBks; k++)
             {
-                tid = omp_get_thread_num();
-                for (int k=0; k<cGlob.nWaves; k++)
-                {
-                    strt = k*stride;
-                    if (!ranks[1] && !(tid + k))
-                    {
-                        splitDiamondCPU(staten[0], tmine);
-                    }
-                    else
-                    {
-                        wholeDiamondCPU(staten[tid] + strt, tmine, 1, cGlob.tpbp);
-                    }
-                }
-            }   
+                wholeDiamondCPU(state[0] + k*cGlob.tpb, tmine);
+            }
 
-            passSwept(state[0], state[0], tmine); // Left first
-            swIncrement();
+            for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+            unstructify(&putSt[0], &putRe[0]);
+            
+            passSwept(&putRe[0], &getRe[0], tmine, 0);
+            
+            restructify(&getSt[0], &getRe[0]);
+            for (int k=0; k<cGlob.htp; k++) state[0][k+xcp] = getSt[k];
+
+            tmine += cGlob.ht;
+            t_eq = cGlob.dt * (tmine/NSTEPS);
+
+            for (int k=0; k<(cGlob.cBks); k++)
+            {
+                if ((ranks[1] == lastproc) && (k == bkL))
+                {
+                    splitDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
+                }
+                else
+                {
+                    wholeDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
+                }
+            }
+
+            for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
+            unstructify(&putSt[0], &putRe[0]);
+            
+            passSwept(&putRe[0], &getRe[0], tmine, 1);
+            
+            restructify(&getSt[0], &getRe[0]);
+            for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
+    
+            tmine += cGlob.ht;
+            t_eq = cGlob.dt * (tmine/NSTEPS);
+            if (!ranks[1]) state[0][0] = bound[0];
+            if (ranks[1]==lastproc) state[0][xcp] = bound[1];
 
             if (t_eq > twrite)
             {
-                #pragma omp parallel for
-                for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, xpts[0][k], t_eq);
+                for (int k=0; k<cGlob.cBks; k++)
+                {
+                    downTriangleCPU(state[0] + k*cGlob.tpb, tmine);
+                }
+
+                // Increment Counter and timestep
+                tmine += cGlob.tpb;
+                t_eq = cGlob.dt * (tmine/NSTEPS);
+
+                for (int k=1; k<alen[0]; k++)  solutionOutput(state[0], t_eq, k, xpts[0]);
+
+                for (int k=0; k<cGlob.cBks; k++)
+                { 
+                    upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
+                }
+
+                for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+                unstructify(&putSt[0], &putRe[0]);
+                
+                passSwept(&putRe[0], &getRe[0], tmine, 0);
+                
+                restructify(&getSt[0], &getRe[0]);
+                for (int k=0; k<cGlob.htp; k++) state[0][k + xcp] = getSt[k];
+
+                // ------------ Step Forward ------------ //
+                // ------------ SPLIT ------------ //
+                
+                for (int k=0; k<(cGlob.cBks); k++)
+                {
+                    if ((ranks[1] == lastproc) && (k == bkL))
+                    {
+                        splitDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
+                    }
+                    else
+                    {
+                        wholeDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
+                    }
+                }
+
+                for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
+                unstructify(&putSt[0], &putRe[0]);
+                
+                passSwept(&putRe[0], &getRe[0], tmine+1, 1);
+                
+                restructify(&getSt[0], &getRe[0]);
+                for (int k=0; k<cGlob.htp; k++)  state[0][k] = putSt[k];
+        
+                // Increment Counter and timestep
+                tmine += cGlob.ht;
+                t_eq = cGlob.dt * (tmine/NSTEPS);
                 twrite += cGlob.freq;
+                if (!ranks[1]) state[0][0] = bound[0];
+                if (ranks[1]==lastproc) state[0][xcp] = bound[1];
             }
-            
         }
-        #pragma omp parallel for
-        for (int k=1; k<xcp; k++) solutionOutput(state[0]+k, xpts[0][k], t_eq);
+        for (int k=0; k<cGlob.cBks; k++)
+        {
+            downTriangleCPU(state[0] + k*cGlob.tpb, tmine);
+        }
+        // Increment Counter and timestep
+        tmine += cGlob.ht;
+        t_eq = cGlob.dt * (tmine/NSTEPS);
     }
+
     *tstep = tmine;
     return t_eq;
 }

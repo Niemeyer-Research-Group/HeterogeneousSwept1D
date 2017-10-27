@@ -16,53 +16,77 @@ toppath = op.dirname(thispath)
 pypath = op.join(toppath, "runtools")
 binpath = op.join(thispath, "bin")
 resultpath = op.join(thispath, "results")
+rawresultpath = op.join(thispath, "rslts")
+testpath = op.join(thispath, "tests")
 
 sys.path.append(pypath)
+
+from main_help import *
 import result_help as rh
-import main_help as mh
+import timing_help as th
 
-makr = "nvcc solmain.cu jsoncpp.cpp -o ./bin/euler -gencode arch=compute_35,code=sm_35 -O3 -restrict -std=c++11 -I/usr/include/mpi -lmpi -Xcompiler -fopenmp -lm -w --ptxas-options=-v"
-makr = shlex.split(makr)
-prog = op.join(binpath, "euler")
+eq = "heat"
 
-mpiarg = "--bind-to socket "
-eqspec = op.join(thispath, "sod.json")
+#makr = "nvcc solmain.cu jsoncpp.cpp -o ./bin/euler -gencode arch=compute_35,code=sm_35 -O3 -restrict -std=c++11 -I/usr/include/mpi -lmpi -Xcompiler -fopenmp -lm -w --ptxas-options=-v"
+#makr = shlex.split(makr)
+prog = op.join(binpath, eq)
+
+nproc = 8
+mpiarg = "" #"--bind-to socket
+eqspec = op.join(testpath, "heatTest.json")
 schemes = ["C ", "S "]
+schD = {schemes[0]: "Classic", schemes[1]: "Swept"}
 
-if op.isfile(prog):
-
-    sgrp = os.stat(prog)
-    spp = sgrp.st_mtime
-    prer = os.listdir(thispath)
-    suff = [".h", "cpp", ".cu", ".sh"]
-    prereq = [k for k in prer for n in suff if n in k]
-
-    ftim = []
-    for p in prereq:
-        fg = os.stat(p)
-        ftim.append(fg.st_mtime)
-
-    ts = sum([fo > spp for fo in ftim])
-    if ts:
-        print("Making executable...")
-        proc = sp.Popen(makr)
-        sp.Popen.wait(proc)
-
-else:
-    print("Making executable...")
-    proc = sp.Popen(makr)
-    sp.Popen.wait(proc)
+#if op.isfile(prog):
+#
+#    sgrp = os.stat(prog)
+#    spp = sgrp.st_mtime
+#    prer = os.listdir(thispath)
+#    suff = [".h", "cpp", ".cu", ".sh"]
+#    prereq = [k for k in prer for n in suff if n in k]
+#
+#    ftim = []
+#    for p in prereq:
+#        fg = os.stat(p)
+#        ftim.append(fg.st_mtime)
+#
+#    ts = sum([fo > spp for fo in ftim])
+#    if ts:
+#        print("Making executable...")
+#        proc = sp.Popen(makr)
+#        sp.Popen.wait(proc)
+#
+#else:
+#    print("Making executable...")
+#    proc = sp.Popen(makr)
+#    sp.Popen.wait(proc)
 
 
 #Say iterate over gpuA at one size and tpb
-gpus = [k/2.0 for k in range(1, 11)]
+gpus = [k/2.0 for k in range(1, 11)] #GPU Affinity
 prog += " "
 eqspec += " "
-nX = [2**k for k in range(11,21,2)]
+nX = [2**k for k in range(11,21,2)] #Num spatial pts (Grid Size)
+tpb = [2**k for k in range(6,10)]
 
-for n in nX:
-    for g in gpus:
-        exargs = "dt 1e-6 gpuA {:.4f} nX {:d}".format(g, n)
-        mh.runMPICUDA(prog, 1, schemes[0], eqspec, mpiopt=mpiarg, eqopt=exargs, timefile="timer.json ")
+for s in schemes[1:]:
+    for t in tpb:
+        for n in nX:
+            xl = int(n/10000) + 1
+            for g in gpus:
+                exargs =  " freq 200 dt 0.0001 gpuA {:.4f} nX {:d} tpb {:d} lx {:d}".format(g, n, t, xl)
+                runMPICUDA(prog, nproc, s, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=rawresultpath)
 
-
+    rd = os.listdir(rawresultpath)
+    rd = [k for k in rd if k.startswith('t')] # t for timing
+    
+    for f in rd:
+        if s in f:
+            tfile = op.join(rawresultpath, f)
+            break
+    
+    res = th.Perform(tfile)
+    eqn = eq + " " + schD[s]
+    res.plotframe(resultpath, eqn)
+    
+    

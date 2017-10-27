@@ -3,7 +3,7 @@
     CLASSIC CORE
 ---------------------------
 */
-using namespace std;
+
 /**
     The Classic Functions for the stencil operation
 */
@@ -14,152 +14,203 @@ using namespace std;
     @param States The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretization
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
+using namespace std;
+
+typedef std::vector<int> ivec;
+
 __global__ void classicStep(states *state, int ts)
 {
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
-
     stepUpdate(state, gid, ts);
 }
 
 void classicStepCPU(states *state, int numx, int tstep)
 {
-    // bool ornk = omp_get_thread_num() == 0;
-    // if (!ranks[1] && ornk) std::cout << "we're taking a classic step on the cpu: " << tstep << std::endl;
     for (int k=1; k<numx; k++)
     {
         stepUpdate(state, k, tstep);
     }
+    // if (tstep % 5000 == 5) cout << numx << " " << ranks[1] << " " << printout(state, 0) << " " << printout(state+1, 0) << " " << tstep << " " << printout(state+numx-1, 0) << " " << printout(state + numx, 0) << endl; 
 }
 
-void classicPassLeft(states *state, int idxend, int tstep)
+// void classicDPass(double *putSt, double *getSt, int tstep)
+// {   
+//     int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
+//     int rnk;
+
+//     MPI_Isend(putSt, 1, MPI_DOUBLE, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
+
+//     MPI_Isend(putSt + 1, 1, MPI_DOUBLE, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
+
+//     MPI_Irecv(getSt + 1, 1, MPI_DOUBLE, ranks[2], t0, MPI_COMM_WORLD, &req[0]);
+
+//     MPI_Irecv(getSt, 1, MPI_DOUBLE, ranks[0], t1, MPI_COMM_WORLD, &req[1]);
+
+//     MPI_Barrier(MPI_COMM_WORLD);
+//     // // MPI_Request_free(&req[0]);
+//     // // MPI_Request_free(&req[1]); 
+
+//     MPI_Wait(&req[0], &stat[0]);
+//     MPI_Wait(&req[1], &stat[1]);
+//     MPI_Get_count(&stat[0], MPI_DOUBLE, &t0);
+//     MPI_Get_count(&stat[1], MPI_DOUBLE, &t1);
+//     if (tstep < 10) 
+//     {
+//         cout << "Exit Pass: " << tstep << " rnk: " << ranks[1] << "  p: " << putSt[0] << " " << putSt[1] << "\ng: " << getSt[0] << " " << getSt[1] << endl;
+//         cout << "Exit Status: " << tstep << " rnk: " << ranks[1] << "  0: " << t0 << " 1: " << t1 << endl;
+//     }    
+// }
+
+// Blocks because one is called and then the other so the PASS blocks.
+void passClassic(REAL *puti, REAL *geti, int tstep)
 {   
-    if (cGlob.bCond[0])
-    {
-        MPI_Isend(&state[1], 1, struct_type, ranks[0], TAGS(tstep),
-                MPI_COMM_WORLD, &req[0]);
-        
-        if (!ranks[1]) std::cout << "we're passing a classic step Left on the cpu: "
-                << tstep << " " << ranks[1] << std::endl;
+    int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
+    int rnk;
 
-        MPI_Recv(&state[0], 1, struct_type, ranks[0], TAGS(tstep+100), 
-                MPI_COMM_WORLD, MPI_STATUS_IGNORE); 
-    }
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    MPI_Isend(puti, NSTATES, MPI_R, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
+
+    MPI_Isend(puti + NSTATES, NSTATES, MPI_R, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
+
+    MPI_Recv(geti + NSTATES, NSTATES, MPI_R, ranks[2], t0, MPI_COMM_WORLD, &stat[0]);
+
+    MPI_Recv(geti, NSTATES, MPI_R, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Wait(&req[0], &stat[0]);
+    MPI_Wait(&req[1], &stat[1]);
 }
 
-void classicPassRight(states *state, int idxend, int tstep)
-{
-    if (cGlob.bCond[1]) 
-    {
-        MPI_Isend(&state[idxend-1], 1, struct_type, ranks[2], TAGS(tstep+100),
-                MPI_COMM_WORLD, &req[1]);
 
-        if (!ranks[1]) std::cout << "we're passing a classic step Right on the cpu: "
-                << tstep << " " << ranks[1] << std::endl;
-
-        MPI_Recv(&state[idxend], 1, struct_type, ranks[2], TAGS(tstep), 
-                MPI_COMM_WORLD,  MPI_STATUS_IGNORE);
-    }
-}
-
-// We are working with the assumption that the parallelism is too fine to see any benefit.
-// Still struggling with the idea of the local vs parameter arrays.
 // Classic Discretization wrapper.
-double classicWrapper(states *state, int xpt, int *tstep)
+double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 {
-    if (!ranks[1]) std::cout << "Classic Decomposition" << std::endl;
     int tmine = *tstep;
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
+    // Must be declared global in equation specific header.
+    stPass = 2; 
+    numPass = NSTATES * stPass;
 
+    states putSt[stPass];
+    states getSt[stPass];
+    REAL putRe[numPass];
+    REAL getRe[numPass];
+ 
+    int t0, t1;
+    int nomar;
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
-        const int xc = cGlob.xcpu/2, xcp = xc+1;
-        const int xcr = xc + cGlob.xg;
-        const int xwrt = cGlob.xg + cGlob.xcpu;
+        cout << "Classic Decomposition GPU" << endl;
+        const int xc = cGlob.xcpu/2;
+        int xcp = xc+1;
+        const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
+        const int gpusize =  cGlob.szState * xgpp;
 
-        printf("Before the first function calls\n");
+        states *dState;
+        
+        cudaMalloc((void **)&dState, gpusize);
+        // Copy the initial conditions to the device array.
+        // This is ok, the whole array has been malloced.
+        cudaMemcpy(dState, state[1], gpusize, cudaMemcpyHostToDevice);
+
+        // Four streams for four transfers to and from cpu.
+        cudaStream_t st1, st2, st3, st4;
+        cudaStreamCreate(&st1);
+        cudaStreamCreate(&st2);
+        cudaStreamCreate(&st3);
+        cudaStreamCreate(&st4);      
+
+        cout << "Entering Loop" << endl;
 
         while (t_eq < cGlob.tf)
         {
-            
-            classicStepCPU(state, xcp, tmine);
+            classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
+            classicStepCPU(state[0], xcp, tmine);
+            classicStepCPU(state[2], xcp, tmine);
 
-            classicStepCPU(state + xcr, xcp, tmine);
- 
-            classicStep<<<cGlob.bks, cGlob.tpb>>> (state + xc, tmine);
+            cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
+            cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
+            cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
+            cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4); 
 
-            // #pragma omp parallel sections num_threads(2)
+            putSt[0] = state[0][1];
+            putSt[1] = state[2][xc]; 
+            unstructify(&putSt[0], &putRe[0]);
+            passClassic(&putRe[0], &getRe[0], tmine);
+            restructify(&getSt[0], &getRe[0]);
+            if (cGlob.bCond[0]) state[0][0] = getSt[0]; 
+            if (cGlob.bCond[1]) state[2][xcp] = getSt[1];
+
+            // if (tmine > 50 && tmine < 53)
             // {
-            //     #pragma omp section
+            //     for (int i=0; i<3; i++)
             //     {
-            //         classicStepCPU(state, xcp, tmine);
-            //     }
-            //     #pragma omp section
-            //     {
-            //         classicStepCPU(state + xcr, xcp, tmine);
+            //         cout << "ARRAY " << i << endl;
+            //         for (int k=0; k<=xcp; k++) cout << " " << printout(state[i] + k, 0);
+            //         cout << endl;
             //     }
             // }
 
-            cudaError_t error = cudaGetLastError();
-            if(error != cudaSuccess)
-            {
-                // print the CUDA error message and exit
-                printf("CUDA error tstep: %i: msg %s\n", tmine, cudaGetErrorString(error));
-            }
-
-            // Host to device first. PASS
-            # pragma omp parallel sections num_threads(2)
-            {
-                #pragma omp section
-                {
-                    classicPassRight(state + xcr, xcp, tmine);
-                }
-                #pragma omp section
-                {
-                    classicPassLeft(state, xcp, tmine);
-                }
-            }
-   
             // Increment Counter and timestep
-            if (MODULA(tmine)) t_eq += cGlob.dt;
+            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
             tmine++;
 
             // OUTPUT
             if (t_eq > twrite)
             {
-                for (int k=1; k<xcp; k++) solutionOutput(state, t_eq, k, xpt);
+                cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+
+                for (int i=0; i<3; i++)
+                {
+                    for (int k=0; k<=alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
+                }          
+
                 twrite += cGlob.freq;
             }
-            cudaDeviceSynchronize();
-        }
+            if (!(tmine % 200000)) std::cout << tmine << " | " << t_eq << " | " << std::endl;
+        }       
+
+        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+
+        cudaStreamDestroy(st1);
+        cudaStreamDestroy(st2);
+        cudaStreamDestroy(st3);
+        cudaStreamDestroy(st4);
+        
+        cudaFree(dState);
     }
     else
     {
-        const int xcp = cGlob.xcpu + 1;
+        int xcp = cGlob.xcpu + 1;
         while (t_eq < cGlob.tf)
         {
-            classicStepCPU(state, xcp, tmine);
-            if (MODULA(tmine)) t_eq += cGlob.dt;
+            classicStepCPU(state[0], xcp, tmine);
+
+            putSt[0] = state[0][1];
+            putSt[1] = state[0][cGlob.xcpu]; 
+            unstructify(&putSt[0], &putRe[0]);
+            passClassic(&putRe[0], &getRe[0], tmine);
+            restructify(&getSt[0], &getRe[0]);
+            if (cGlob.bCond[0]) state[0][0] = getSt[0]; 
+            if (cGlob.bCond[1]) state[0][xcp] = getSt[1];
+
+            // cout << "CPU ARRAY " << ranks[1]  << " | " << tmine << "\n" << "p: " << printout(&putSt[0], 0) << " | " << printout(&putSt[1], 1) << "\ng: " << printout(&getSt[0], 0) << " | " << printout(&getSt[1], 1) << endl;
+
+            if (!(tmine % NSTEPS)) 
+            {
+                t_eq += cGlob.dt;
+            }
             tmine++;
 
-            #pragma omp parallel sections num_threads(2)
-            {
-                #pragma omp section
-                {
-                    classicPassRight(state, xcp, tmine);
-                }
-                #pragma omp section
-                {
-                    classicPassLeft(state, xcp, tmine);
-                }
-            }
-
             if (t_eq > twrite)
-            
-                for (int k=1; k<xcp; k++) solutionOutput(state, t_eq, k, xpt); 
+            {
+                for (int k=1; k<alen[0]; k++)  solutionOutput(state[0], t_eq, k, xpts[0]);
                 twrite += cGlob.freq;
             }
+        }   
     }
     *tstep = tmine;
     return t_eq;

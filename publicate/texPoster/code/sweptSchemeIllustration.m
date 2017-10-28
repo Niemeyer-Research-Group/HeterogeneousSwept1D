@@ -146,13 +146,13 @@ for k = 1:4
         end
     end
 end
-%% Three
+
 
 mw = [0 100 700 300];
-annotation('line',[0.51, 0.54], [0.60, 0.78], 'LineWidth', 5)
-annotation('arrow',[0.54, 0.57], [0.78, 0.60], 'LineWidth', 5)
-annotation('line',[0.54, 0.51], [0.60, 0.78], 'LineWidth', 5)
-annotation('arrow',[0.51, 0.48], [0.78, 0.60], 'LineWidth', 5)
+annotation('arrow',[0.54, 0.505], [0.78, 0.59], 'LineWidth', 5)
+annotation('line',[0.54, 0.57], [0.78, 0.59], 'LineWidth', 5)
+annotation('arrow',[0.51, 0.545], [0.78, 0.59], 'LineWidth', 5)
+annotation('line',[0.51, 0.48], [0.78, 0.59], 'LineWidth', 5)
 set(gcf,'Position',mw)
 xlabel('Spatial point')
 ylabel('Sub-timestep')

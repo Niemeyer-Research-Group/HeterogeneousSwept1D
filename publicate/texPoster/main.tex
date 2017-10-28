@@ -149,6 +149,7 @@
     \vspace{0.5em}
     
     Recently, high-performance computing clusters, such as ONRL's Titan, have moved hybrid processing paradigm by incorporating accelerating processors like GPUs. The features of GPU architecture originally designed for high resolution and frequency displays, hundreds to thousands of simple, parallel cores, a transparent memory hierarchy, and generous on-chip memory capacity, make it a natural tool for scientific computing.  
+    \vspace{0.5em}
     
     \begin{minipage}{0.45\linewidth}
     \centering
@@ -167,7 +168,7 @@
     \captionof{figure}{CPU used in this study: Intel Xeon 2630-E5}
     \end{minipage}
     
-    \vspace{1em}
+    \vspace{1.25em}
     
     }
     
@@ -179,7 +180,8 @@
     \begin{tikzfigure}
     \includegraphics[width=\linewidth]{InitialCmpare}
     \end{tikzfigure}
-    \captionof{figure}{Swept Rule compared to Classic applied to heat equation}
+    \captionof{figure}{Best execution times per timestep for the heat equation using swept and classic decompisition}
+    \label{fig:rw}
     \end{minipage}
 	\hfill
 	\begin{minipage}{0.48\linewidth}
@@ -188,33 +190,38 @@
 	\begin{tikzfigure}
 	\includegraphics[width=\linewidth]{InitialSpeedup}
 	\end{tikzfigure}
-	\captionof{figure}{Speedup of swept rule compared to classic decomposition.}
+	\captionof{figure}{Speedup, $t_c/t_s$, of swept rule compared to classic decomposition.}
+	\label{fig:sped}
 	\end{minipage}
+	
     \vspace{1em}
     
-    These results are taken from an experiment which varies the node width, gpu affinity, and grid size. The plots here show the best result at each grid size, that is, presuming that the user knows the best run configuration for a given grid size and equation.
+    These results are taken from an experiment which varies the node width, GPU affinity (the ratio of the grid partition size on the GPU to a single CPU process), and total grid size using $8$ MPI processes, one for each CPU core, one of which controls and communicates with the GPU. Figures~\ref{fig:rw} and~\ref{fig:sped} above compare the best times for the respective procedures at each grid size. 
     
-    \vspace{5.5em}
+    \vspace{1.75em}
     
     }
     
     \column{0.25}
     \block{Conclusions}{
-	The results of this MPI+CUDA implementation match previously observed trends in CUDA only implementation of the swept rule applied to the Heat equation.
+	The results of this MPI+CUDA (GPU+CPU) implementation match previously observed trends in the GPU only implementation of the swept rule applied to the Heat equation:
 	
-	\vspace{0.5em}
+	\vspace{0.75 em}
 	
 	\begin{itemize}
-		
-		\item As communication cost becomes less significant the positive effect of the swept rule diminishes and it's extra overhead hinders it.
-		 
-		\item Need further investigations on clusters with higher latency and multiple nodes
+	 \item The performance benefits of the swept rule diminish with increasing grid size. As the cost of communication and kernel launch, which occur every sub-timestep in classic decomposition, become less significant as more computation is performed, the positive effect of the swept rule diminishes.
+	 
+	 \item The heat equation benefits from swept rule decomposition. This is because it permits a simple numerical scheme without path divergence that requires little memory overhead. Exploring more complicated equations that performed worse in the previous study, such as the Euler equations for inviscid flow, will provide a more general picture of performance benefit.
+	 
+	 \item The node width has a noticeable but minor impact on the performance of the swept rule.  In general node widths of $64 - 512$ produce the best results.  Additionally, GPU affinity did not substantially affect the results.
 		
 	\end{itemize}
-
-	More equations, particularly the Euler equations for inviscid flow which doesn't work very well on the GPU alone. 
 	
-	Remember: Upshot philosophy of swept rule -> Do as much work on the data closest to the logic unit before sending and receiving.
+	\vspace{0.75 em}
+	
+	These results are limited by the environment where they were obtained, a workstation with one CPU and one GPU. Distributed, heterogeneous environments incur substantially greater communication costs and diminish computation load per processor which should bolster the swept rule's comparative efficacy.
+	
+	\vspace{0.75em}
 	
     }
 \end{columns}
@@ -226,36 +233,38 @@
     \begin{minipage}[t]{0.3\linewidth}
 	\centering\textbf{Classic Decomposition}   
     \begin{tikzfigure}
-    \includegraphics[width=0.9\linewidth]{ClassicScheme}
+    \centering\includegraphics[width=0.86\linewidth]{ClassicScheme}
     \end{tikzfigure}
     \centering\textbf{Swept Decomposition}
     \begin{tikzfigure}
-    \includegraphics[width=0.9\linewidth]{FirstOrderStepOne}
+    \centering\includegraphics[width=0.88\linewidth]{FirstOrderStepOne}
     \end{tikzfigure}
     \begin{tikzfigure}
-    \includegraphics[width=0.9\linewidth]{FirstOrderStepTwo}
+    \centering\includegraphics[width=0.88\linewidth]{FirstOrderStepTwo}
     \end{tikzfigure}
 	\end{minipage}  
 	\hfill
-	\begin{minipage}[t]{0.67\linewidth} 
+	\begin{minipage}[t]{0.69\linewidth} 
 	As compute clusters become larger, more processors need to communicate to exchange results to continue a solution. The obvious answer to this challenge is to simply partition the spatial domain and pass the values at the edge of each node (partition) to the neighboring node. We refer to this decomposition method as Classic. 
 	
-	Classic Decomposition needs to pass every timestep.  Explain why that's a problem briefly.
+	\vspace{0.75em}
 	
-	How swept rule works.  Downside -- extra overhead.
+	Since each sub-timestep, a step in a numerical method using a three-point spatial stencil, is dependent on the results of a previous sub-timestep, each process in a classic decomposition needs to communicate values at each edge spatial point to its neighbors after each sub-timestep. While the amount of data transferred in each communication is small, the latency cost of each communication event ($100\mu s - .5\mu s$) becomes significant over the many millions of timesteps needed to evaluate a meaningful equation with stability and precision.
 	
-	Explicit methods.  Could end with a brief heat equation summary.
+	\vspace{0.75em}
 	
-	GET MORE CITATIONS (QR code for repo?)
+	The swept rule seeks to mitigate this cost by exploiting the domain of dependence. As shown in the figures to the left, the swept rule marches forward in time computing all grid points for which all the dependent values are known. When there are no grid points with known stencils, it passes the values needed to continue to a neighboring node. In this way, it communicates twice while advancing across a number of sub-timesteps equal to the node width.
 	
-	Heat EQUATION:
+	\vspace{0.75em}
+	
+	The test case for the performance results presented here is the heat equation in one dimension, 
 	\begin{equation}
 	\frac{\partial T}{\partial t} = \alpha \frac{\partial^2 T}{\partial x^2} \;.
 	\end{equation}
-	
-	Using a first-order, explicit, finite-difference approximation, forward differencing in time and central in space, we can solve for T at the new timestep with:
+
+	Using a first-order, explicit, finite-difference approximation, forward differencing in time and central in space, we can solve for T at the new timestep,
 	\begin{equation}
-	T_i^{m+1} = \text{Fo} (T_{i+1}^m + T_{i-1}^m) + (1 - 2 \text{Fo}) T_i^m \;.
+	T_i^{m+1} = \text{Fo} (T_{i+1}^m + T_{i-1}^m) + (1 - 2 \text{Fo}) T_i^m \;,
 	\end{equation}
 	where $i$ is the spatial node index and $m$ is the time index corresponding to time $t^m$.
 
@@ -268,7 +277,7 @@
         
         \item DJ Magee \& KE Niemeyer. \texttt{HeterogeneousSwept1D}. GitHub: \url{https://github.com/Niemeyer-Research-Group/HeterogeneousSwept1D}.
         v1.0 (2017)
-         
+                 
         \item M Alhubail \& Q Wang.
         ``The Swept Rule for Breaking the Latency Barrier in Time Advancing PDEs.'' (2017) \textit{Journal of Computational Physics}, in press.
         \doi{10.1016/j.jcp.2015.11.026}
@@ -277,8 +286,14 @@
         ``Accelerating solutions of PDEs with GPU-based swept time-space decomposition'' (2017) In preparation, available via {\tt \href{https://arxiv.org/abs/1705.03162}{arXiv:1705.03162}}.
 		
     \end{enumerate}
+    
+    \vspace{1em}
+    
+    \textbf{Working Repository:}
+    
+   	\centering\includegraphics[width=0.45\linewidth]{repoQR}
 
-	\vspace{1em}
+	\vspace{0.75em}
 
     }
    
@@ -308,6 +323,7 @@
 %    }}
     
     \centering\textbf{Further Information}
+    \vspace{0.5em}
     \colorlet{innerblocktitlebgcolor}{OSUorange}
     \colorlet{innerblocktitlefgcolor}{white}
     \innerblock{Niemeyer Research Group (OSU)}{\centering{\url{https://niemeyer-research-group.github.io}}}
@@ -317,10 +333,9 @@
     \colorlet{innerblocktitlefgcolor}{white}
     \innerblock{Daniel's Site }{\centering{\url{https://www.danieljmagee.com}}}
     
-    \vspace{2.5em}
+    \vspace{2.25em}
 }
     
 \end{columns}
-
 
 \end{document}

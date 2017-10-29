@@ -16,4 +16,5 @@ cubin/
 tempSol.json
 src/rslts/*.json
 main.pdf
+src/utilities/js*
 *~*

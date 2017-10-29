@@ -184,6 +184,7 @@ void wholeDiamondCPU(states *state, int tstep)
         }
     tnow++;
     }
+    if(!ranks[1]) cout << tnow << " " << tstep << endl;
 }
 
 void splitDiamondCPU(states *state, int tstep)
@@ -200,13 +201,13 @@ void splitDiamondCPU(states *state, int tstep)
             if (n == cGlob.ht)
             {
                 ssLeft[0] = state[n-1], ssLeft[1] = state[n];
-                stepUpdate(ssLeft, n, tnow);
+                stepUpdate(&ssLeft[0], n, tnow);
                 state[n] = ssLeft[1];
             }
             else if (n == cGlob.htp)
             {
                 ssRight[1] = state[n], ssRight[2] = state[n+1];
-                stepUpdate(ssRight, n, tnow);
+                stepUpdate(&ssRight[0], n, tnow);
                 state[n] = ssRight[1];
             }
             else
@@ -224,13 +225,13 @@ void splitDiamondCPU(states *state, int tstep)
             if (n == cGlob.ht)
             {
                 ssLeft[0] = state[n-1], ssLeft[1] = state[n];
-                stepUpdate(ssLeft, n, tnow);
+                stepUpdate(&ssLeft[0], n, tnow);
                 state[n] = ssLeft[1];
             }
             else if (n == cGlob.htp)
             {
                 ssRight[1] = state[n], ssRight[2] = state[n+1];
-                stepUpdate(ssRight, n, tnow);
+                stepUpdate(&ssRight[0], n, tnow);
                 state[n] = ssRight[1];
             }
             else
@@ -328,6 +329,8 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         }
 
         cout << "UP " << endl;
+
+        MPI_Send(state[2] + 5, 1, struct_type, 0, 0, MPI_COMM_WORLD);
 
         // ------------ Pass Edges ------------ // 
         // -- FRONT TO BACK -- //
@@ -560,6 +563,13 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     }
     else
     {
+        states tmp;
+        if (!ranks[1]) 
+        {
+            MPI_Recv(&tmp, 1, struct_type, 3, MPI_ANY_TAG,  MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            cout << printout(&tmp, 2) << " " << printout(state[0]+1, 2) << endl;
+        }
+       
         const int xc = cGlob.xcpu, xcp = xc+1;
         for (int k=0; k<cGlob.cBks; k++)
         { 

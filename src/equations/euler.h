@@ -65,8 +65,8 @@ struct eqConsts {
 
 //---------------// 
 struct states {
-    REALthree Q[2]; // Full Step, Midpoint step state variables
     REAL Pr; // Pressure ratio
+    REALthree Q[2]; // Full Step, Midpoint step state variables
 };
 
 std::string outVars[NVARS] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------// 
@@ -193,7 +193,7 @@ __host__ inline states icond(double xs, double lx)
     int side = (xs > HALF*lx);
     s.Q[0] = hBounds[side];
     s.Q[1] = hBounds[side];
-    s.Pr = 0.0;
+    s.Pr = -10.0;
     return s;
 }
 
@@ -247,12 +247,11 @@ __host__ void mpi_type(MPI_Datatype *dtype)
     MPI_Type_create_struct(3, n, disp, typs, &vtype);
     MPI_Type_commit(&vtype);
 
-    typs[0] = vtype;
-    typs[2] = vtype;
-    disp[1] = 3*sizeof(vtype);
-    disp[2] = 4*sizeof(REAL);
+    int n2[2] = {1, 2};
+    MPI_Datatype typs2[2] = {MPI_R, vtype}; 
+    MPI_Aint disp2[2] = {0, sizeof(REAL)};
 
-    MPI_Type_create_struct(3, n, disp, typs, dtype);
+    MPI_Type_create_struct(2, n2, disp2, typs2, dtype);
     MPI_Type_commit(dtype);
 
     MPI_Type_free(&vtype);
@@ -291,7 +290,7 @@ __device__ __host__
 __forceinline__
 REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
 {   
-    if(QNAN(pRatio) || pRatio<0)  
+    if(QNAN(pRatio) || (pRatio<1.0e-8))  
     {
         return qH;
     }
@@ -374,12 +373,13 @@ void eulerStep(states *state, int idx, int tstep)
 __device__ __host__ 
 void stepUpdate(states *state, int idx, int tstep)
 {
+    int ts = DIVMOD(tstep);
     if (tstep & 1) //Odd - Rslt is 0 for even numbers
     {
-        pressureRatio(state, idx, DIVMOD(tstep));
+        pressureRatio(state, idx, ts);
     }
     else
     {
-        eulerStep(state, idx, DIVMOD(tstep));
+        eulerStep(state, idx, ts);
     }
 }

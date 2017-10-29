@@ -117,8 +117,8 @@ int main(int argc, char *argv[])
     }
     else
     {
-        state = new states* [1];
-        cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));
+        state = new states*[1];
+        state[0] = new states[xalloc * cGlob.szState];
     }
 
     for (int i=0; i<nrows; i++)
@@ -128,7 +128,6 @@ int main(int argc, char *argv[])
     }
 
     // If you have selected scheme I, it will only initialize and output the initial values.
-    if (!ranks[1])	std::cout << "Initial Values Instantiated." << std::endl;
 
     if (scheme.compare("I"))
     {
@@ -207,17 +206,22 @@ int main(int argc, char *argv[])
     soljson << solution;
     soljson.close();
 
-    endMPI();
-
-    for (int k=0; k<nrows; k++)
-    {
-        cudaFreeHost(state[k]);
-    }
-    delete[] state;   
     if (cGlob.hasGpu)
     {
+        for (int k=0; k<3; k++)cudaFreeHost(state[k]);
         cudaDeviceSynchronize();
         cudaDeviceReset();
     }
+    else
+    {   
+        delete[] state[0];
+    }
+    delete[] state;   
+    for (int k=0; k<nrows; k++)
+    {
+        std::cout << nrows << " " << ranks[1] << " " << cGlob.hasGpu << endl; 
+    }
+
+    endMPI();
     return 0;
 }

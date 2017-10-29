@@ -30,7 +30,7 @@ void classicStepCPU(states *state, int numx, int tstep)
     {
         stepUpdate(state, k, tstep);
     }
-    // if (tstep % 5000 == 5) cout << numx << " " << ranks[1] << " " << printout(state, 0) << " " << printout(state+1, 0) << " " << tstep << " " << printout(state+numx-1, 0) << " " << printout(state + numx, 0) << endl; 
+    if ((tstep>120 && tstep <125) || tstep<6 ) cout << ranks[1] << " " << printout(state, 0) << " " << printout(state+1, 0) << " " << tstep << " " << printout(state+numx-10, 0) << " " << printout(state + numx, 0) << endl; 
 }
 
 // void classicDPass(double *putSt, double *getSt, int tstep)

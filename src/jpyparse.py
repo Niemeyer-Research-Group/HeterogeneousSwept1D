@@ -42,7 +42,7 @@ jdf = rh.Solved(dm)
 fg, axi = plt.subplots(sp[0], sp[1])
 jdf.metaparse(meta)
 jdf.plotResult(fg, axi)
-jdf.savePlot(fg, resultpath)
+jdf.savePlot(fg, resultpath, shw=True)
 dff = jdf.ddf
 ddfk = list(dff.keys())
 dsam = dff[ddfk[0]]

@@ -169,11 +169,7 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
 
 __host__ void mpi_type(MPI_Datatype *dtype)
 { 
-    MPI_Datatype typs[2] = {MPI_R, MPI_R};
-    int n[2] = {1};
-    MPI_Aint disp[2] = {0, sizeof(REAL)};
-
-    MPI_Type_create_struct(2, n, disp, typs, dtype);
+    MPI_Type_contiguous(2, MPI_R, dtype);
     MPI_Type_commit(dtype);
 }
 

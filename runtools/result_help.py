@@ -138,10 +138,12 @@ class Solved(object):
             fh.subplots_adjust(bottom=0.08, right=0.85, top=0.9, 
                                 wspace=0.15, hspace=0.25)
 
-    def savePlot(self, fh, plotpath):
+    def savePlot(self, fh, plotpath, shw=False):
         
         plotfile = op.join(plotpath, self.plotname + self.ext)
         fh.savefig(plotfile, dpi=200, bbox_inches="tight")
+        if shw:
+            plt.show()
 
     def gifify(self, plotpath, fh, ax):
 

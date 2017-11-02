@@ -184,7 +184,7 @@ void wholeDiamondCPU(states *state, int tstep)
         }
     tnow++;
     }
-    if(!ranks[1]) cout << tnow << " " << tstep << endl;
+
 }
 
 void splitDiamondCPU(states *state, int tstep)
@@ -247,7 +247,6 @@ void passSwept(REAL *passer, REAL *getter, int tstep, int turn)
 {
     int rx = turn^1;
     int t0;
-    MPI_Barrier(MPI_COMM_WORLD);
     MPI_Isend(passer, numPass, MPI_R, ranks[2*turn], TAGS(tstep),
             MPI_COMM_WORLD, &req[0]);
 
@@ -271,7 +270,6 @@ void passSwept(REAL *passer, REAL *getter, int tstep, int turn)
 // Now we need to put the last value in a bucket, and append that to the start of the next array.
 double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 {
-    if (!ranks[1]) std::cout << "Swept Decomposition" << std::endl;
     int tmine = *tstep;
     int t0;
     const int bkL = cGlob.cBks - 1;
@@ -283,10 +281,10 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     stPass = cGlob.htp; 
     numPass = NSTATES * stPass;
 
-    states *putSt = new states[stPass];
-    states *getSt = new states[stPass];
-    REAL *putRe = new REAL[numPass];
-    REAL *getRe = new REAL[numPass];
+    states putSt[stPass];
+    states getSt[stPass];
+    REAL putRe[numPass];
+    REAL getRe[numPass];
     int tou = 2000;
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
@@ -330,8 +328,6 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
         cout << "UP " << endl;
 
-        MPI_Send(state[2] + 5, 1, struct_type, 0, 0, MPI_COMM_WORLD);
-
         // ------------ Pass Edges ------------ // 
         // -- FRONT TO BACK -- //
 
@@ -348,6 +344,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
         // ------------ Step Forward ------------ //
         // ------------ SPLIT ------------ //
+        cout << "SPLIT CALL" << endl;
 
         wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
@@ -364,6 +361,8 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                 wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
             }
         }      
+
+        cout << "SPLIT " << endl;
 
         // ------------ Pass Edges ------------ //
         // -- BACK TO FRONT -- //
@@ -563,12 +562,6 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     }
     else
     {
-        states tmp;
-        if (!ranks[1]) 
-        {
-            MPI_Recv(&tmp, 1, struct_type, 3, MPI_ANY_TAG,  MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            cout << printout(&tmp, 2) << " " << printout(state[0]+1, 2) << endl;
-        }
        
         const int xc = cGlob.xcpu, xcp = xc+1;
         for (int k=0; k<cGlob.cBks; k++)

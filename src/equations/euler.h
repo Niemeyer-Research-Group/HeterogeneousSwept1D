@@ -65,8 +65,8 @@ struct eqConsts {
 
 //---------------// 
 struct states {
-    REAL Pr; // Pressure ratio
     REALthree Q[2]; // Full Step, Midpoint step state variables
+    REAL Pr; // Pressure ratio
 };
 
 std::string outVars[NVARS] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------// 
@@ -153,6 +153,7 @@ __host__ inline REAL printout(states *state, int i)
     return ret;
 }
 
+
 // Make the struct an array.
 __host__ inline void unstructify(states *putSt, REAL *putReal)
 {
@@ -164,8 +165,8 @@ __host__ inline void unstructify(states *putSt, REAL *putReal)
         putReal[gap+1] = putSt[k].Q[0].y;
         putReal[gap+2] = putSt[k].Q[0].z;
         putReal[gap+3] = putSt[k].Q[1].x;
-        putReal[gap+4] = putSt[k].Q[1].z;
-        putReal[gap+5] = putSt[k].Q[1].y;
+        putReal[gap+4] = putSt[k].Q[1].y;
+        putReal[gap+5] = putSt[k].Q[1].z;
         putReal[gap+6] = putSt[k].Pr;
     }
 }

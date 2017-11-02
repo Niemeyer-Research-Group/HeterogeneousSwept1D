@@ -14,6 +14,7 @@
     @param States The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretization
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
+#include <unistd.h>
 using namespace std;
 
 typedef std::vector<int> ivec;
@@ -30,7 +31,7 @@ void classicStepCPU(states *state, int numx, int tstep)
     {
         stepUpdate(state, k, tstep);
     }
-    if ((tstep>120 && tstep <125) || tstep<6 ) cout << ranks[1] << " " << printout(state, 0) << " " << printout(state+1, 0) << " " << tstep << " " << printout(state+numx-10, 0) << " " << printout(state + numx, 0) << endl; 
+    // if ((tstep>120 && tstep <125) || tstep<6 ) cout << ranks[1] << " " << printout(state, 0) << " " << printout(state+1, 0) << " " << tstep << " " << printout(state+numx-10, 0) << " " << printout(state + numx, 0) << endl; 
 }
 
 // void classicDPass(double *putSt, double *getSt, int tstep)
@@ -66,8 +67,6 @@ void passClassic(REAL *puti, REAL *geti, int tstep)
 {   
     int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
     int rnk;
-
-    MPI_Barrier(MPI_COMM_WORLD);
 
     MPI_Isend(puti, NSTATES, MPI_R, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
 
@@ -144,16 +143,6 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             if (cGlob.bCond[0]) state[0][0] = getSt[0]; 
             if (cGlob.bCond[1]) state[2][xcp] = getSt[1];
 
-            // if (tmine > 50 && tmine < 53)
-            // {
-            //     for (int i=0; i<3; i++)
-            //     {
-            //         cout << "ARRAY " << i << endl;
-            //         for (int k=0; k<=xcp; k++) cout << " " << printout(state[i] + k, 0);
-            //         cout << endl;
-            //     }
-            // }
-
             // Increment Counter and timestep
             if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
             tmine++;
@@ -188,16 +177,16 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         while (t_eq < cGlob.tf)
         {
             classicStepCPU(state[0], xcp, tmine);
-
+            // sleep(ranks[1]+1);
+           
             putSt[0] = state[0][1];
             putSt[1] = state[0][cGlob.xcpu]; 
             unstructify(&putSt[0], &putRe[0]);
             passClassic(&putRe[0], &getRe[0], tmine);
             restructify(&getSt[0], &getRe[0]);
+
             if (cGlob.bCond[0]) state[0][0] = getSt[0]; 
             if (cGlob.bCond[1]) state[0][xcp] = getSt[1];
-
-            // cout << "CPU ARRAY " << ranks[1]  << " | " << tmine << "\n" << "p: " << printout(&putSt[0], 0) << " | " << printout(&putSt[1], 1) << "\ng: " << printout(&getSt[0], 0) << " | " << printout(&getSt[1], 1) << endl;
 
             if (!(tmine % NSTEPS)) 
             {

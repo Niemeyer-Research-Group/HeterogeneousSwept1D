@@ -93,7 +93,6 @@ int main(int argc, char *argv[])
     std::string pth = string(argv[3]);
     std::vector<int> xpts(1, strt); //Index at which pointer array starts.
     std::vector<int> alen(1, xc + 1); //Write out | Init args vector
-    if(!ranks[1]) std::cout << "Before initial values." << std::endl;
     if (cGlob.hasGpu)
     {
         cudaSetDevice(gpuID);
@@ -217,10 +216,6 @@ int main(int argc, char *argv[])
         delete[] state[0];
     }
     delete[] state;   
-    for (int k=0; k<nrows; k++)
-    {
-        std::cout << nrows << " " << ranks[1] << " " << cGlob.hasGpu << endl; 
-    }
 
     endMPI();
     return 0;

@@ -193,7 +193,7 @@ int main(int argc, char *argv[])
 
             
             std::ofstream timejson(tpath.c_str(), std::ofstream::trunc);
-            timing[tpbs][nXs][gpuAs] = per_ts;
+            timing[tpbs][gpuAs][nXs] = per_ts;
             timejson << timing;
             timejson.close();
         }

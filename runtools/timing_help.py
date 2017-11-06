@@ -24,6 +24,8 @@ mpl.rcParams['lines.linewidth'] = 3
 mpl.rcParams["grid.alpha"] = 0.5
 mpl.rcParams["axes.grid"] = True
 
+ext = ".json"
+
 def parseJdf(fb):
     if isinstance(fb, str):
         jdict = readj(fb)
@@ -32,6 +34,12 @@ def parseJdf(fb):
         
     return jdict
     
+def find_all(name, path):
+    result = []
+    for root, dirs, files in os.walk(path):
+        if name in files:
+            result.append(os.path.join(root, name))
+    return result
 
 class Perform(object):
     
@@ -41,7 +49,7 @@ class Perform(object):
         self.dFrame = dictframes(self.oDict, self.dpth)
 
         
-    def plotframe(self, plotpath, eqName, shower=False):
+    def plotframe(self, eqName, plotpath=".", saver=True, shower=False):
         for ky in self.dFrame.keys():
             ptitle = eqName + " | tpb = " + ky
             plotname = op.join(plotpath, eqName + ky + ".pdf")
@@ -49,8 +57,9 @@ class Perform(object):
             self.dFrame[ky].plot(logx = True, logy=True, grid=True, linewidth=2, title=ptitle)
             plt.ylabel("Time per timestep (us)")
             plt.xlabel("gpuAffinity")
-            plt.legend(bbox_to_anchor=(1.05, 1), loc=2, title="gpuAffinity", borderaxespad=0.)
-            plt.savefig(plotname, dpi=1000, bbox_inches="tight")
+            if saver:
+                plt.legend(bbox_to_anchor=(1.05, 1), loc=2, title="gpuAffinity", borderaxespad=0.)
+                plt.savefig(plotname, dpi=1000, bbox_inches="tight")
             if shower:
                 plt.show()
 
@@ -70,6 +79,12 @@ class QualityRuns(object):
         self.bestLaunch.index = pd.to_numeric(self.bestLaunch)
         self.bestLaunch.sort_index(inplace=True)
 
+if __name__ == "__main__":
+    fnow = input("input the file-name without extension ")
+    f = fnow + ext
+    ff = find_all(f, "..")
+    pobj = Perform(ff[0])
+    pobj.plotframe("Euler", saver=False, shower=True)
 
 
 #def normJdf(fpath, xlist):

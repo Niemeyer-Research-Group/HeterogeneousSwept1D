@@ -27,7 +27,7 @@ import timing_help as th
 
 ext = ".json"
 
-eq = ["euler", "heat"];
+eq = ["heat", "euler"];
 
 #makr = "nvcc solmain.cu jsoncpp.cpp -o ./bin/euler -gencode arch=compute_35,code=sm_35 -O3 -restrict -std=c++11 -I/usr/include/mpi -lmpi -Xcompiler -fopenmp -lm -w --ptxas-options=-v"
 #makr = shlex.split(makr)
@@ -36,7 +36,7 @@ eq = ["euler", "heat"];
 nproc = 8
 mpiarg = "" #"--bind-to socket
 tstrng = os.listdir(testpath)
-schemes = ["C", "S"]
+schemes = ["S", "C"]
 schD = {schemes[0]: "Classic", schemes[1]: "Swept"}
 #if op.isfile(prog):
 #
@@ -90,7 +90,6 @@ for p in eq:
     
         for t in tpb:
             for n in nX:
-                break
                 xl = int(n/10000) + 1
                 for g in gpus:
                     exargs =  " freq 200 gpuA {:.4f} nX {:d} tpb {:d} lx {:d}".format(g, n, t, xl)
@@ -98,4 +97,4 @@ for p in eq:
 
         tfile = op.join(rawresultpath, timeTitle)
         res = th.Perform(tfile)
-        res.plotframe(eqn, plotpath=resultpath)
+        res.plotdict(eqn, plotpath=resultpath)

@@ -67,7 +67,7 @@ schD = {schemes[0]: "Classic", schemes[1]: "Swept"}
 gpus = [k/1.5 for k in range(1, 15)] #GPU Affinity
 nX = [2**k for k in range(12,21)] #Num spatial pts (Grid Size)
 tpb = [2**k for k in range(6,10)]
-ac = 0
+ac = 1
 
 #%%
 for p in eq:
@@ -78,19 +78,24 @@ for p in eq:
     eqspec += " "
     for sc in schemes:
         timeTitle = "t"+p.title()+sc+ext
-        sc += " "
         print(timeTitle)
+    
+        eqn = p + " " + schD[sc]
+        print(eqn)
+        if not ac:
+            ac += 1
+            break
+
+        sc += " "
+    
         for t in tpb:
             for n in nX:
+                break
                 xl = int(n/10000) + 1
                 for g in gpus:
                     exargs =  " freq 200 gpuA {:.4f} nX {:d} tpb {:d} lx {:d}".format(g, n, t, xl)
                     runMPICUDA(prog, nproc, sc, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=rawresultpath)
 
         tfile = op.join(rawresultpath, timeTitle)
-
         res = th.Perform(tfile)
-        eqn = eq + " " + schD[sc]
-        res.plotframe(resultpath, eqn)
-    
-    
+        res.plotframe(eqn, plotpath=resultpath)

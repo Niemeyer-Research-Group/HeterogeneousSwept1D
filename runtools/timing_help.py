@@ -56,9 +56,9 @@ class Perform(object):
         
             self.dFrame[ky].plot(logx = True, logy=True, grid=True, linewidth=2, title=ptitle)
             plt.ylabel("Time per timestep (us)")
-            plt.xlabel("gpuAffinity")
+            plt.xlabel("Grid Size")
             if saver:
-                plt.legend(bbox_to_anchor=(1.05, 1), loc=2, title="gpuAffinity", borderaxespad=0.)
+                plt.legend(bbox_to_anchor=(1.05, 1), loc=2, title="GPU Affinity", borderaxespad=0.)
                 plt.savefig(plotname, dpi=1000, bbox_inches="tight")
             if shower:
                 plt.show()

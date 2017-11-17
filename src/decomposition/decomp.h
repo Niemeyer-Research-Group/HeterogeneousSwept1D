@@ -147,6 +147,10 @@ void initArgs()
 
 void solutionOutput(states *outState, double tstamp, int idx, int strt)
 {
+    #ifdef NOS
+        return; // Prevents write out in performance experiments so they don't take all day.
+    #endif
+
     std::string tsts = std::to_string(tstamp);
     double xpt = indexer(cGlob.dx, idx, strt);
     std::string xpts = std::to_string(xpt);

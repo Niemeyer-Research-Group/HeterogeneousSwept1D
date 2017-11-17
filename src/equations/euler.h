@@ -67,6 +67,8 @@ struct eqConsts {
 struct states {
     REALthree Q[2]; // Full Step, Midpoint step state variables
     REAL Pr; // Pressure ratio
+    // size_t tstep; // Consider this for padding.  Unfortunately, requires much refactoring.
+    // Test this equation without setting the block width.  Should be 14 blocks resulting in bank conflict.
 };
 
 std::string outVars[NVARS] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------// 

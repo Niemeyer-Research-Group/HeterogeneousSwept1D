@@ -67,6 +67,7 @@ struct eqConsts {
 //---------------// 
 struct states{
     REAL T[2];
+    size_t tstep; // Consider as padding. 
 };
 
 typedef Json::Value jsons;

@@ -1,6 +1,9 @@
+# DEF adds extra defines. Specificially -DNOS=1. This prevents the program from writing the solution out so it can be 
+# performance tested more efficiently.
+# run make DEF="-DNOS=1"
+DEF :=
 
-NATLIB := -lm -std=c++11 -gencode arch=compute_35,code=sm_35 -L$(LD_LIBRARY_PATH) -restrict -O3 -w --ptxas-options=-v
-
+NATLIB := -lm -std=c++11 -gencode arch=compute_35,code=sm_35 -L$(LD_LIBRARY_PATH) -restrict -O3 -w --ptxas-options=-v $(DEF)
 
 CPREQ := solmain.cu utilities/jsoncpp.cpp
 
@@ -12,5 +15,5 @@ default: ./bin/heat ./bin/euler ./bin/cons
 ./bin/heat: $(CPREQ) equations/heat.h equations/heads.h decomposition/decomp.h decomposition/classic.h decomposition/swept.h
 	nvcc $(CPREQ) -o ./bin/heat -DHEAT=1 $(NATLIB) -I/usr/include/mpi -I./equations -I./decomposition -I./utilities -lmpi
 
-./bin/cons: $(CPREQ) equations/constantF.h equations/heads.h decomposition/decomp.h decomposition/classic.h decomposition/swept.h
+./bin/cons: $(CPREQ) equations/constantF.h equations/heads.h decomposition/%.h
 	nvcc $(CPREQ) -o ./bin/cons -DCONS=1 $(NATLIB) -I/usr/include/mpi -I./equations -I./decomposition -I./utilities -lmpi

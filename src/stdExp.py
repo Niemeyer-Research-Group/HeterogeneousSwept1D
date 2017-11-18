@@ -38,6 +38,7 @@ mpiarg = "" #"--bind-to socket
 tstrng = os.listdir(testpath)
 schemes = ["S", "C"]
 schD = {schemes[0]: "Classic", schemes[1]: "Swept"}
+
 #if op.isfile(prog):
 #
 #    sgrp = os.stat(prog)

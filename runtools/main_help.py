@@ -38,6 +38,14 @@ def readj(f):
     fobj.close()
     return j.loads(fr)
 
+def undict(d):
+    dp = depth(d)
+    if dp>2:
+        return {float(dk): undict(d[dk]) for dk in d.keys()}
+    else:
+        return sorted([(int(k), float(v)) for k, v in d.items()])
+    
+
 def makeList(v):
     if isinstance(v, collections.Iterable):
         return v

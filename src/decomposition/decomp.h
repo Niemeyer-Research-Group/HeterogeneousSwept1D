@@ -22,6 +22,7 @@ struct globalism {
 // Topology
     int nGpu, nX;
     int xg, xcpu;
+    int nWrite;
     bool hasGpu;
     double gpuA;
 
@@ -38,10 +39,7 @@ struct globalism {
 };
 
 globalism cGlob;
-
 jsons inJ;
-jsons solution;
-jsons timing;
 
 //Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
@@ -130,6 +128,7 @@ void initArgs()
 
     // Different schemes!
     cGlob.dx = cGlob.lx/(double)cGlob.nX; // Spatial step
+    cGlob.nWrite = cGlob.tf/cGlob.freq + 2;
     inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
 
     equationSpecificArgs(inJ);

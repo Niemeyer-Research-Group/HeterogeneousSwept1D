@@ -43,7 +43,9 @@ int main(int argc, char *argv[])
 {
     makeMPI(argc, argv);
 
-    std::string ext = ".json";
+    std::string i_ext = ".json";
+    std::string s_ext = ".dat";
+    std::string t_ext = ".csv";
     std::string myrank = std::to_string(ranks[1]);
     std::string sout = argv[3];
     sout.append(myrank);
@@ -84,6 +86,7 @@ int main(int argc, char *argv[])
     */
     int strt = cGlob.xcpu * ranks[1] + cGlob.xg * smGpu; 
     states **state;
+    states **solutionState = new states* [cGlob.nWrite];
 
     int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
     int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
@@ -179,35 +182,32 @@ int main(int argc, char *argv[])
             std::cout << n_timesteps << " timesteps" << std::endl;
             std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
-            std::string tpath = pth + "/t" + fspec + scheme + ext;
-            try {
-                std::ifstream tjson(tpath, std::ifstream::in);
-                tjson >> timing;
-                tjson.close();
-            }
-            catch (...) {}
-
-            std::string tpbs = std::to_string(cGlob.tpb);
-            std::string nXs = std::to_string(cGlob.nX);
-            std::string gpuAs = std::to_string(cGlob.gpuA);
-
-            
-            std::ofstream timejson(tpath.c_str(), std::ofstream::trunc);
-            timing[tpbs][gpuAs][nXs] = per_ts;
-            timejson << timing;
-            timejson.close();
+            std::string tpath = pth + fspec + scheme + t_ext
+            FIle * timeOut;
+            timeOut = fopen(tpath, "a+");
+            fprintf(timeOut, "%d,%.4f,%d,%.8f",cGlob.tpb, cGlob.gpuA, cGlob.nX, per_ts);
+            timeOut.close();
         }
     }
 
-    std::string spath = pth + "/s" + fspec + "_" + std::to_string(ranks[1]) + ext;
-    std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
-    if (!ranks[1]) solution["meta"] = inJ;
-    soljson << solution;
-    soljson.close();
+    int nOut = cGlob.hasGpu * cGlob.xg + cGlob.xcpu + 2;
+    std::string spath = pth + "/" + fspec + "_" + std::to_string(ranks[1]) + s_ext;
+    FILE * solOut;
+    solOut = fopen(spath, "w");
+    double meta[] = {cGlob.dx, cGlob.dt, cGlob.tf, cGlob.nX, cGlob.gpuA, cGlob.tpb, cGlob.cBks, cGlob.gBks} 
+    fwrite(meta, sizeof(REAL), sizeof(meta), solOut);
+
+    for (int k=0; k<cGlob.nWrite; k++) 
+    {
+        fwrite(solutionState[k], sizeof(REAL), nOut, solOut);
+        fprintf(solOut, "\n");
+    }
+
+    solOut.close();
 
     if (cGlob.hasGpu)
     {
-        for (int k=0; k<3; k++)cudaFreeHost(state[k]);
+        for (int k=0; k<3; k++) cudaFreeHost(state[k]);
         cudaDeviceSynchronize();
         cudaDeviceReset();
     }
@@ -216,6 +216,7 @@ int main(int argc, char *argv[])
         delete[] state[0];
     }
     delete[] state;   
+    delete[] solutionState;
 
     endMPI();
     return 0;

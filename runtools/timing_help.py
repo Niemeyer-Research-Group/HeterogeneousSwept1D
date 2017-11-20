@@ -59,23 +59,23 @@ class Perform(object):
 
     def plotdict(self, eqName, plotpath=".", saver=True, shower=False, swap=False):
         for k0 in self.oDict.keys():
+            plt.figure()
             ptitle = eqName + " | tpb = " + k0
             plotname = op.join(plotpath, eqName + k0 + ".pdf")
             if swap:
-                self.nDict = swapKeys(self.oDict[k0])
+                nDict = swapKeys(self.oDict[k0])
             else:
-                self.nDict = self.oDict[k0]
-            lg = sorted(self.nDict.keys())
+                nDict = self.oDict[k0]
+            lg = sorted(nDict.keys())
             lg = lg[1::2]
             for k1 in lg:
                 x = []
                 y = []
-                lo = [int(k) for k in self.nDict[k1].keys()]
+                lo = [int(k) for k in nDict[k1].keys()]
                 x = sorted(lo)
                 for k2 in x:
-                    y.append(self.nDict[k1][str(k2)])
+                    y.append(nDict[k1][str(k2)])
                     
-
                 print(x, y)
                 plt.loglog(x, y, linewidth=2, label=k1)
             plt.grid(True)
@@ -88,6 +88,8 @@ class Perform(object):
                 plt.savefig(plotname, dpi=1000, bbox_inches="tight")
             if shower:
                 plt.show()
+            
+          
         
     def plotframe(self, eqName, plotpath=".", saver=True, shower=False):
         for ky in self.dFrame.keys():
@@ -136,8 +138,6 @@ class Perform1(object):
                 for k2 in x:
                     y.append(self.nDict[k1][str(k2)])
                     
-
-                print(x, y)
                 plt.loglog(x, y, linewidth=2, label=k1)
             plt.grid(True)
             plt.title(ptitle)

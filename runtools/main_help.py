@@ -38,12 +38,16 @@ def readj(f):
     fobj.close()
     return j.loads(fr)
 
-def undict(d):
+def undict(d, kind='dict'):
     dp = depth(d)
     if dp>2:
         return {float(dk): undict(d[dk]) for dk in d.keys()}
     else:
-        return sorted([(int(k), float(v)) for k, v in d.items()])
+        if kind=="tuple":
+            return sorted([(int(k), float(v)) for k, v in d.items()])
+        elif kind=="dict":
+            return {int(k): float(v) for k, v in sorted(d.items())}
+            
     
 
 def makeList(v):

@@ -13,6 +13,7 @@ from main_help import *
 import matplotlib.pyplot as plt
 import timing_help as th
 from sklearn import linear_model
+from sklearn.metrics import mean_squared_error, r2_score
 import re
 
 thispath = op.abspath(op.dirname(__file__))
@@ -50,27 +51,33 @@ for t in res:
     odict = odict[(odict.nX != 0)]
     od.append(odict)
     
-rg = []
-ffult = pd.DataFrame()
-for i, o in enumerate(od):
-    gA = np.arange(2*o.min()[1], o.max()[1]+1, o.min()[1])
-    nXA = np.arange(2*o.min()[2], o.max()[2]+1, o.min()[2])
-    fx = np.array(np.meshgrid(tpbA, gA, nXA)).T.reshape(-1,3)
-    ox = o[cols[:-1]]
-    oy = o[cols[-1]]
-    rrg.fit(ox, oy)
-    fy = rrg.predict(fx)
-    ffy = pd.DataFrame(np.vstack((fx.T, fy.T)).T, columns=cols)
-    ffy = ffy.set_index(cols[0]).set_index(cols[1], append=True).set_index(cols[2], append=True)
-    ffyo = ffy.unstack(cols[2])
-    ffmn = pd.DataFrame(ffyo.min().unstack(0))
-    ffmn.columns = ['time']
-    rg.append(rrg)
-    ffult[eq[i] + " " + sch[i]] = ffmn.time
-    plt.title("Best Times")
-    plt.ylabel("Time per timestep (us)")
-    plt.xlabel("Grid Size")
-    plt.legend()
+pr = th.Perform2(od[1])
+fitmod = pr.modelGeneral(rrg)
+pr.transform()
+rsq = r2_score(pr.oFrame.time, fitmod.predict(pr.oFrame[cols[:-1]]))
+print("R^2 {:3f}".format(rsq))
+
+#rg = []
+#ffult = pd.DataFrame()
+#for i, o in enumerate(od):
+#    gA = np.arange(2*o.min()[1], o.max()[1]+1, o.min()[1])
+#    nXA = np.arange(2*o.min()[2], o.max()[2]+1, o.min()[2])
+#    fx = np.array(np.meshgrid(tpbA, gA, nXA)).T.reshape(-1,3)
+#    ox = o[cols[:-1]]
+#    oy = o[cols[-1]]
+#    rrg.fit(ox, oy)
+#    fy = rrg.predict(fx)
+#    ffy = pd.DataFrame(np.vstack((fx.T, fy.T)).T, columns=cols)
+#    ffy = ffy.set_index(cols[0]).set_index(cols[1], append=True).set_index(cols[2], append=True)
+#    ffyo = ffy.unstack(cols[2])
+#    ffmn = pd.DataFrame(ffyo.min().unstack(0))
+#    ffmn.columns = ['time']
+#    rg.append(rrg)
+#    ffult[eq[i] + " " + sch[i]] = ffmn.time
+#    plt.title("Best Times")
+#    plt.ylabel("Time per timestep (us)")
+#    plt.xlabel("Grid Size")
+#    plt.legend()
     
     
     

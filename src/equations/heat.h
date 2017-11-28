@@ -105,7 +105,7 @@ __host__ double indexer(double dx, int i, int s)
 
 __host__ REAL printout(states *state, int i)
 {
-    return state->T[1];
+    return state->T[0];
 }
 
 
@@ -124,7 +124,7 @@ __host__ inline void unstructify(states *putSt, REAL *putReal)
 // Make the struct an array a struct.
 __host__ inline void restructify(states *getSt, REAL *getReal)
 {
-    int gap;                \
+    int gap;                
     for (int k=0; k<stPass; k++)
     {
         gap = k*NSTATES;
@@ -168,9 +168,32 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
     inl[idx] = icond(xss); 
 }
 
+void mpi_type(MPI_Datatype *dtype)
+{ 
+    //double 3 type
+    states state_ex;
+    MPI_Datatype vtype;
+    MPI_Datatype typs[3] = {MPI_R, MPI_R, MPI_R};
+    int n[] = {1, 1, 1};
+    MPI_Aint disp[] = {0, sizeof(REAL), 2*sizeof(REAL)};
+
+    MPI_Type_create_struct(3, n, disp, typs, &vtype);
+    MPI_Type_commit(&vtype);
+
+    int n2[2] = {2, 1};
+    MPI_Datatype typs2[2] = {vtype, MPI_R}; 
+    MPI_Aint disp2[2] = {0, 6*sizeof(REAL)};
+    // disp2[0] = &state_ex.Q[0] - &state_ex;
+    // disp2[1] = &state_ex.Pr - &state_ex;
+
+    MPI_Type_create_struct(2, n2, disp2, typs2, dtype);
+    MPI_Type_commit(dtype);
+
+    MPI_Type_free(&vtype);
+}
 __host__ void mpi_type(MPI_Datatype *dtype)
 { 
-    MPI_Type_contiguous(2, MPI_R, dtype);
+    MPI_Type_create_struct(1, 2, 0, MPI_R, dtype);
     MPI_Type_commit(dtype);
 }
 

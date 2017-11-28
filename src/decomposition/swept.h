@@ -243,17 +243,16 @@ void splitDiamondCPU(states *state, int tstep)
     }
 }
 
-void passSwept(REAL *passer, REAL *getter, int tstep, int turn)
+void passSwept(state *passer, state *getter, int tstep, int turn)
 {
     int rx = turn^1;
     int t0;
-    MPI_Isend(passer, numPass, MPI_R, ranks[2*turn], TAGS(tstep),
+    MPI_Isend(passer, cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
             MPI_COMM_WORLD, &req[0]);
 
-    MPI_Recv(getter, numPass, MPI_R, ranks[2*rx], TAGS(tstep),
+    MPI_Recv(getter, cGlob.htp, struct_type, ranks[2*rx], TAGS(tstep),
             MPI_COMM_WORLD, &stat[0]);
 
-    MPI_Barrier(MPI_COMM_WORLD);
     MPI_Wait(&req[0], &stat[0]);
 }
 
@@ -281,10 +280,10 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     stPass = cGlob.htp; 
     numPass = NSTATES * stPass;
 
-    states putSt[stPass];
-    states getSt[stPass];
-    REAL putRe[numPass];
-    REAL getRe[numPass];
+    // states putSt[stPass];
+    // states getSt[stPass];
+    // REAL putRe[numPass];
+    // REAL getRe[numPass];
     int tou = 2000;
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
@@ -334,13 +333,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
         cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
 
-        for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
-        unstructify(&putSt[0], &putRe[0]);
+        // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+        // unstructify(&putSt[0], &putRe[0]);
 
-        passSwept(&putRe[0], &getRe[0], tmine, 0);
+        // passSwept(&putRe[0], &getRe[0], tmine, 0);
+        passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
 
-        restructify(&getSt[0], &getRe[0]);
-        for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
+        // restructify(&getSt[0], &getRe[0]);
+        // for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
 
         // ------------ Step Forward ------------ //
         // ------------ SPLIT ------------ //
@@ -370,13 +370,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
         cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
 
-        for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
-        unstructify(&putSt[0], &putRe[0]);
+        // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
+        // unstructify(&putSt[0], &putRe[0]);
         
-        passSwept(&putRe[0], &getRe[0], tmine+1, 1);
+        // passSwept(&putRe[0], &getRe[0], tmine+1, 1);
+        passSwept(state[2] + xc, state[0], tmine+1, 1);
         
-        restructify(&getSt[0], &getRe[0]);
-        for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
+        // restructify(&getSt[0], &getRe[0]);
+        // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
         // Increment Counter and timestep
         tmine += cGlob.ht;
@@ -405,13 +406,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
             cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
     
-            for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
-            unstructify(&putSt[0], &putRe[0]);
+            // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+            // unstructify(&putSt[0], &putRe[0]);
             
-            passSwept(&putRe[0], &getRe[0], tmine, 0);
-            
-            restructify(&getSt[0], &getRe[0]);
-            for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
+            // passSwept(&putRe[0], &getRe[0], tmine, 0);
+            passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
+        
+            // restructify(&getSt[0], &getRe[0]);
+            // for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
 
             // Increment Counter and timestep
             tmine += cGlob.ht;
@@ -442,13 +444,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
             cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
     
-            for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
-            unstructify(&putSt[0], &putRe[0]);
+            // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
+            // unstructify(&putSt[0], &putRe[0]);
             
-            passSwept(&putRe[0], &getRe[0], tmine, 1);
+            // passSwept(&putRe[0], &getRe[0], tmine, 1);
+            passSwept(state[2] + xc, state[0], tmine, 1);
             
-            restructify(&getSt[0], &getRe[0]);
-            for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
+            // restructify(&getSt[0], &getRe[0]);
+            // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
             // Increment Counter and timestep
             tmine += cGlob.ht;
@@ -491,13 +494,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                 cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
                 cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
         
-                for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
-                unstructify(&putSt[0], &putRe[0]);
+                // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+                // unstructify(&putSt[0], &putRe[0]);
                 
-                passSwept(&putRe[0], &getRe[0], tmine, 0);
+                // passSwept(&putRe[0], &getRe[0], tmine, 0);
+                passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
                 
-                restructify(&getSt[0], &getRe[0]);
-                for (int k=0; k<cGlob.htp; k++) state[2][k + xcp] = getSt[k];
+                // restructify(&getSt[0], &getRe[0]);
+                // for (int k=0; k<cGlob.htp; k++) state[2][k + xcp] = getSt[k];
 
                 // ------------ Step Forward ------------ //
                 // ------------ SPLIT ------------ //
@@ -523,13 +527,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                 cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
                 cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
         
-                for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
-                unstructify(&putSt[0], &putRe[0]);
+                // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
+                // unstructify(&putSt[0], &putRe[0]);
                 
-                passSwept(&putRe[0], &getRe[0], tmine, 1);
+                // passSwept(&putRe[0], &getRe[0], tmine, 1);
+                passSwept(state[2] + xc, state[0], tmine+1, 1);
                 
-                restructify(&getSt[0], &getRe[0]);
-                for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
+                // restructify(&getSt[0], &getRe[0]);
+                // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
                 // Increment Counter and timestep
                 tmine += cGlob.ht;
@@ -569,13 +574,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
         }        
 
-        for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
-        unstructify(&putSt[0], &putRe[0]);
+        // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+        // unstructify(&putSt[0], &putRe[0]);
         
-        passSwept(&putRe[0], &getRe[0], tmine, 0);
+        // passSwept(&putRe[0], &getRe[0], tmine, 0);
+        passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
         
-        restructify(&getSt[0], &getRe[0]);
-        for (int k=0; k<cGlob.htp; k++) state[0][k + xcp] = getSt[k];
+        // restructify(&getSt[0], &getRe[0]);
+        // for (int k=0; k<cGlob.htp; k++) state[0][k + xcp] = getSt[k];
 
         //Split
         for (int k=0; k<(cGlob.cBks); k++)
@@ -592,13 +598,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
         // -- BACK TO FRONT -- //
 
-        for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
-        unstructify(&putSt[0], &putRe[0]);
+        // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
+        // unstructify(&putSt[0], &putRe[0]);
         
-        passSwept(&putRe[0], &getRe[0], tmine+1, 1);
+        // passSwept(&putRe[0], &getRe[0], tmine+1, 1);
+        passSwept(state[0] + xc, state[0], tmine+1, 1);
         
-        restructify(&getSt[0], &getRe[0]);
-        for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
+        // restructify(&getSt[0], &getRe[0]);
+        // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
         tmine += cGlob.ht;
         t_eq = cGlob.dt * (tmine/NSTEPS);
@@ -612,13 +619,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                 wholeDiamondCPU(state[0] + k*cGlob.tpb, tmine);
             }
 
-            for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
-            unstructify(&putSt[0], &putRe[0]);
+            // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+            // unstructify(&putSt[0], &putRe[0]);
             
-            passSwept(&putRe[0], &getRe[0], tmine, 0);
+            // passSwept(&putRe[0], &getRe[0], tmine, 0);
+            passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
             
-            restructify(&getSt[0], &getRe[0]);
-            for (int k=0; k<cGlob.htp; k++) state[0][k+xcp] = getSt[k];
+            // restructify(&getSt[0], &getRe[0]);
+            // for (int k=0; k<cGlob.htp; k++) state[0][k+xcp] = getSt[k];
 
             tmine += cGlob.ht;
             t_eq = cGlob.dt * (tmine/NSTEPS);
@@ -635,13 +643,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                 }
             }
 
-            for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
-            unstructify(&putSt[0], &putRe[0]);
+            // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
+            // unstructify(&putSt[0], &putRe[0]);
             
-            passSwept(&putRe[0], &getRe[0], tmine, 1);
+            // passSwept(&putRe[0], &getRe[0], tmine, 1);
+            passSwept(state[0] + xc, state[0], tmine, 1);
             
-            restructify(&getSt[0], &getRe[0]);
-            for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
+            // restructify(&getSt[0], &getRe[0]);
+            // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
     
             tmine += cGlob.ht;
             t_eq = cGlob.dt * (tmine/NSTEPS);
@@ -666,13 +675,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                     upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
                 }
 
-                for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
-                unstructify(&putSt[0], &putRe[0]);
+                // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
+                // unstructify(&putSt[0], &putRe[0]);
                 
-                passSwept(&putRe[0], &getRe[0], tmine, 0);
-                
-                restructify(&getSt[0], &getRe[0]);
-                for (int k=0; k<cGlob.htp; k++) state[0][k + xcp] = getSt[k];
+                // passSwept(&putRe[0], &getRe[0], tmine, 0);
+                passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
+
+                // restructify(&getSt[0], &getRe[0]);
+                // for (int k=0; k<cGlob.htp; k++) state[0][k + xcp] = getSt[k];
 
                 // ------------ Step Forward ------------ //
                 // ------------ SPLIT ------------ //
@@ -689,13 +699,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                     }
                 }
 
-                for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
-                unstructify(&putSt[0], &putRe[0]);
+                // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
+                // unstructify(&putSt[0], &putRe[0]);
                 
-                passSwept(&putRe[0], &getRe[0], tmine+1, 1);
+                // passSwept(&putRe[0], &getRe[0], tmine+1, 1);
+                passSwept(state[0] + xc, state[0], tmine+1, 1);
                 
-                restructify(&getSt[0], &getRe[0]);
-                for (int k=0; k<cGlob.htp; k++)  state[0][k] = putSt[k];
+                // restructify(&getSt[0], &getRe[0]);
+                // for (int k=0; k<cGlob.htp; k++)  state[0][k] = putSt[k];
         
                 // Increment Counter and timestep
                 tmine += cGlob.ht;

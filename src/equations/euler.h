@@ -243,16 +243,16 @@ __host__ void mpi_type(MPI_Datatype *dtype)
 { 
     //double 3 type
     MPI_Datatype vtype;
-    MPI_Datatype typs[3] = {MPI_R, MPI_R, MPI_R};
-    int n[3] = {1};
-    MPI_Aint disp[3] = {0, sizeof(REAL), 2*sizeof(REAL)};
+    MPI_Datatype typs[] = {MPI_R, MPI_R, MPI_R};
+    int n[] = {1, 1, 1};
+    MPI_Aint disp[] = {0, sizeof(REAL), 2*sizeof(REAL)};
 
     MPI_Type_create_struct(3, n, disp, typs, &vtype);
     MPI_Type_commit(&vtype);
 
-    int n2[2] = {1, 2};
-    MPI_Datatype typs2[2] = {MPI_R, vtype}; 
-    MPI_Aint disp2[2] = {0, sizeof(REAL)};
+    int n2[] = {2, 1};
+    MPI_Datatype typs2[] = {vtype, MPI_R}; 
+    MPI_Aint disp2[] = {0, 2*sizeof(REALthree)};
 
     MPI_Type_create_struct(2, n2, disp2, typs2, dtype);
     MPI_Type_commit(dtype);
@@ -263,7 +263,6 @@ __host__ void mpi_type(MPI_Datatype *dtype)
 /*
     // MARK : Equation procedure
 */
-
 __device__ __host__ 
 __forceinline__
 REAL pressureRoe(REALthree qH)

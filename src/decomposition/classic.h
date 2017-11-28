@@ -31,36 +31,25 @@ void classicStepCPU(states *state, int numx, int tstep)
     {
         stepUpdate(state, k, tstep);
     }
-    // if ((tstep>120 && tstep <125) || tstep<6 ) cout << ranks[1] << " " << printout(state, 0) << " " << printout(state+1, 0) << " " << tstep << " " << printout(state+numx-10, 0) << " " << printout(state + numx, 0) << endl; 
 }
 
-// void classicDPass(double *putSt, double *getSt, int tstep)
-// {   
-//     int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
-//     int rnk;
+void classicPass(states *putSt, states *getSt, int tstep)
+{   
+    int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
+    int rnk;
 
-//     MPI_Isend(putSt, 1, MPI_DOUBLE, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
+    MPI_Isend(putSt, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
 
-//     MPI_Isend(putSt + 1, 1, MPI_DOUBLE, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
+    MPI_Isend(putSt + 1, 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
 
-//     MPI_Irecv(getSt + 1, 1, MPI_DOUBLE, ranks[2], t0, MPI_COMM_WORLD, &req[0]);
+    MPI_Recv(getSt + 1, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &stat[0]);
 
-//     MPI_Irecv(getSt, 1, MPI_DOUBLE, ranks[0], t1, MPI_COMM_WORLD, &req[1]);
+    MPI_Recv(getSt, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
 
-//     MPI_Barrier(MPI_COMM_WORLD);
-//     // // MPI_Request_free(&req[0]);
-//     // // MPI_Request_free(&req[1]); 
-
-//     MPI_Wait(&req[0], &stat[0]);
-//     MPI_Wait(&req[1], &stat[1]);
-//     MPI_Get_count(&stat[0], MPI_DOUBLE, &t0);
-//     MPI_Get_count(&stat[1], MPI_DOUBLE, &t1);
-//     if (tstep < 10) 
-//     {
-//         cout << "Exit Pass: " << tstep << " rnk: " << ranks[1] << "  p: " << putSt[0] << " " << putSt[1] << "\ng: " << getSt[0] << " " << getSt[1] << endl;
-//         cout << "Exit Status: " << tstep << " rnk: " << ranks[1] << "  0: " << t0 << " 1: " << t1 << endl;
-//     }    
-// }
+    MPI_Wait(&req[0], &stat[0]);
+    MPI_Wait(&req[1], &stat[1]);
+ 
+}
 
 // Blocks because one is called and then the other so the PASS blocks.
 void passClassic(REAL *puti, REAL *geti, int tstep)
@@ -76,7 +65,6 @@ void passClassic(REAL *puti, REAL *geti, int tstep)
 
     MPI_Recv(geti, NSTATES, MPI_R, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
 
-    MPI_Barrier(MPI_COMM_WORLD);
     MPI_Wait(&req[0], &stat[0]);
     MPI_Wait(&req[1], &stat[1]);
 }
@@ -95,8 +83,8 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
     states putSt[stPass];
     states getSt[stPass];
-    REAL putRe[numPass];
-    REAL getRe[numPass];
+    // REAL putRe[numPass];
+    // REAL getRe[numPass];
  
     int t0, t1;
     int nomar;
@@ -137,9 +125,10 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
             putSt[0] = state[0][1];
             putSt[1] = state[2][xc]; 
-            unstructify(&putSt[0], &putRe[0]);
-            passClassic(&putRe[0], &getRe[0], tmine);
-            restructify(&getSt[0], &getRe[0]);
+            classicPass(&putSt[0], &getSt[0], tmine);
+            // unstructify(&putSt[0], &putRe[0]);
+            // passClassic(&putRe[0], &getRe[0], tmine);
+            // restructify(&getSt[0], &getRe[0]);
             if (cGlob.bCond[0]) state[0][0] = getSt[0]; 
             if (cGlob.bCond[1]) state[2][xcp] = getSt[1];
 
@@ -181,9 +170,10 @@ double classicWrapper(states **state, ivec xpts, ivec alen, int *tstep)
            
             putSt[0] = state[0][1];
             putSt[1] = state[0][cGlob.xcpu]; 
-            unstructify(&putSt[0], &putRe[0]);
-            passClassic(&putRe[0], &getRe[0], tmine);
-            restructify(&getSt[0], &getRe[0]);
+            classicPass(&putSt[0], &getSt[0], tmine);
+            // unstructify(&putSt[0], &putRe[0]);
+            // passClassic(&putRe[0], &getRe[0], tmine);
+            // restructify(&getSt[0], &getRe[0]);
 
             if (cGlob.bCond[0]) state[0][0] = getSt[0]; 
             if (cGlob.bCond[1]) state[0][xcp] = getSt[1];

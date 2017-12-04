@@ -38,6 +38,12 @@ def readj(f):
     fobj.close()
     return j.loads(fr)
 
+# def writej(f, j):
+#     fobj = open(f, 'w')
+#     fr = fobj.read()
+#     fobj.close()
+#     return "Wrote"
+
 def undict(d, kind='dict'):
     dp = depth(d)
     if dp>2:
@@ -49,8 +55,6 @@ def undict(d, kind='dict'):
             return {int(k): float(v) for k, v in sorted(d.items())}
 
       
-    
-
 def makeList(v):
     if isinstance(v, collections.Iterable):
         return v
@@ -95,3 +99,17 @@ def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=
     sp.Popen.wait(proc)
             
     return None
+
+# Read notes into a dataFrame. Sort by date and get sha
+    
+def mostRecentResults(rpath):
+    note = readj(op.join(rpath, "notes.json"))
+    hfive = op.join(rpath, "rawResults.h5")
+    nframe = pd.DataFrame.from_dict(note).T
+    nframe = nframe.sort_values("date")
+    sha = nframe.index.values[0]
+    hframe = pd.HDFStore(hfive)
+    outframe = hframe[sha]
+    hframe.close()
+    return outframe
+    

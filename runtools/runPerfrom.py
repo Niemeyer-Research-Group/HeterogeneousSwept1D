@@ -37,25 +37,30 @@ for tf in tfiles:
     sch.append(schemes[opt[1][0]])
     res.append(th.Perform(pth))
 
+
+
 #%%
-tpbA = np.arange(64, 513, 64)
 rrg = linear_model.LinearRegression()
+
+#What we need is to take this and apply it to the jsons that exist and save them as csvs. Then we never have to do it again.  Use spyder.
+
 od = []
+ti = []
 cols = ["tpb", "GPUAffinity", "nX", "time"]
-for t in res:
+for i, t in enumerate(res):
     #t.plotdict(eq[i] + " " + sch[i], plotpath=resultpath)
     tb = undict(t.oDict)
     redict = {(k0, k1, k2): [v] for k0, d1 in tb.items() for k1, d2 in d1.items() for k2, v  in d2.items()}
     odict = pd.DataFrame(redict).T.reset_index()
     odict.columns = cols
     odict = odict[(odict.nX != 0)]
+    ti.append(eq[i] + sch[i])
     od.append(odict)
     
-pr = th.Perform2(od[1])
-fitmod = pr.modelGeneral(rrg)
-pr.transform()
-rsq = r2_score(pr.oFrame.time, fitmod.predict(pr.oFrame[cols[:-1]]))
-print("R^2 {:3f}".format(rsq))
+hdfpath = op.join(resultpath, "rawResults.h5")    
+th.longTerm(od, ti, hdfpath)
+
+
 
 #rg = []
 #ffult = pd.DataFrame()
@@ -92,4 +97,3 @@ print("R^2 {:3f}".format(rsq))
 #store2 = pd.HDFStore(finalfile)
 #store2.put('runs' ,df_all)
 #store2.close()
-

@@ -3,6 +3,7 @@
 
 '''
 
+# Dependencies: gitpython, palettable, cycler
 
 import os
 import sys
@@ -14,6 +15,11 @@ import numpy as np
 import pandas as pd
 import palettable.colorbrewer as pal
 import collections
+import git
+import json
+from datetime import datetime
+from sklearn import linear_model
+from sklearn.metrics import mean_squared_error, r2_score
 
 from main_help import *
 import result_help as rh
@@ -132,21 +138,75 @@ class RunParse(object):
         self.bestLaunch.index = pd.to_numeric(self.bestLaunch)
         self.bestLaunch.sort_index(inplace=True)
 
-    
-class Perform2(object):
-    def __init__(self, df):
-        self.oFrame = parseCsv(df)
+#takes list of dfs? title of each df, longterm hd5, option to overwrite incase you write wrong.  Use carefully!
+def longTerm(dfs, titles, fhdf, overwrite=False): 
+    today = str(datetime.date(datetime.today()))
+    repo = git.Repo(search_parent_directories=True)
+    sha = repo.head.object.hexsha
+    nList = []
+    for d, t in zip(dfs, titles):
+        d["eqs"] = [t]*len(d)
+        nList.append(d.set_index("eqs"))
 
-    def _xinterp(self):
-        tpbA = self.oFrame.tpb.unique()
-        gA = self.oFrame[cols[1]].unique()
-        nXA = self.oFrame[cols[2]].unique()
-        return np.array(np.meshgrid(tpbA, gA, nXA)).T.reshape(-1,3)
-#        tpbA = np.arange(self.oFrame.min()[0], self.oFrame.max()[0]+1, self.oFrame.min()[0])
-#        gA = np.arange(2*self.oFrame.min()[1], self.oFrame.max()[1]+1, self.oFrame.min()[1])
-#        nXA = np.arange(2*self.oFrame.min()[2], self.oFrame.max()[2]+1, self.oFrame.min()[2])
-#        return np.array(np.meshgrid(tpbA, gA, nXA)).T.reshape(-1,3)
+    dfcat = pd.concat(nList)
+    
+    print(len(dfcat))
+
+    opStore = pd.HDFStore(fhdf)
+    fnote = op.join(op.dirname(fhdf), "notes.json")
+    if op.isfile(fnote):
+        dnote = readj(fnote)
+    else:
+        dnote = dict()
+    
+    if sha in dnote.keys() and not overwrite:
+        opStore.close()
+        print("You need a new commit before you save this again")
+        return "Error: would overwrite previous entry"
+
+    dnote[sha] = {"date": today}
+    dnote[sha]["System"] = input("What machine did you run it on? ") 
+    dnote[sha]["np"] = int(input("Input # MPI procs? "))
+    dnote[sha]["note"] = input("Write a note for this data save: ")
+    
+    with open(fnote, "w") as fj:
+        json.dump(dnote, fj)
+
+    opStore[sha] = dfcat
+    opStore.close()
+    return dfcat
+
+def xinterp(dfn):
+    gA = np.linspace(min(dfn.GPUAffinity), max(dfn.GPUAffinity), 50)
+    nXA = np.linspace(min(dfn.nX), max(dfn.nX), 50)
+
+    # There should be a combinatorial function.
+    return np.array(np.meshgrid(gA, nXA)).T.reshape(-1,2)
+
+class Perform2(object):
+    def __init__(self, df, name):
+        self.oFrame = df
+        self.title = name
+        self.cols = list(df.columns.values)
+        self.tpbs = np.unique(self.oFrame.tpb)
         
+    def glmBytpb(self, mdl):
+        iframe = self.oFrame.set_index("tpb")
+        self.gframes = dict()
+        self.gR2 = dict()
+        
+        for th in self.tpbs:
+            dfn = iframe.xs(th)
+            mdl.fit(dfn[cols[1:-1]], dfn[cols[-1]])
+            xi = xinterp(dfn)
+            yi = mdl.predict(xi)
+            xyi = pd.DataFrame(np.vstack((xi.T, yi.T)).T, columns=cols[1:])
+
+            self.gframes[th] = xyi.pivot(cols[1], cols[2], cols[3])
+            self.gR2[th] = r2_score(dfn[cols[-1]], mdl.predict(dfn[cols[1:-1]]))          
+
+        return mdl
+
     def modelGeneral(self, mdl):
         xInt = self._xinterp()
         mdl.fit(self.oFrame[cols[:-1]], self.oFrame[cols[-1]])
@@ -161,11 +221,10 @@ class Perform2(object):
         self.pMinFrame = pd.DataFrame(self.ffyo.min().unstack(0))
         self.pMinFrame.columns = ["time"]
 
-
-    def plotframe(self, eqName, plotpath=".", saver=True, shower=False):
-        for ky in self.dFrame.keys():
-            ptitle = eqName + " | tpb = " + ky
-            plotname = op.join(plotpath, eqName + ky + ".pdf")
+    def plotframe(self, plotpath=".", saver=True, shower=False):
+        for ky in self.tpbs:
+            ptitle = self.title + " | tpb = " + ky
+            plotname = op.join(plotpath, self.title + ky + ".pdf")
         
             self.dFrame[ky].plot(logx = True, logy=True, grid=True, linewidth=2, title=ptitle)
             plt.ylabel("Time per timestep (us)")
@@ -176,8 +235,32 @@ class Perform2(object):
             if shower:
                 plt.show()
 
-    def plotContour(self, axVars):
-        pass
+    def plotContour(self, plotpath=".", saver=True, shower=False):
+        
+        f, ax = plt.subplots(2, 2)
+        ax = ax.ravel()
+        plotname = op.join(plotpath, self.title + "Contour.pdf")
+        for th, a in zip(self.tpbs, ax):
+            df = self.gframes[th]
+            X,Y = np.meshgrid(df.columns.values, df.index.values)
+            Z=df.values
+            mxz = np.max(np.max(Z))/1.05
+            mnz = np.min(np.min(Z))*1.1
+            lvl = np.linspace(mnz, mxz, 10)
+            CS = a.contour(X, Y, Z, levels=lvl)
+            a.clabel(CS, inline=1, fontsize=10)
+            a.set_xscale("log")
+            a.set_ylabel("GPUAffinity")
+            a.set_xlabel("Grid Size") 
+            a.set_title(str(th))
+            
+        plt.suptitle(self.title)
+                                    
+        if saver:
+            plt.savefig(plotname, dpi=1000, bbox_inches="tight")
+        if shower:
+            plt.show()
+            
         
 def plotItBar(axi, dat):
 
@@ -195,17 +278,32 @@ class QualityRuns(object):
         self.bestLaunch.index = pd.to_numeric(self.bestLaunch)
         self.bestLaunch.sort_index(inplace=True)
 
-## Make a generalized linear model out of this
-def glmRun():
-    pass
-
 if __name__ == "__main__":
-    fnow = input("input the file-name without extension ")
-    f = fnow + ext
-    ff = find_all(f, "..")
-    pobj = Perform(ff[0])
-    pobj.plotframe("Euler", saver=False, shower=True)
-
+    thispath = op.abspath(op.dirname(__file__))
+    toppath = op.dirname(thispath) #Top level of git repo
+    resultpath = op.join(toppath,'Results')
+    os.chdir(thispath)
+    
+    recentdf = mostRecentResults(resultpath)
+    
+    rrg = linear_model.LinearRegression()
+    
+    perfs = []
+    eqs = np.unique(recentdf.index.values)
+    for ty in eqs:
+        perfs.append(Perform2(recentdf.xs(ty), ty))
+        
+    print("RSquared values for GLMs:")
+    for p in perfs:
+        p.glmBytpb(rrg)
+        p.plotContour(plotpath=resultpath)
+        print(p.title, p.gR2)
+        
+    # Now compare Swept to Classic
+        
+    
+        
+#def plotContour(self, plotpath=".", saver=True, shower=False):
 
 #def normJdf(fpath, xlist):
 #    jdict = parseJ(fpath)

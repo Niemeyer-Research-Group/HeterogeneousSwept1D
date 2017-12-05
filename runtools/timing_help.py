@@ -194,17 +194,24 @@ class Perform2(object):
         iframe = self.oFrame.set_index("tpb")
         self.gframes = dict()
         self.gR2 = dict()
-        
+        i=0
+        minmaxes = []
         for th in self.tpbs:
             dfn = iframe.xs(th)
             mdl.fit(dfn[cols[1:-1]], dfn[cols[-1]])
+            minmaxes.append([min(dfn.GPUAffinity), min(dfn.nX), max(dfn.GPUAffinity), max(dfn.nX)])
             xi = xinterp(dfn)
             yi = mdl.predict(xi)
             xyi = pd.DataFrame(np.vstack((xi.T, yi.T)).T, columns=cols[1:])
 
             self.gframes[th] = xyi.pivot(cols[1], cols[2], cols[3])
-            self.gR2[th] = r2_score(dfn[cols[-1]], mdl.predict(dfn[cols[1:-1]]))          
+            self.gR2[th] = r2_score(dfn[cols[-1]], mdl.predict(dfn[cols[1:-1]])) 
+            
 
+        mnmx = np.array(minmaxes)
+        self.lims = np.array((mnmx[:,:2].max(axis=0), mnmx[:,-2:].min(axis=0)))
+        #self.lims = np.append(b, minmaxes[-2:].min(axis=1).values)
+        
         return mdl
 
     def modelGeneral(self, mdl):
@@ -222,11 +229,13 @@ class Perform2(object):
         self.pMinFrame.columns = ["time"]
 
     def plotframe(self, plotpath=".", saver=True, shower=False):
+        iframe = self.oFrame.set_index("tpb")
         for ky in self.tpbs:
             ptitle = self.title + " | tpb = " + ky
             plotname = op.join(plotpath, self.title + ky + ".pdf")
-        
-            self.dFrame[ky].plot(logx = True, logy=True, grid=True, linewidth=2, title=ptitle)
+            ifx = iframe.xs(ky).pivot(cols[1], cols[2], cols[3])
+            
+            ifx.plot(logx = True, logy=True, grid=True, linewidth=2, title=ptitle)
             plt.ylabel("Time per timestep (us)")
             plt.xlabel("Grid Size")
             if saver:
@@ -260,7 +269,6 @@ class Perform2(object):
             plt.savefig(plotname, dpi=1000, bbox_inches="tight")
         if shower:
             plt.show()
-            
         
 def plotItBar(axi, dat):
 
@@ -296,7 +304,7 @@ if __name__ == "__main__":
     print("RSquared values for GLMs:")
     for p in perfs:
         p.glmBytpb(rrg)
-        p.plotContour(plotpath=resultpath)
+        #p.plotContour(plotpath=resultpath)
         print(p.title, p.gR2)
         
     # Now compare Swept to Classic

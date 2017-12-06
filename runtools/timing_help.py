@@ -32,21 +32,20 @@ mpl.rcParams["axes.grid"] = True
 
 ylbl = "Time per timestep (us)"
 xlbl = "Grid Size"
-
 ext = ".json"
 
 schemes = {"C": "Classic", "S": "Swept"}
 
-cols = ["tpb", "GPUAffinity", "nX", "time"]
+cols = ["tpb", "gpuA", "nX", "time"]
 
 def parseJdf(fb):
     if isinstance(fb, str):
         jdict = readj(fb)
     elif isinstance(fb, dict):
         jdict=fb
-        
+
     return jdict
-    
+
 def find_all(name, path):
     result = []
     for root, dirs, files in os.walk(path):
@@ -75,7 +74,7 @@ def parseCsv(fb):
     return jframe
 
 class Perform(object):
-    
+
     def __init__(self, dataset):
         self.oDict = parseJdf(dataset) #Takes either dict or path to json.
         self.dpth = depth(self.oDict)
@@ -99,7 +98,7 @@ class Perform(object):
                 x = sorted(lo)
                 for k2 in x:
                     y.append(nDict[k1][str(k2)])
-                    
+
                 print(x, y)
                 plt.loglog(x, y, linewidth=2, label=k1)
             plt.grid(True)
@@ -112,14 +111,14 @@ class Perform(object):
                 plt.savefig(plotname, dpi=1000, bbox_inches="tight")
             if shower:
                 plt.show()
-            
-          
-        
+
+
+
     def plotframe(self, eqName, plotpath=".", saver=True, shower=False):
         for ky in self.dFrame.keys():
             ptitle = eqName + " | tpb = " + ky
             plotname = op.join(plotpath, eqName + ky + ".pdf")
-        
+
             self.dFrame[ky].plot(logx = True, logy=True, grid=True, linewidth=2, title=ptitle)
             plt.ylabel("Time per timestep (us)")
             plt.xlabel("Grid Size")
@@ -128,7 +127,7 @@ class Perform(object):
                 plt.savefig(plotname, dpi=1000, bbox_inches="tight")
             if shower:
                 plt.show()
-    
+
 
 class RunParse(object):
     def __init__(self, dataMat):
@@ -139,7 +138,7 @@ class RunParse(object):
         self.bestLaunch.sort_index(inplace=True)
 
 #takes list of dfs? title of each df, longterm hd5, option to overwrite incase you write wrong.  Use carefully!
-def longTerm(dfs, titles, fhdf, overwrite=False): 
+def longTerm(dfs, titles, fhdf, overwrite=False):
     today = str(datetime.date(datetime.today()))
     repo = git.Repo(search_parent_directories=True)
     sha = repo.head.object.hexsha
@@ -149,7 +148,7 @@ def longTerm(dfs, titles, fhdf, overwrite=False):
         nList.append(d.set_index("eqs"))
 
     dfcat = pd.concat(nList)
-    
+
     print(len(dfcat))
 
     opStore = pd.HDFStore(fhdf)
@@ -158,17 +157,17 @@ def longTerm(dfs, titles, fhdf, overwrite=False):
         dnote = readj(fnote)
     else:
         dnote = dict()
-    
+
     if sha in dnote.keys() and not overwrite:
         opStore.close()
         print("You need a new commit before you save this again")
         return "Error: would overwrite previous entry"
 
     dnote[sha] = {"date": today}
-    dnote[sha]["System"] = input("What machine did you run it on? ") 
+    dnote[sha]["System"] = input("What machine did you run it on? ")
     dnote[sha]["np"] = int(input("Input # MPI procs? "))
     dnote[sha]["note"] = input("Write a note for this data save: ")
-    
+
     with open(fnote, "w") as fj:
         json.dump(dnote, fj)
 
@@ -176,8 +175,9 @@ def longTerm(dfs, titles, fhdf, overwrite=False):
     opStore.close()
     return dfcat
 
+
 def xinterp(dfn):
-    gA = np.linspace(min(dfn.GPUAffinity), max(dfn.GPUAffinity), 50)
+    gA = np.linspace(min(dfn.gpuA), max(dfn.gpuA), 50)
     nXA = np.linspace(min(dfn.nX), max(dfn.nX), 50)
 
     # There should be a combinatorial function.
@@ -189,7 +189,7 @@ class Perform2(object):
         self.title = name
         self.cols = list(df.columns.values)
         self.tpbs = np.unique(self.oFrame.tpb)
-        
+
     def glmBytpb(self, mdl):
         iframe = self.oFrame.set_index("tpb")
         self.gframes = dict()
@@ -199,27 +199,30 @@ class Perform2(object):
         for th in self.tpbs:
             dfn = iframe.xs(th)
             mdl.fit(dfn[cols[1:-1]], dfn[cols[-1]])
-            minmaxes.append([min(dfn.GPUAffinity), min(dfn.nX), max(dfn.GPUAffinity), max(dfn.nX)])
+            minmaxes.append([min(dfn.gpuA), min(dfn.nX), max(dfn.gpuA), max(dfn.nX)])
             xi = xinterp(dfn)
             yi = mdl.predict(xi)
             xyi = pd.DataFrame(np.vstack((xi.T, yi.T)).T, columns=cols[1:])
 
             self.gframes[th] = xyi.pivot(cols[1], cols[2], cols[3])
-            self.gR2[th] = r2_score(dfn[cols[-1]], mdl.predict(dfn[cols[1:-1]])) 
-            
+            self.gR2[th] = r2_score(dfn[cols[-1]], mdl.predict(dfn[cols[1:-1]]))
+
 
         mnmx = np.array(minmaxes)
         self.lims = np.array((mnmx[:,:2].max(axis=0), mnmx[:,-2:].min(axis=0)))
         #self.lims = np.append(b, minmaxes[-2:].min(axis=1).values)
-        
+
         return mdl
 
     def modelGeneral(self, mdl):
-        xInt = self._xinterp()
         mdl.fit(self.oFrame[cols[:-1]], self.oFrame[cols[-1]])
+        return mdl
+
+    def useModel(self, mdl):
+        mdl = modelGeneral(mdl)
+        xInt = xinterp(self.oFrame)
         yInt = mdl.predict(xInt)
         self.pFrame = pd.DataFrame(np.vstack((xInt.T, yInt.T)).T, columns=cols)
-        return mdl
 
     def transform(self):
         self.ffy = self.pFrame.set_index(cols[0]).set_index(cols[1], append=True)
@@ -234,10 +237,10 @@ class Perform2(object):
             ptitle = self.title + " | tpb = " + ky
             plotname = op.join(plotpath, self.title + ky + ".pdf")
             ifx = iframe.xs(ky).pivot(cols[1], cols[2], cols[3])
-            
+
             ifx.plot(logx = True, logy=True, grid=True, linewidth=2, title=ptitle)
-            plt.ylabel("Time per timestep (us)")
-            plt.xlabel("Grid Size")
+            plt.ylabel(ylbl)
+            plt.xlabel(xlbl)
             if saver:
                 plt.legend(bbox_to_anchor=(1.05, 1), loc=2, title="GPU Affinity", borderaxespad=0.)
                 plt.savefig(plotname, dpi=1000, bbox_inches="tight")
@@ -245,8 +248,8 @@ class Perform2(object):
                 plt.show()
 
     def plotContour(self, plotpath=".", saver=True, shower=False):
-        
-        f, ax = plt.subplots(2, 2)
+
+        f, ax = plt.subplots(2, 2, figsize=(14,8))
         ax = ax.ravel()
         plotname = op.join(plotpath, self.title + "Contour.pdf")
         for th, a in zip(self.tpbs, ax):
@@ -256,20 +259,56 @@ class Perform2(object):
             mxz = np.max(np.max(Z))/1.05
             mnz = np.min(np.min(Z))*1.1
             lvl = np.linspace(mnz, mxz, 10)
-            CS = a.contour(X, Y, Z, levels=lvl)
-            a.clabel(CS, inline=1, fontsize=10)
+            a.pcolor(X, Y, Z, levels=lvl)
+            # a.clabel(CS, inline=1, fontsize=10)
             a.set_xscale("log")
-            a.set_ylabel("GPUAffinity")
-            a.set_xlabel("Grid Size") 
+            a.set_ylabel("gpuA")
+            a.set_xlabel(xlbl)
             a.set_title(str(th))
-            
+
+        f.tight_layout(pad=0.2, w_pad=0.75, h_pad=1.0)
+        f.subplots_adjust(bottom=0.08, right=0.82, top=0.9)
         plt.suptitle(self.title)
-                                    
+        plt.colorbar()
+
         if saver:
-            plt.savefig(plotname, dpi=1000, bbox_inches="tight")
+            f.savefig(plotname, dpi=1000, bbox_inches="tight")
         if shower:
             plt.show()
-        
+
+# Change the source code?  Run it here to compare to the same
+# result in the old version
+def compareRuns(eq, alg, args, np=8, mdl=linear_model.LinearRegression()):
+    oldF = mostRecentResults(resultpath)
+    mkstr = eq.title() + schemes[alg].title()
+    oldPerf = Perform(oldF.xs(mkstr), mkstr)
+    newMod = oldPerf.modelGeneral(mdl)
+
+    #Run the new configuration
+    expath = op.join(binpath, eq.lower())
+    tp = [k for k in op.listdir(testpath) if eq.lower() in k]
+    tpath = op.join(testpath, tp[0])
+
+    outc = runMPICUDA(expath, np, alg.upper(), tpath, eqopt=args)
+
+    oc = outc.split()
+    i = oc.index("Averaged")
+    newTime = float(oc[i+1])
+    #Would be nice to get the time pipelined from the MPI program
+    argss = args.split()
+    topics = ['tpb', 'gpuA', 'nX']
+    confi = []
+    for t in topics:
+        ix = argss.index(t)
+        confi.append(float(ix+1))
+
+    oldTime = newMod.predict(np.array(confi))
+    print(oldTime, newTime)
+    ratio = oldTime/newTime
+    print(ratio)
+    return ratio
+
+
 def plotItBar(axi, dat):
 
     rects = axi.patches
@@ -287,30 +326,25 @@ class QualityRuns(object):
         self.bestLaunch.sort_index(inplace=True)
 
 if __name__ == "__main__":
-    thispath = op.abspath(op.dirname(__file__))
-    toppath = op.dirname(thispath) #Top level of git repo
-    resultpath = op.join(toppath,'Results')
-    os.chdir(thispath)
-    
     recentdf = mostRecentResults(resultpath)
-    
+
     rrg = linear_model.LinearRegression()
-    
     perfs = []
     eqs = np.unique(recentdf.index.values)
+
     for ty in eqs:
         perfs.append(Perform2(recentdf.xs(ty), ty))
-        
+
     print("RSquared values for GLMs:")
     for p in perfs:
         p.glmBytpb(rrg)
         #p.plotContour(plotpath=resultpath)
         print(p.title, p.gR2)
-        
+
     # Now compare Swept to Classic
-        
-    
-        
+
+
+
 #def plotContour(self, plotpath=".", saver=True, shower=False):
 
 #def normJdf(fpath, xlist):
@@ -321,23 +355,21 @@ if __name__ == "__main__":
 #        jd[jk] = dict()
 #        for jkk in jdict[jk].keys():
 #            jknt, idx = min([(abs(int(jkk)-x), i) for i, x in enumerate(xlist)])
-#            
+#
 #            jkn = xlist[idx]
 #            print(jknt, idx, jkk, jkn)
-#            
+#
 #            if jkn not in jd[jk].keys():
 #                jd[jk][jkn] = dict()
-#                
-#                
+#
+#
 #            jd[jk][jkn].update(jdict[jk][jkk])
-#        
-#            
+#
+#
 #    return jd
 #
 #def nicePlot(df, ptitle, ltitle):
 #    df.plot(grid=True, logy=True, title=ptitle)
 #    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, title=ltitle, borderaxespad=0.)
-#    #Saveit as pdf?    
+#    #Saveit as pdf?
 #    return True
-
-    

@@ -14,10 +14,6 @@ thispath = op.abspath(op.dirname(__file__))
 os.chdir(thispath)
 toppath = op.dirname(thispath)
 pypath = op.join(toppath, "runtools")
-binpath = op.join(thispath, "bin")
-resultpath = op.join(toppath, "results")
-rawresultpath = op.join(thispath, "rslts")
-testpath = op.join(thispath, "tests")
 
 sys.path.append(pypath)
 
@@ -80,7 +76,7 @@ for p in eq:
     for sc in schemes:
         timeTitle = "t"+p.title()+sc+ext
         print(timeTitle)
-    
+
         eqn = p + " " + schD[sc]
         print(eqn)
         if not ac:
@@ -88,7 +84,7 @@ for p in eq:
             break
 
         sc += " "
-    
+
         for t in tpb:
             for n in nX:
                 xl = int(n/10000) + 1
@@ -96,6 +92,6 @@ for p in eq:
                     exargs =  " freq 200 gpuA {:.4f} nX {:d} tpb {:d} lx {:d}".format(g, n, t, xl)
                     runMPICUDA(prog, nproc, sc, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=rawresultpath)
 
-        tfile = op.join(rawresultpath, timeTitle)
+        tfile = op.join(rspath, timeTitle)
         res = th.Perform(tfile)
         res.plotdict(eqn, plotpath=resultpath)

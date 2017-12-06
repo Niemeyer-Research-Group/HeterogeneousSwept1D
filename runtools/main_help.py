@@ -1,18 +1,28 @@
 '''
-    Python Classes and functions for running the cuda programs and 
-    parsing/plotting the performance data. 
+    Python Classes and functions for running the cuda programs and
+    parsing/plotting the performance data.
 '''
 
 import os
 import os.path as op
 import matplotlib.pyplot as plt
-from cycler import cycler
+# from cycler import cycler
+#
+# import palettable.colorbrewer as pal
+
 import pandas as pd
-import palettable.colorbrewer as pal
 import shlex
 import subprocess as sp
 import collections
 import json as j
+
+thispath = op.abspath(op.dirname(__file__))
+toppath = op.dirname(thispath)
+spath = op.join(toppath, "src")
+binpath = op.join(spath, "bin")
+rspath = op.join(spath, "rslts")
+resultpath = op.join(toppath, "results")
+testpath = op.join(spath, "tests")
 
 def numerica(df):
     df.columns = pd.to_numeric(df.columns.values)
@@ -54,7 +64,7 @@ def undict(d, kind='dict'):
         elif kind=="dict":
             return {int(k): float(v) for k, v in sorted(d.items())}
 
-      
+
 def makeList(v):
     if isinstance(v, collections.Iterable):
         return v
@@ -62,12 +72,12 @@ def makeList(v):
         return [v]
 
 #Divisions and threads per block need to be lists (even singletons) at least.
-def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency, 
+def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency,
     decomp, varfile='temp.dat', timefile=""):
 
     threadsPerBlock = makeList(threadsPerBlock)
     divisions = makeList(divisions)
-
+testpath = op.join(thispath, "tests")
     for tpb in threadsPerBlock:
         for i, dvs in enumerate(divisions):
             print("---------------------")
@@ -80,7 +90,7 @@ def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency,
             exeStr = shlex.split(execut)
             proc = sp.Popen(exeStr)
             sp.Popen.wait(proc)
-            
+
     return None
 
 #Divisions and threads per block need to be lists (even singletons) at least.
@@ -90,18 +100,19 @@ def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=
 
     runnr = "mpirun -np "
     print("---------------------")
+    os.chdir(spath)
 
     execut = runnr + "{0} ".format(nproc) + mpiopt + exece + scheme + eqfile + outdir + eqopt
 
     print(execut)
     exeStr = shlex.split(execut)
-    proc = sp.Popen(exeStr)
-    sp.Popen.wait(proc)
-            
-    return None
+    proc = sp.Popen(exeStr, stdout=PIPE)
+    cout, err = proc.communicate()
+
+    return cout
 
 # Read notes into a dataFrame. Sort by date and get sha
-    
+
 def mostRecentResults(rpath):
     note = readj(op.join(rpath, "notes.json"))
     hfive = op.join(rpath, "rawResults.h5")
@@ -112,4 +123,3 @@ def mostRecentResults(rpath):
     outframe = hframe[sha]
     hframe.close()
     return outframe
-    

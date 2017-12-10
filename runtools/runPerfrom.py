@@ -9,19 +9,12 @@ import os.path as op
 import sys
 import pandas as pd
 import numpy as np
-from main_help import *
 import matplotlib.pyplot as plt
+
+from main_help import *
 import timing_help as th
 from sklearn import linear_model
-from sklearn.metrics import mean_squared_error, r2_score
 import re
-
-thispath = op.abspath(op.dirname(__file__))
-toppath = op.dirname(thispath) #Top level of git repo
-resultpath = op.join(toppath,'Results')
-srcpath = op.join(toppath,'src') #Binary directory
-rsltpath = op.join(srcpath, 'rslts') #Top level of git repo
-os.chdir(thispath)
 
 schemes = {"C": "Classic", "S": "Swept"}
 
@@ -36,8 +29,6 @@ for tf in tfiles:
     eq.append(opt[0])
     sch.append(schemes[opt[1][0]])
     res.append(th.Perform(pth))
-
-
 
 #%%
 rrg = linear_model.LinearRegression()

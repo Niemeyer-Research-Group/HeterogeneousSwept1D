@@ -77,7 +77,6 @@ def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency,
 
     threadsPerBlock = makeList(threadsPerBlock)
     divisions = makeList(divisions)
-testpath = op.join(thispath, "tests")
     for tpb in threadsPerBlock:
         for i, dvs in enumerate(divisions):
             print("---------------------")
@@ -101,12 +100,13 @@ def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=
     runnr = "mpirun -np "
     print("---------------------")
     os.chdir(spath)
+    testpath = op.join(spath, "tests")
 
     execut = runnr + "{0} ".format(nproc) + mpiopt + exece + scheme + eqfile + outdir + eqopt
 
     print(execut)
     exeStr = shlex.split(execut)
-    proc = sp.Popen(exeStr, stdout=PIPE)
+    proc = sp.Popen(exeStr, stdout=sp.PIPE)
     cout, err = proc.communicate()
 
     return cout

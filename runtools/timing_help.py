@@ -17,6 +17,7 @@ import palettable.colorbrewer as pal
 import collections
 import git
 import json
+import statsmodels.api as sm
 from datetime import datetime
 from sklearn import linear_model
 from sklearn.metrics import mean_squared_error, r2_score
@@ -183,6 +184,8 @@ def xinterp(dfn):
     # There should be a combinatorial function.
     return np.array(np.meshgrid(gA, nXA)).T.reshape(-1,2)
 
+
+
 class Perform2(object):
     def __init__(self, df, name):
         self.oFrame = df
@@ -207,7 +210,6 @@ class Perform2(object):
             self.gframes[th] = xyi.pivot(cols[1], cols[2], cols[3])
             self.gR2[th] = r2_score(dfn[cols[-1]], mdl.predict(dfn[cols[1:-1]]))
 
-
         mnmx = np.array(minmaxes)
         self.lims = np.array((mnmx[:,:2].max(axis=0), mnmx[:,-2:].min(axis=0)))
         #self.lims = np.append(b, minmaxes[-2:].min(axis=1).values)
@@ -216,6 +218,11 @@ class Perform2(object):
 
     def modelGeneral(self, mdl):
         mdl.fit(self.oFrame[cols[:-1]], self.oFrame[cols[-1]])
+        return mdl
+
+    def modelSm(self):
+        mdl = sm.RecursiveLS(self.oFrame[cols[-1]], self.oFrame[cols[:-1]]).fit()
+        mdl.summary()
         return mdl
 
     def useModel(self, mdl):
@@ -248,7 +255,6 @@ class Perform2(object):
                 plt.show()
 
     def plotContour(self, plotpath=".", saver=True, shower=False):
-
         f, ax = plt.subplots(2, 2, figsize=(14,8))
         ax = ax.ravel()
         plotname = op.join(plotpath, self.title + "Contour.pdf")
@@ -275,6 +281,17 @@ class Perform2(object):
             f.savefig(plotname, dpi=1000, bbox_inches="tight")
         if shower:
             plt.show()
+
+class customOLS(sm.OLS):
+    def __init__(self, datadf, typ, vargs):
+        #typ needs to tell it what kind of parameters to use
+        self.oFrame = datadf
+        self.cols = list(df.columns.values)
+        self.tpbs = np.unique(self.oFrame.tpb)
+        self.typ = typ
+        self.va = vargs #Dictionary of additional arguments to stats models
+
+
 
 # Change the source code?  Run it here to compare to the same
 # result in the old version
@@ -310,7 +327,6 @@ def compareRuns(eq, alg, args, np=8, mdl=linear_model.LinearRegression()):
 
 
 def plotItBar(axi, dat):
-
     rects = axi.patches
     for r, val in zip(rects, dat):
         axi.text(r.get_x() + r.get_width()/2, val+.5, val, ha='center', va='bottom')
@@ -327,6 +343,7 @@ class QualityRuns(object):
 
 if __name__ == "__main__":
     recentdf = mostRecentResults(resultpath)
+    recentdf.columns = cols
 
     rrg = linear_model.LinearRegression()
     perfs = []
@@ -336,40 +353,9 @@ if __name__ == "__main__":
         perfs.append(Perform2(recentdf.xs(ty), ty))
 
     print("RSquared values for GLMs:")
-    for p in perfs:
-        p.glmBytpb(rrg)
-        #p.plotContour(plotpath=resultpath)
-        print(p.title, p.gR2)
+#    for p in perfs:
+#        p.glmBytpb(rrg)
+#        #p.plotContour(plotpath=resultpath)
+#        print(p.title, p.gR2)
 
     # Now compare Swept to Classic
-
-
-
-#def plotContour(self, plotpath=".", saver=True, shower=False):
-
-#def normJdf(fpath, xlist):
-#    jdict = parseJ(fpath)
-#    jd = dict()
-#    for jk in jdict.keys():
-#
-#        jd[jk] = dict()
-#        for jkk in jdict[jk].keys():
-#            jknt, idx = min([(abs(int(jkk)-x), i) for i, x in enumerate(xlist)])
-#
-#            jkn = xlist[idx]
-#            print(jknt, idx, jkk, jkn)
-#
-#            if jkn not in jd[jk].keys():
-#                jd[jk][jkn] = dict()
-#
-#
-#            jd[jk][jkn].update(jdict[jk][jkk])
-#
-#
-#    return jd
-#
-#def nicePlot(df, ptitle, ltitle):
-#    df.plot(grid=True, logy=True, title=ptitle)
-#    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, title=ltitle, borderaxespad=0.)
-#    #Saveit as pdf?
-#    return True

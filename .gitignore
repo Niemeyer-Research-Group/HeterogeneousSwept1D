@@ -18,5 +18,6 @@ src/trslt/*.json
 src/rslts/*.json
 main.pdf
 src/utilities/js*
+src/conf
 nohup*
 *~*

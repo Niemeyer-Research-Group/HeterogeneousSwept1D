@@ -90,7 +90,7 @@ for p in eq:
                 xl = int(n/10000) + 1
                 for g in gpus:
                     exargs =  " freq 200 gpuA {:.4f} nX {:d} tpb {:d} lx {:d}".format(g, n, t, xl)
-                    runMPICUDA(prog, nproc, sc, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=rawresultpath)
+                    runMPICUDA(prog, nproc, sc, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=rspath)
 
         tfile = op.join(rspath, timeTitle)
         res = th.Perform(tfile)

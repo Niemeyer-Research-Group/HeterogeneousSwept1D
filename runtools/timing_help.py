@@ -21,6 +21,7 @@ import statsmodels.api as sm
 from datetime import datetime
 from sklearn import linear_model
 from sklearn.metrics import mean_squared_error, r2_score
+import itertools
 
 from main_help import *
 import result_help as rh
@@ -74,7 +75,7 @@ def parseCsv(fb):
 
     return jframe
 
-class Perform(object):
+class PerformOld(object):
 
     def __init__(self, dataset):
         self.oDict = parseJdf(dataset) #Takes either dict or path to json.
@@ -186,7 +187,7 @@ def xinterp(dfn):
 
 
 
-class Perform2(object):
+class Perform(object):
     def __init__(self, df, name):
         self.oFrame = df
         self.title = name
@@ -282,14 +283,48 @@ class Perform2(object):
         if shower:
             plt.show()
 
-class customOLS(sm.OLS):
-    def __init__(self, datadf, typ, vargs):
+class perfModel(Perform):
+    def __init__(self, datadf, name, typ="all", vargs={}):
         #typ needs to tell it what kind of parameters to use
-        self.oFrame = datadf
-        self.cols = list(df.columns.values)
-        self.tpbs = np.unique(self.oFrame.tpb)
-        self.typ = typ
+        super().__init__(datadf, name)
         self.va = vargs #Dictionary of additional arguments to stats models
+        self.respvar = self.cols[-1]
+        if typ == "all":
+            self.it = list(itertools.combinations_with_replacement(self.cols[:-1], 2))
+
+        self.ilbl = ["|".join(k) for k in self.it] 
+        for n, o in zip(self.ilbl, self.it):
+            self.oFrame[n] = self.oFrame[o[0]] * self.oFrame[o[1]] 
+                
+        self.cols = list(self.oFrame.columns.values)
+        self.cols.remove(self.respvar)
+        
+        X = self.oFrame[self.cols]
+        y = self.oFrame[self.respvar]
+        sm.add_constant(X)
+   
+        self.nFrame = pd.DataFrame({self.respvar: self.oFrame[self.respvar], "log"+self.respvar: np.log(self.oFrame[self.respvar])})
+        self.mdl = sm.OLS(y, X)
+        self.res = self.mdl.fit() 
+        
+    def __transform(self, frame):
+        if not isinstance(frame, pd.DataFrame):
+            frame = pd.DataFrame(frame)
+            
+        for n, o in zip(self.ilbl, self.it):
+            frame[n] = frame[o[0]] * frame[o[1]] 
+            
+        return frame
+
+    def predict(self):
+        pass
+
+    def model(self):
+        pass
+             
+    
+    def __str__(self):
+        return self.title, self.res.summary()
 
 
 
@@ -350,7 +385,7 @@ if __name__ == "__main__":
     eqs = np.unique(recentdf.index.values)
 
     for ty in eqs:
-        perfs.append(Perform2(recentdf.xs(ty), ty))
+        perfs.append(perfModel(recentdf.xs(ty), ty))
 
     print("RSquared values for GLMs:")
 #    for p in perfs:

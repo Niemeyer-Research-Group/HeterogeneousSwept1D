@@ -5,7 +5,6 @@
 ---------------------------
 */
 
-
 using namespace std;
 
 typedef std::vector<int> ivec;
@@ -28,7 +27,7 @@ __global__ void upTriangle(states *state, int tstep)
 	{
 		if (tidx < (blockDim.x-k) && tidx >= k)
 		{
-            stepUpdate(temper, tidx, tstep + k); 
+            stepUpdate(temper, tidx, tstep + k);
 		}
 		__syncthreads();
 	}
@@ -51,13 +50,13 @@ downTriangle(states *state, int tstep, int offset)
 
     int tid = threadIdx.x; // Thread index
     int mid = blockDim.x >> 1; // Half of block size
-    int base = blockDim.x + 2; 
-    int gid = blockDim.x * blockIdx.x + tid + offset; 
+    int base = blockDim.x + 2;
+    int gid = blockDim.x * blockIdx.x + tid + offset;
     int tidx = tid + 1;
 
     int tnow = tstep; // read tstep into register.
 
-    if (tid<2) temper[tid] = state[gid]; 
+    if (tid<2) temper[tid] = state[gid];
     __syncthreads();
     temper[tid+2] = state[gid+2];
     __syncthreads();
@@ -66,7 +65,7 @@ downTriangle(states *state, int tstep, int offset)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-	            stepUpdate(temper, tidx, tnow);
+	    	stepUpdate(temper, tidx, tnow);
 		}
 		tnow++;
 		__syncthreads();
@@ -96,16 +95,15 @@ wholeDiamond(states *state, int tstep, int offset)
 {
 	extern __shared__ states temper[];
 
-    int tid = threadIdx.x; // Thread index
+    int tidx = threadIdx.x + 1; // Thread index
     int mid = (blockDim.x >> 1); // Half of block size
     int base = blockDim.x + 2;
-    int gid = blockDim.x * blockIdx.x + tid + offset;
-    int tidx = tid + 1;
+    int gid = blockDim.x * blockIdx.x + threadIdx.x + offset;
 
     int tnow = tstep;
-    if (tid<2) temper[tid] = state[gid]; 
+    if (threadIdx.x<2) temper[threadIdx.x] = state[gid];
     __syncthreads();
-    temper[tid + 2] = state[gid + 2];
+    temper[tidx+1] = state[gid + 2];
 
     __syncthreads();
 
@@ -129,7 +127,7 @@ wholeDiamond(states *state, int tstep, int offset)
 		tnow++;
 		__syncthreads();
     }
-    
+
     state[gid + 1] = temper[tidx];
 }
 
@@ -190,10 +188,10 @@ void wholeDiamondCPU(states *state, int tstep)
 void splitDiamondCPU(states *state, int tstep)
 {
     int tnow=tstep;
-    states ssLeft[3]; 
-    ssLeft[2] = bound[0]; 
-    states ssRight[3]; 
-    ssRight[0] = bound[1]; 
+    states ssLeft[3];
+    ssLeft[2] = bound[0];
+    states ssRight[3];
+    ssRight[0] = bound[1];
     for (int k=cGlob.ht; k>0; k--)
     {
         for (int n=k; n<(cGlob.base-k); n++)
@@ -243,7 +241,7 @@ void splitDiamondCPU(states *state, int tstep)
     }
 }
 
-void passSwept(state *passer, state *getter, int tstep, int turn)
+void passSwept(states *passer, states *getter, int tstep, int turn)
 {
     int rx = turn^1;
     int t0;
@@ -259,8 +257,8 @@ void passSwept(state *passer, state *getter, int tstep, int turn)
 // void applyBC(states *state, int ty, int pt)
 // {
 //     // Like if-dirichilet
-//     // Works for whole 
-//     state[ty*pt] = sBound[ty]; 
+//     // Works for whole
+//     state[ty*pt] = sBound[ty];
 //     // If reflective
 //     // state[ty*pt] = state[pt-2] or state[pt+2]
 // }
@@ -275,9 +273,9 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    
+
     // Must be declared global in equation specific header.
-    stPass = cGlob.htp; 
+    stPass = cGlob.htp;
     numPass = NSTATES * stPass;
 
     // states putSt[stPass];
@@ -310,7 +308,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
         cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
 
-        /* 
+        /*
         -- DOWN MUST FOLLOW A SPLIT AND UP CANNOT BE IN WHILE LOOP SO DO UP AND FIRST SPLIT OUTSIDE OF LOOP THEN LOOP CAN BE WITH WHOLE - DIAMOND - CHECK DOWN.
         */
         // ------------ Step Forward ------------ //
@@ -319,7 +317,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
 
         for (int k=0; k<cGlob.cBks; k++)
-        { 
+        {
             bx = (k/cmid);
             ix = 2*bx;
             upTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
@@ -327,7 +325,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
         cout << "UP " << endl;
 
-        // ------------ Pass Edges ------------ // 
+        // ------------ Pass Edges ------------ //
         // -- FRONT TO BACK -- //
 
         cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
@@ -360,7 +358,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             {
                 wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
             }
-        }      
+        }
 
         cout << "SPLIT " << endl;
 
@@ -372,10 +370,10 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
         // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
         // unstructify(&putSt[0], &putRe[0]);
-        
+
         // passSwept(&putRe[0], &getRe[0], tmine+1, 1);
         passSwept(state[2] + xc, state[0], tmine+1, 1);
-        
+
         // restructify(&getSt[0], &getRe[0]);
         // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
@@ -400,18 +398,18 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                 ix = 2*(k/cmid);
                 wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
             }
-            
+
             // ------------ Pass Edges ------------ //
-            
+
             cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
             cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
-    
+
             // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
             // unstructify(&putSt[0], &putRe[0]);
-            
+
             // passSwept(&putRe[0], &getRe[0], tmine, 0);
             passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
-        
+
             // restructify(&getSt[0], &getRe[0]);
             // for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
 
@@ -423,7 +421,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             // ------------ SPLIT ------------ //
 
             wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
-            
+
             for (int k=0; k<(cGlob.cBks); k++)
             {
                 bx = (k/cmid);
@@ -443,13 +441,13 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
             cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
             cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-    
+
             // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
             // unstructify(&putSt[0], &putRe[0]);
-            
+
             // passSwept(&putRe[0], &getRe[0], tmine, 1);
             passSwept(state[2] + xc, state[0], tmine, 1);
-            
+
             // restructify(&getSt[0], &getRe[0]);
             // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
@@ -470,22 +468,22 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                     ix = 2*bx;
                     downTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
                 }
-                
+
                 // Increment Counter and timestep
                 tmine += cGlob.ht;
                 t_eq = cGlob.dt * (tmine/NSTEPS);
 
                 cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
-                                
+
                 for (int i=0; i<3; i++)
                 {
                     for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
-                }  
+                }
 
                 upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
 
                 for (int k=0; k<cGlob.cBks; k++)
-                { 
+                {
                     bx = (k/cmid);
                     ix = 2*bx;
                     upTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
@@ -493,13 +491,13 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
                 cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
                 cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
-        
+
                 // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
                 // unstructify(&putSt[0], &putRe[0]);
-                
+
                 // passSwept(&putRe[0], &getRe[0], tmine, 0);
                 passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
-                
+
                 // restructify(&getSt[0], &getRe[0]);
                 // for (int k=0; k<cGlob.htp; k++) state[2][k + xcp] = getSt[k];
 
@@ -507,7 +505,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                 // ------------ SPLIT ------------ //
 
                 wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
-                
+
                 for (int k=0; k<(cGlob.cBks); k++)
                 {
                     bx = (k/cmid);
@@ -526,13 +524,13 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                 // -- BACK TO FRONT -- //
                 cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
                 cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-        
+
                 // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[2][k+xc];
                 // unstructify(&putSt[0], &putRe[0]);
-                
+
                 // passSwept(&putRe[0], &getRe[0], tmine, 1);
                 passSwept(state[2] + xc, state[0], tmine+1, 1);
-                
+
                 // restructify(&getSt[0], &getRe[0]);
                 // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
@@ -547,14 +545,14 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         }
 
         downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
-        
+
         for (int k=0; k<cGlob.cBks; k++)
         {
             bx = (k/cmid);
             ix = 2*bx;
             downTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
         }
-        
+
         // Increment Counter and timestep
         tmine += cGlob.ht;
         t_eq = cGlob.dt * (tmine/NSTEPS);
@@ -567,19 +565,19 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     }
     else
     {
-       
+
         const int xc = cGlob.xcpu, xcp = xc+1;
         for (int k=0; k<cGlob.cBks; k++)
-        { 
+        {
             upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
-        }        
+        }
 
         // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
         // unstructify(&putSt[0], &putRe[0]);
-        
+
         // passSwept(&putRe[0], &getRe[0], tmine, 0);
         passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
-        
+
         // restructify(&getSt[0], &getRe[0]);
         // for (int k=0; k<cGlob.htp; k++) state[0][k + xcp] = getSt[k];
 
@@ -600,10 +598,10 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
         // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
         // unstructify(&putSt[0], &putRe[0]);
-        
+
         // passSwept(&putRe[0], &getRe[0], tmine+1, 1);
         passSwept(state[0] + xc, state[0], tmine+1, 1);
-        
+
         // restructify(&getSt[0], &getRe[0]);
         // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
 
@@ -621,10 +619,10 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
             // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
             // unstructify(&putSt[0], &putRe[0]);
-            
+
             // passSwept(&putRe[0], &getRe[0], tmine, 0);
             passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
-            
+
             // restructify(&getSt[0], &getRe[0]);
             // for (int k=0; k<cGlob.htp; k++) state[0][k+xcp] = getSt[k];
 
@@ -645,13 +643,13 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
             // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
             // unstructify(&putSt[0], &putRe[0]);
-            
+
             // passSwept(&putRe[0], &getRe[0], tmine, 1);
             passSwept(state[0] + xc, state[0], tmine, 1);
-            
+
             // restructify(&getSt[0], &getRe[0]);
             // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
-    
+
             tmine += cGlob.ht;
             t_eq = cGlob.dt * (tmine/NSTEPS);
             if (!ranks[1]) state[0][0] = bound[0];
@@ -671,13 +669,13 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
                 for (int k=1; k<alen[0]; k++)  solutionOutput(state[0], t_eq, k, xpts[0]);
 
                 for (int k=0; k<cGlob.cBks; k++)
-                { 
+                {
                     upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
                 }
 
                 // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
                 // unstructify(&putSt[0], &putRe[0]);
-                
+
                 // passSwept(&putRe[0], &getRe[0], tmine, 0);
                 passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
 
@@ -686,7 +684,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
                 // ------------ Step Forward ------------ //
                 // ------------ SPLIT ------------ //
-                
+
                 for (int k=0; k<(cGlob.cBks); k++)
                 {
                     if ((ranks[1] == lastproc) && (k == bkL))
@@ -701,13 +699,13 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
                 // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+xc];
                 // unstructify(&putSt[0], &putRe[0]);
-                
+
                 // passSwept(&putRe[0], &getRe[0], tmine+1, 1);
                 passSwept(state[0] + xc, state[0], tmine+1, 1);
-                
+
                 // restructify(&getSt[0], &getRe[0]);
                 // for (int k=0; k<cGlob.htp; k++)  state[0][k] = putSt[k];
-        
+
                 // Increment Counter and timestep
                 tmine += cGlob.ht;
                 t_eq = cGlob.dt * (tmine/NSTEPS);

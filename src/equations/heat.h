@@ -31,7 +31,7 @@
 #define REAL            double
 #define REALtwo         double2
 #define REALthree       double3
-#define MPI_R           MPI_DOUBLE    
+#define MPI_R           MPI_DOUBLE
 #define ZERO            0.0
 #define QUARTER         0.25
 #define HALF            0.5
@@ -43,13 +43,13 @@
 #define NVARS               1
 #define NSTATES             2 // How many numbers in the struct.
 
-// Since anyone would need to write a header and functions file, why not just hardwire this.  
+// Since anyone would need to write a header and functions file, why not just hardwire this.
 // If the user's number of steps isn't a power of 2 use the other one.
 
-#define MODULA(x)           x & (NSTEPS-1)  
-// #define MODULA(x)           x % NSTEPS  
+#define MODULA(x)           x & (NSTEPS-1)
+// #define MODULA(x)           x % NSTEPS
 
-#define DIVMOD(x)           (MODULA(x)) >> 1   
+#define DIVMOD(x)           (MODULA(x)) >> 1
 
 /*
 	============================================================
@@ -57,22 +57,22 @@
 	============================================================
 */
 
-//---------------// 
+//---------------//
 struct eqConsts {
     REAL Fo;
 };
 
 #define AL 8.0e-6
 
-//---------------// 
+//---------------//
 struct states{
     REAL T[2];
-    //size_t tstep; // Consider as padding. 
+    //size_t tstep; // Consider as padding.
 };
 
 typedef Json::Value jsons;
 std::string fspec = "Heat";
-std::string outVars[NVARS] = {"Temperature"}; //---------------// 
+std::string outVars[NVARS] = {"Temperature"}; //---------------//
 
 /*
 	============================================================
@@ -81,8 +81,8 @@ std::string outVars[NVARS] = {"Temperature"}; //---------------//
 */
 // The boundary points can't be on the device so there's no boundary device array.
 
-__constant__ eqConsts deqConsts;  //---------------// 
-eqConsts heqConsts; //---------------// 
+__constant__ eqConsts deqConsts;  //---------------//
+eqConsts heqConsts; //---------------//
 states bound[2];
 int stPass, numPass; // Number of Passing states, total numbers in passing states.
 
@@ -108,7 +108,6 @@ __host__ REAL printout(states *state, int i)
     return state->T[0];
 }
 
-
 // Make the struct an array.
 __host__ inline void unstructify(states *putSt, REAL *putReal)
 {
@@ -124,7 +123,7 @@ __host__ inline void unstructify(states *putSt, REAL *putReal)
 // Make the struct an array a struct.
 __host__ inline void restructify(states *getSt, REAL *getReal)
 {
-    int gap;                
+    int gap;
     for (int k=0; k<stPass; k++)
     {
         gap = k*NSTATES;
@@ -148,7 +147,7 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.Fo = AL*dtx/(dxx*dxx);
     std::cout << heqConsts.Fo << std::endl;
-    if (heqConsts.Fo>.5) 
+    if (heqConsts.Fo>.5)
     {
         std::cout << "Fourier too high: " << heqConsts.Fo << std::endl;
         std::cin >> stPass;
@@ -165,44 +164,21 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
 {
     double dxx = inJs["dx"].asDouble();
     double xss = indexer(dxx, idx, xst);
-    inl[idx] = icond(xss); 
+    inl[idx] = icond(xss);
 }
 
-void mpi_type(MPI_Datatype *dtype)
-{ 
-    //double 3 type
-    states state_ex;
-    MPI_Datatype vtype;
-    MPI_Datatype typs[3] = {MPI_R, MPI_R, MPI_R};
-    int n[] = {1, 1, 1};
-    MPI_Aint disp[] = {0, sizeof(REAL), 2*sizeof(REAL)};
-
-    MPI_Type_create_struct(3, n, disp, typs, &vtype);
-    MPI_Type_commit(&vtype);
-
-    int n2[2] = {2, 1};
-    MPI_Datatype typs2[2] = {vtype, MPI_R}; 
-    MPI_Aint disp2[2] = {0, 6*sizeof(REAL)};
-    // disp2[0] = &state_ex.Q[0] - &state_ex;
-    // disp2[1] = &state_ex.Pr - &state_ex;
-
-    MPI_Type_create_struct(2, n2, disp2, typs2, dtype);
-    MPI_Type_commit(dtype);
-
-    MPI_Type_free(&vtype);
-}
 __host__ void mpi_type(MPI_Datatype *dtype)
-{ 
-    MPI_Type_create_struct(1, 2, 0, MPI_R, dtype);
+{
+    MPI_Type_contiguous(2, MPI_R, dtype);
     MPI_Type_commit(dtype);
 }
 
-__device__ __host__ 
+__device__ __host__
 void stepUpdate(states *heat, int idx, int tstep)
 {
     int otx = tstep % NSTEPS; //Modula is output place
     int itx = (otx^1); //Opposite in input place.
-    
+
     heat[idx].T[otx] = DIMS.Fo*(heat[idx-1].T[itx] + heat[idx+1].T[itx]) + (1.0-2.0*DIMS.Fo) * heat[idx].T[itx];
     // if (abs(heat[idx].T[itx]) < 0.1) printf("tstep: %.i | loc: %.i | includes: %.2f, %.2f, %.2f \n", tstep, idx, heat[idx-1].T[itx], heat[idx].T[itx], heat[idx+1].T[itx]);
 }

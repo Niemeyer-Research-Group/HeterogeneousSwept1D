@@ -1,13 +1,12 @@
-// ALLONE
-
-// Well we definitely need to get rid of the xpts.  Really I need to concentrate on getting the output right so I can check the answers.  Then, if they're right, we can worry about streamlining this. Partly main problem, the keys in the output json are strings. Could read each in and then make it a data frame from dict.
-
+/*
+    Entry point for hsweep.
+*/
 #include <fstream>
 
 #define cudaCheckError(ans) { cudaCheck((ans), __FILE__, __LINE__); }
-inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false) 
+inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false)
 {
-   if (code != cudaSuccess) 
+   if (code != cudaSuccess)
    {
       fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);
@@ -25,20 +24,6 @@ inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=f
 ----------------------
 */
 
-#ifndef HDW
-    #define HDW     "hardware/WORKSTATION.json"
-#endif
-
-std::vector<int> jsonP(jsons jp, size_t sz)
-{
-	std::vector <int> outv;
-	for(int i=0; i<sz; i++)
-	{
-		outv.push_back(jp[i].asInt());
-	}
-	return outv;
-}
-
 int main(int argc, char *argv[])
 {
     makeMPI(argc, argv);
@@ -47,30 +32,14 @@ int main(int argc, char *argv[])
     std::string s_ext = ".dat";
     std::string t_ext = ".csv";
     std::string myrank = std::to_string(ranks[1]);
-    std::string sout = argv[3];
-    sout.append(myrank);
-    sout.append(ext); 
     std::string scheme = argv[1];
 
-    std::ifstream hwjson(HDW, std::ifstream::in);
-    jsons hwJ;
-    hwjson >> hwJ;
-    hwjson.close();
 
-    // However you coe by these vectors are somewhat immaterial.  Could do a test on the cluster before running.
-    cGlob.nGpu = hwJ["nGpu"].asInt();
-    std::vector<int> gpuvec = jsonP(hwJ["pGpu"], cGlob.nGpu);
-    std::vector<int> myGPU = jsonP(hwJ["gpuID"], cGlob.nGpu);
-    int gpuID = -1;
-    for (int k=0; k<cGlob.nGpu; k++)
-    {
-        if (ranks[1] == gpuvec[k])
-        {
-            cGlob.hasGpu = true;
-            gpuID = myGPU[k];
-        }
-    }
-    int smGpu = std::count_if(gpuvec.begin(), gpuvec.end(), [](int i){return i<ranks[1] == 1;});
+    //Get the number of GPUs in front of the current process.
+    int gpuPlaces[nprocs];
+    MPI_Allgather(&cGlob.hasGpu, 1, MPI_INT, &gpuPlaces[0], 1, MPI_INT, MPI_COMM_WORLD);
+    cGlob.nGpu=0;
+    for (int k=0; k<ranks[1]; k++) cGlob.nGpu+=gpuPlaces[k];
 
     // Equation, grid, affinity data
     std::ifstream injson(argv[2], std::ifstream::in);
@@ -81,13 +50,12 @@ int main(int argc, char *argv[])
     initArgs();
 
     /*
-        Essentially it should associate some unique (UUID?) for the GPU with the CPU. 
+        Essentially it should associate some unique (UUID?) for the GPU with the CPU.
         Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
     */
-    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * smGpu; 
+    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.nGpu;
     states **state;
-    states **solutionState = new states* [cGlob.nWrite];
-
+    
     int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
     int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
     int nrows = (cGlob.hasGpu) ? 3 : 1;
@@ -98,7 +66,6 @@ int main(int argc, char *argv[])
     std::vector<int> alen(1, xc + 1); //Write out | Init args vector
     if (cGlob.hasGpu)
     {
-        cudaSetDevice(gpuID);
 
         state = new states* [3];
         cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));
@@ -182,28 +149,19 @@ int main(int argc, char *argv[])
             std::cout << n_timesteps << " timesteps" << std::endl;
             std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
-            std::string tpath = pth + fspec + scheme + t_ext
-            FIle * timeOut;
-            timeOut = fopen(tpath, "a+");
-            fprintf(timeOut, "%d,%.4f,%d,%.8f",cGlob.tpb, cGlob.gpuA, cGlob.nX, per_ts);
-            timeOut.close();
+            std::string tpath = pth + "/t" + fspec + scheme + t_ext;
+            FILE * timeOut;
+            timeOut = fopen(tpath.c_str(), "a+");
+            fprintf(timeOut, "%d,%.4f,%d,%.8f\n", cGlob.tpb, cGlob.gpuA, cGlob.nX, per_ts);
+            fclose(timeOut);
         }
     }
 
-    int nOut = cGlob.hasGpu * cGlob.xg + cGlob.xcpu + 2;
-    std::string spath = pth + "/" + fspec + "_" + std::to_string(ranks[1]) + s_ext;
-    FILE * solOut;
-    solOut = fopen(spath, "w");
-    double meta[] = {cGlob.dx, cGlob.dt, cGlob.tf, cGlob.nX, cGlob.gpuA, cGlob.tpb, cGlob.cBks, cGlob.gBks} 
-    fwrite(meta, sizeof(REAL), sizeof(meta), solOut);
-
-    for (int k=0; k<cGlob.nWrite; k++) 
-    {
-        fwrite(solutionState[k], sizeof(REAL), nOut, solOut);
-        fprintf(solOut, "\n");
-    }
-
-    solOut.close();
+        std::string spath = pth + "/s" + fspec + "_" + myrank + i_ext;
+        std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
+        if (!ranks[1]) solution["meta"] = inJ;
+        soljson << solution;
+        soljson.close();
 
     if (cGlob.hasGpu)
     {
@@ -212,11 +170,10 @@ int main(int argc, char *argv[])
         cudaDeviceReset();
     }
     else
-    {   
+    {
         delete[] state[0];
     }
-    delete[] state;   
-    delete[] solutionState;
+    delete[] state;
 
     endMPI();
     return 0;

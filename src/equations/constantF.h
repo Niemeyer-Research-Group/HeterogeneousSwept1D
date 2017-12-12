@@ -41,7 +41,7 @@
 
 #define NSTEPS              2
 #define NVARS               1
-#define NSTATES             2 // How many numbers in the struct.
+#define NSTATES             2  // How many numbers in the struct.
 // Since anyone would need to write a header and functions file, why not just hardwire this.  
 // If the user's number of steps isn't a power of 2 use the other one.
 

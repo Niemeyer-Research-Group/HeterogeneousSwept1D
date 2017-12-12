@@ -6,6 +6,6 @@
     #include "heat.h"
 #endif
 
-#ifdef CONS
+#ifdef CONSTANTF
     #include "constantF.h"
 #endif

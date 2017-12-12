@@ -22,6 +22,7 @@ from datetime import datetime
 from sklearn import linear_model
 from sklearn.metrics import mean_squared_error, r2_score
 import itertools
+from random import random
 
 from main_help import *
 import result_help as rh
@@ -74,61 +75,6 @@ def parseCsv(fb):
     jframe = jframe[(jframe.nX !=0)]
 
     return jframe
-
-class PerformOld(object):
-
-    def __init__(self, dataset):
-        self.oDict = parseJdf(dataset) #Takes either dict or path to json.
-        self.dpth = depth(self.oDict)
-        self.dFrame = dictframes(self.oDict, self.dpth)
-
-    def plotdict(self, eqName, plotpath=".", saver=True, shower=False, swap=False):
-        for k0 in self.oDict.keys():
-            plt.figure()
-            ptitle = eqName + " | tpb = " + k0
-            plotname = op.join(plotpath, eqName + k0 + ".pdf")
-            if swap:
-                nDict = swapKeys(self.oDict[k0])
-            else:
-                nDict = self.oDict[k0]
-            lg = sorted(nDict.keys())
-            lg = lg[1::2]
-            for k1 in lg:
-                x = []
-                y = []
-                lo = [int(k) for k in nDict[k1].keys()]
-                x = sorted(lo)
-                for k2 in x:
-                    y.append(nDict[k1][str(k2)])
-
-                print(x, y)
-                plt.loglog(x, y, linewidth=2, label=k1)
-            plt.grid(True)
-            plt.title(ptitle)
-            plt.ylabel("Time per timestep (us)")
-            plt.xlabel("Grid Size")
-            plt.legend(lg)
-            if saver:
-                plt.legend(bbox_to_anchor=(1.05, 1), loc=2, title="GPU Affinity", borderaxespad=0.)
-                plt.savefig(plotname, dpi=1000, bbox_inches="tight")
-            if shower:
-                plt.show()
-
-
-
-    def plotframe(self, eqName, plotpath=".", saver=True, shower=False):
-        for ky in self.dFrame.keys():
-            ptitle = eqName + " | tpb = " + ky
-            plotname = op.join(plotpath, eqName + ky + ".pdf")
-
-            self.dFrame[ky].plot(logx = True, logy=True, grid=True, linewidth=2, title=ptitle)
-            plt.ylabel("Time per timestep (us)")
-            plt.xlabel("Grid Size")
-            if saver:
-                plt.legend(bbox_to_anchor=(1.05, 1), loc=2, title="GPU Affinity", borderaxespad=0.)
-                plt.savefig(plotname, dpi=1000, bbox_inches="tight")
-            if shower:
-                plt.show()
 
 
 class RunParse(object):
@@ -186,29 +132,29 @@ def xinterp(dfn):
     return np.array(np.meshgrid(gA, nXA)).T.reshape(-1,2)
 
 
-
 class Perform(object):
     def __init__(self, df, name):
         self.oFrame = df
         self.title = name
         self.cols = list(df.columns.values)
-        self.tpbs = np.unique(self.oFrame.tpb)
+        self.uniques, self.minmaxes = [], []
+            
+        for k in self.cols[:-1]:
+            self.uniques.append(list(np.unique(self.oFrame[self.cols[0]])))
+            self.minmaxes.append( (min(self.uniques[-1]), max(self.uniques[-1])) ) 
 
     def glmBytpb(self, mdl):
         iframe = self.oFrame.set_index("tpb")
         self.gframes = dict()
         self.gR2 = dict()
-        i=0
-        minmaxes = []
-        for th in self.tpbs:
+        for th in self.uniques[0]:
             dfn = iframe.xs(th)
             mdl.fit(dfn[cols[1:-1]], dfn[cols[-1]])
-            minmaxes.append([min(dfn.gpuA), min(dfn.nX), max(dfn.gpuA), max(dfn.nX)])
             xi = xinterp(dfn)
             yi = mdl.predict(xi)
             xyi = pd.DataFrame(np.vstack((xi.T, yi.T)).T, columns=cols[1:])
 
-            self.gframes[th] = xyi.pivot(cols[1], cols[2], cols[3])
+            self.gframes[th] = xyi.pivot(*self.cols[1:])
             self.gR2[th] = r2_score(dfn[cols[-1]], mdl.predict(dfn[cols[1:-1]]))
 
         mnmx = np.array(minmaxes)
@@ -244,7 +190,7 @@ class Perform(object):
         for ky in self.tpbs:
             ptitle = self.title + " | tpb = " + ky
             plotname = op.join(plotpath, self.title + ky + ".pdf")
-            ifx = iframe.xs(ky).pivot(cols[1], cols[2], cols[3])
+            ifx = iframe.xs(ky).pivot(*self.cols[1:])
 
             ifx.plot(logx = True, logy=True, grid=True, linewidth=2, title=ptitle)
             plt.ylabel(ylbl)
@@ -255,18 +201,95 @@ class Perform(object):
             if shower:
                 plt.show()
 
+def xinterp3(dfn):
+    gA = np.linspace(min(dfn.gpuA), max(dfn.gpuA), 50)
+    nXA = np.linspace(min(dfn.nX), max(dfn.nX), 50)
+    tpbs = np.unique(dfn.tpb)
+
+    # There should be a combinatorial function.
+    return np.array(np.meshgrid(tpbs, gA, nXA)).T.reshape(-1,3)
+
+class perfModel(Perform):
+    def __init__(self, datadf, name, typ="all", vargs={}):
+        #typ needs to tell it what kind of parameters to use
+        super().__init__(datadf, name)
+        self.va = vargs #Dictionary of additional arguments to stats models
+        self.respvar = self.cols[-1]
+        self.xo = self.cols[:-1]
+        self.nFrame = self.oFrame.copy()
+        if typ == "all":
+            self.it = list(itertools.combinations_with_replacement(self.xo, 2))
+
+        self.ilbl = ["|".join(k) for k in self.it] 
+        for n, o in zip(self.ilbl, self.it):
+            self.nFrame[n] = self.oFrame[o[0]] * self.oFrame[o[1]] 
+                
+        self.newcols = list(self.nFrame.columns.values)
+        self.newcols.remove(self.respvar)
+        
+        X = self.nFrame[self.newcols]
+        y = self.nFrame[self.respvar]
+        sm.add_constant(X)
+   
+        self.logY = pd.DataFrame({self.respvar: self.oFrame[self.respvar], "log"+self.respvar: np.log(self.oFrame[self.respvar])})
+        self.mdl = sm.OLS(y, X)
+        self.res = self.mdl.fit() 
+        
+    def makedf(self, lists):
+
+        if isinstance(lists[0], list):
+            dct = {k:[] for k in self.xo}
+            for a in lists:
+                for c, b in zip(self.xo, a):
+                    dct[c].append(b)
+                    
+        else:
+            dct = dict(zip(self.xo, lists))
+                
+        return pd.DataFrame.from_dict(dct)
+    
+        
+    def transform(self, frame):     
+        fr = frame.copy()
+        for n, o in zip(self.ilbl, self.it):
+            fr[n] = frame[o[0]] * frame[o[1]] 
+            
+        return fr
+
+    def predict(self, newVals):
+        newFrame = self.makedf(newVals)
+        newFrame = newFrame[self.xo]
+        fr = self.transform(newFrame)
+        print(fr)
+        return self.res.predict(fr)
+        
+
+    def model(self):
+        xi = xinterp3(self.oFrame)
+        xi = pd.DataFrame(xi, columns=self.xo)
+        xdf = self.transform(xi)
+        fdf = self.res.predict(xdf)
+        xi["time"] = fdf
+        return xi.set_index(self.xo[0])
+             
+    def pr(self):
+        print(self.title)
+        print(self.res.summary())
+        
     def plotContour(self, plotpath=".", saver=True, shower=False):
         f, ax = plt.subplots(2, 2, figsize=(14,8))
         ax = ax.ravel()
+        df = self.model()
         plotname = op.join(plotpath, self.title + "Contour.pdf")
-        for th, a in zip(self.tpbs, ax):
-            df = self.gframes[th]
-            X,Y = np.meshgrid(df.columns.values, df.index.values)
-            Z=df.values
+        for th, a in zip(self.uniques[0], ax):
+            dfn = df.xs(th).pivot(*self.cols[1:])
+            self.b = dfn
+            X, Y = np.meshgrid(dfn.columns.values, dfn.index.values)
+            Z=dfn.values
             mxz = np.max(np.max(Z))/1.05
             mnz = np.min(np.min(Z))*1.1
             lvl = np.linspace(mnz, mxz, 10)
-            a.pcolor(X, Y, Z, levels=lvl)
+            a.contourf(X, Y, Z, levels=lvl)
             # a.clabel(CS, inline=1, fontsize=10)
             a.set_xscale("log")
             a.set_ylabel("gpuA")
@@ -282,68 +305,30 @@ class Perform(object):
             f.savefig(plotname, dpi=1000, bbox_inches="tight")
         if shower:
             plt.show()
-
-class perfModel(Perform):
-    def __init__(self, datadf, name, typ="all", vargs={}):
-        #typ needs to tell it what kind of parameters to use
-        super().__init__(datadf, name)
-        self.va = vargs #Dictionary of additional arguments to stats models
-        self.respvar = self.cols[-1]
-        if typ == "all":
-            self.it = list(itertools.combinations_with_replacement(self.cols[:-1], 2))
-
-        self.ilbl = ["|".join(k) for k in self.it] 
-        for n, o in zip(self.ilbl, self.it):
-            self.oFrame[n] = self.oFrame[o[0]] * self.oFrame[o[1]] 
-                
-        self.cols = list(self.oFrame.columns.values)
-        self.cols.remove(self.respvar)
-        
-        X = self.oFrame[self.cols]
-        y = self.oFrame[self.respvar]
-        sm.add_constant(X)
-   
-        self.nFrame = pd.DataFrame({self.respvar: self.oFrame[self.respvar], "log"+self.respvar: np.log(self.oFrame[self.respvar])})
-        self.mdl = sm.OLS(y, X)
-        self.res = self.mdl.fit() 
-        
-    def __transform(self, frame):
-        if not isinstance(frame, pd.DataFrame):
-            frame = pd.DataFrame(frame)
             
-        for n, o in zip(self.ilbl, self.it):
-            frame[n] = frame[o[0]] * frame[o[1]] 
-            
-        return frame
-
-    def predict(self):
-        pass
-
-    def model(self):
-        pass
-             
-    
-    def __str__(self):
-        return self.title, self.res.summary()
+        return df
 
 
 
 # Change the source code?  Run it here to compare to the same
 # result in the old version
-def compareRuns(eq, alg, args, np=8, mdl=linear_model.LinearRegression()):
+def compareRuns(eq, alg, args, np=8): #)mdl=linear_model.LinearRegression()):
     oldF = mostRecentResults(resultpath)
     mkstr = eq.title() + schemes[alg].title()
-    oldPerf = Perform(oldF.xs(mkstr), mkstr)
-    newMod = oldPerf.modelGeneral(mdl)
+    oldF.columns=cols
+    oldF = oldF.xs(mkstr).reset_index(drop=True)
+    oldPerf = perfModel(oldF, mkstr)
+    newMod = oldPerf.model()
 
     #Run the new configuration
     expath = op.join(binpath, eq.lower())
-    tp = [k for k in op.listdir(testpath) if eq.lower() in k]
+    tp = [k for k in os.listdir(testpath) if eq.lower() in k]
     tpath = op.join(testpath, tp[0])
 
     outc = runMPICUDA(expath, np, alg.upper(), tpath, eqopt=args)
 
     oc = outc.split()
+    print(oc)
     i = oc.index("Averaged")
     newTime = float(oc[i+1])
     #Would be nice to get the time pipelined from the MPI program
@@ -386,8 +371,11 @@ if __name__ == "__main__":
 
     for ty in eqs:
         perfs.append(perfModel(recentdf.xs(ty), ty))
+        print("------------")
+        perfs[-1].pr()
 
     print("RSquared values for GLMs:")
+    pp = perfs[0]
 #    for p in perfs:
 #        p.glmBytpb(rrg)
 #        #p.plotContour(plotpath=resultpath)

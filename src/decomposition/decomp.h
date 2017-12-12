@@ -5,6 +5,7 @@
 */
 
 #include <string>
+#include "gpuDetector.h"
 
 #define TAGS(x) x & 32767
 
@@ -23,7 +24,7 @@ struct globalism {
     int nGpu, nX;
     int xg, xcpu;
     int nWrite;
-    bool hasGpu;
+    int hasGpu;
     double gpuA;
 
 // Geometry
@@ -40,6 +41,7 @@ struct globalism {
 
 globalism cGlob;
 jsons inJ;
+jsons solution;
 
 //Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
@@ -51,6 +53,8 @@ void makeMPI(int argc, char* argv[])
     lastproc = nprocs-1;
     ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
+    cGlob.hasGpu = detection::detector(ranks[1], nprocs);
+    MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 }
 
 // I think this needs a try except for string inputs.
@@ -161,6 +165,7 @@ void solutionOutput(states *outState, double tstamp, int idx, int strt)
 
 void endMPI()
 {
+    MPI_Type_free(&struct_type);
 	MPI_Barrier(MPI_COMM_WORLD);
 	MPI_Finalize();
 }

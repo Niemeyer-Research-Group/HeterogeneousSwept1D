@@ -292,14 +292,7 @@ __device__ __host__
 __forceinline__
 REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
 {   
-    if(QNAN(pRatio) || (pRatio<1.0e-8))  
-    {
-        return qH;
-    }
-    else
-    {
-       return (qH + HALF * QMIN(pRatio, ONE) * (qN - qH));
-    }
+    return (QNAN(pRatio) || (pRatio<1.0e-8)) ? qH : (qH + HALF * QMIN(pRatio, ONE) * (qN - qH));
 }
 
 /**
@@ -375,7 +368,7 @@ void eulerStep(states *state, int idx, int tstep)
 __device__ __host__ 
 void stepUpdate(states *state, int idx, int tstep)
 {
-    int ts = DIVMOD(tstep);
+   int ts = DIVMOD(tstep);
     if (tstep & 1) //Odd - Rslt is 0 for even numbers
     {
         pressureRatio(state, idx, ts);

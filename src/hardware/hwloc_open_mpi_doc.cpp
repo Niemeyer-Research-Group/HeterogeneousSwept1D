@@ -30,25 +30,33 @@ static hwloc_obj_t gpus[16] = {0};
  * This function searches for all the GPUs that are hanging off a NUMA
  * node.  It walks through each of the PCI devices and looks for ones
  * with the NVIDIA vendor ID.  It then stores them into an array.
- * Note that there can be more than one GPU on the NUMA node.
+ * Note that there can be more than one GPU on the
+    } NUMA node.
  */
  
-static void find_gpus(hwloc_topology_t topology, hwloc_obj_t parent, hwloc_obj_t child) {
+static void find_gpus(hwloc_topology_t topology, hwloc_obj_t parent, hwloc_obj_t child) 
+{
     hwloc_obj_t pcidev;
     pcidev = hwloc_get_next_child(topology, parent, child);
-    if (NULL == pcidev) {
+    if (NULL == pcidev) 
+    {
         return;
-    } else if (0 != pcidev->arity) {
+    } 
+    else if (0 != pcidev->arity) 
+    {
         /* This device has children so need to look recursively at them */
         find_gpus(topology, pcidev, NULL);
         find_gpus(topology, parent, pcidev);
-    } else {
+    } 
+    else 
+    {
         if (pcidev->attr->pcidev.vendor_id == 0x10de) {
             gpus[gpuIndex++] = pcidev;
         }
         find_gpus(topology, parent, pcidev);
     }
 }
+
 int main(int argc, char *argv[])
 {
     int rank, retval, length;

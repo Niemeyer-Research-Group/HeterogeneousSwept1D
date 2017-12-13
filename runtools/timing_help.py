@@ -41,6 +41,8 @@ schemes = {"C": "Classic", "S": "Swept"}
 
 cols = ["tpb", "gpuA", "nX", "time"]
 
+crs=["r", "b", "k", "g"]
+
 def parseJdf(fb):
     if isinstance(fb, str):
         jdict = readj(fb)
@@ -84,6 +86,7 @@ class RunParse(object):
         self.bestLaunch = bestIdx.value_counts()
         self.bestLaunch.index = pd.to_numeric(self.bestLaunch)
         self.bestLaunch.sort_index(inplace=True)
+        
 
 #takes list of dfs? title of each df, longterm hd5, option to overwrite incase you write wrong.  Use carefully!
 def longTerm(dfs, titles, fhdf, overwrite=False):
@@ -177,8 +180,10 @@ class Perform(object):
         xInt = xinterp(self.oFrame)
         yInt = mdl.predict(xInt)
         self.pFrame = pd.DataFrame(np.vstack((xInt.T, yInt.T)).T, columns=cols)
+        
 
-    def transform(self):
+
+    def transformz(self):
         self.ffy = self.pFrame.set_index(cols[0]).set_index(cols[1], append=True)
         self.fffy = self.ffy.set_index(cols[2], append=True)
         self.ffyo = self.fffy.unstack(cols[2])
@@ -200,6 +205,9 @@ class Perform(object):
                 plt.savefig(plotname, dpi=1000, bbox_inches="tight")
             if shower:
                 plt.show()
+
+def compare(dfS, dfC):
+    return dfS['time']/dfc['time']
 
 def xinterp3(dfn):
     gA = np.linspace(min(dfn.gpuA), max(dfn.gpuA), 50)
@@ -245,8 +253,9 @@ class perfModel(Perform):
                     
         else:
             dct = dict(zip(self.xo, lists))
+            dct = {0: dct}
                 
-        return pd.DataFrame.from_dict(dct)
+            return pd.DataFrame.from_dict(dct, orient='index')
     
         
     def transform(self, frame):     
@@ -257,10 +266,10 @@ class perfModel(Perform):
         return fr
 
     def predict(self, newVals):
+        
         newFrame = self.makedf(newVals)
         newFrame = newFrame[self.xo]
         fr = self.transform(newFrame)
-        print(fr)
         return self.res.predict(fr)
         
 
@@ -271,6 +280,26 @@ class perfModel(Perform):
         fdf = self.res.predict(xdf)
         xi["time"] = fdf
         return xi.set_index(self.xo[0])
+    
+    def byFlop(self):
+        dfn = self.oFrame.copy()
+        newHead="Updates/us"
+        dfn[newHead] = dfn["nX"]/dfn["time"]
+        
+        return dfn[self.cols[:2] + [newHead]]
+    
+    def plotFlop(self, df, f, a):
+        ncols=list(df.columns.values)
+        df = df.set_index(ncols[0])
+        nix=list(np.unique(df.index.values))
+        plt.hold(True)
+        for n, cr in zip(nix, crs):
+            dfn = df.xs(n)
+            print(dfn)
+            dfn.plot.scatter(*ncols[-2:], ax=a, label="{:1}".format(n), color=cr)
+            
+        a.set_title(self.title)    
+        
              
     def pr(self):
         print(self.title)
@@ -308,11 +337,26 @@ class perfModel(Perform):
             
         return df
 
-
+def predictNew(eq, alg, args, nprocs=8):
+    oldF = mostRecentResults(resultpath)
+    mkstr = eq.title() + schemes[alg].title()
+    oldF.columns=cols
+    oldF = oldF.xs(mkstr).reset_index(drop=True)
+    oldPerf = perfModel(oldF, mkstr)
+    newMod = oldPerf.model()
+    
+    argss = args.split()
+    topics = ['tpb', 'gpuA', 'nX']
+    confi = []
+    for t in topics:
+        ix = argss.index(t)
+        confi.append(float(argss[ix+1]))
+        
+    return oldPerf.predict(np.array(confi))
 
 # Change the source code?  Run it here to compare to the same
 # result in the old version
-def compareRuns(eq, alg, args, np=8): #)mdl=linear_model.LinearRegression()):
+def compareRuns(eq, alg, args, nprocs=8): #)mdl=linear_model.LinearRegression()):
     oldF = mostRecentResults(resultpath)
     mkstr = eq.title() + schemes[alg].title()
     oldF.columns=cols
@@ -325,7 +369,7 @@ def compareRuns(eq, alg, args, np=8): #)mdl=linear_model.LinearRegression()):
     tp = [k for k in os.listdir(testpath) if eq.lower() in k]
     tpath = op.join(testpath, tp[0])
 
-    outc = runMPICUDA(expath, np, alg.upper(), tpath, eqopt=args)
+    outc = runMPICUDA(expath, nprocs, alg.upper(), tpath, eqopt=args)
 
     oc = outc.split()
     print(oc)
@@ -365,7 +409,7 @@ if __name__ == "__main__":
     recentdf = mostRecentResults(resultpath)
     recentdf.columns = cols
 
-    rrg = linear_model.LinearRegression()
+#    rrg = linear_model.LinearRegression()
     perfs = []
     eqs = np.unique(recentdf.index.values)
 
@@ -374,11 +418,16 @@ if __name__ == "__main__":
         print("------------")
         perfs[-1].pr()
 
-    print("RSquared values for GLMs:")
+#    print("RSquared values for GLMs:")
     pp = perfs[0]
+    abc = pp.byFlop()
+    f, a = plt.subplots(1, 1, figsize=(14,8))
+    #ax = a.ravel()
+    pp.plotFlop(abc, f, a)
+    
 #    for p in perfs:
 #        p.glmBytpb(rrg)
 #        #p.plotContour(plotpath=resultpath)
 #        print(p.title, p.gR2)
-
+    
     # Now compare Swept to Classic

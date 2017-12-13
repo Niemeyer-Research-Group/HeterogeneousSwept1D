@@ -17,6 +17,7 @@ inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=f
 #include "decomp.h"
 #include "classic.h"
 #include "swept.h"
+#include <unistd.h>
 
 /**
 ----------------------
@@ -152,6 +153,7 @@ int main(int argc, char *argv[])
             std::string tpath = pth + "/t" + fspec + scheme + t_ext;
             FILE * timeOut;
             timeOut = fopen(tpath.c_str(), "a+");
+            if (timeOut==NULL) fprintf(timeOut, "tpb,gpuA,nX,time\n");
             fprintf(timeOut, "%d,%.4f,%d,%.8f\n", cGlob.tpb, cGlob.gpuA, cGlob.nX, per_ts);
             fclose(timeOut);
         }

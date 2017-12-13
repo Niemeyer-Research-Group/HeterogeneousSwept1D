@@ -82,9 +82,7 @@ bool detector(int ranks, int sz)
 			ledger.push_back(hBuf);
 		}
     }
-
-	if(!ranks) cout << "After first loop but before Split" << endl;
-    
+  
 	MPI_Comm machineComm;
     MPI_Comm_split(MPI_COMM_WORLD, machineID, ranks, &machineComm);
     int machineRank, machineSize;
@@ -101,11 +99,10 @@ bool detector(int ranks, int sz)
     
 	if (machineRank == 0)
     {
-		cout << nGpu << " " << ledger.size() << endl;
         for (int k = 0; k < nGpu; k++) 
         {    
             cudaGetDeviceProperties(&props, k);
-			cout << "Rank " << ranks << " device- " << k << " ";
+			cout << "Rank " << ranks << " device - " << k << " ";
 			cout << props.name << " " << props.pciBusID << endl;
 
 			pcivec[3*k] = props.pciDomainID;
@@ -117,7 +114,6 @@ bool detector(int ranks, int sz)
 	MPI_Bcast(&pcivec[0], 3*nGpu, MPI_INT, 0, machineComm);
 	MPI_Barrier(MPI_COMM_WORLD);
     
-	if(!ranks)	cout << "After PCI Broadcast" << endl;
 	int nset = 0;
     int dev;
 	string pcistr;
@@ -131,32 +127,23 @@ bool detector(int ranks, int sz)
         }
         if (i == machineRank)
         {
-			bufs << std::hex << pcivec[3*nset] << ":" <<  pcivec[3*nset+1] << ":" <<  pcivec[3*nset+2];
-            cout << i << " " << bufs.str() << endl;
+            nset++;
             cudaDeviceGetByPCIBusId(&dev, bufs.str().c_str());
-            cudaSetDevice(dev);
             cudaGetDeviceProperties(&props, dev);
+			bufs << std::hex << pcivec[3*nset] << ":" <<  pcivec[3*nset+1] << ":" <<  pcivec[3*nset+2];
+            cout << i << " " << bufs.str() << " " << props.name << endl;
+
+            cudaSetDevice(dev);
+            
             cout << "----------------------" << endl;
             cout << "Global Rank: " << ranks << " Machine Rank: " << machineRank << std::endl;
-            cout << "On machine " << ledger[machineID].hostname << std::endl;
+            cout << "on machine " << ledger[machineID].hostname << std::endl;
             cout << "Acquired GPU: " << props.name << " with pciID: " << bufs.str() << endl;
 			hasgpu = 1;
-            nset++;
         }
         MPI_Bcast(&nset, 1, MPI_INT, i, machineComm);
         MPI_Barrier(machineComm);
     }
-    MPI_Barrier(MPI_COMM_WORLD);
-	for(int k=0; k<sz; k++)
-	{
-		if (ranks == k)
-		{
-			cout << ranks << " " << nset << " " << machineRank;
-			cout << " " << hasgpu << endl;
-		}
-		MPI_Barrier(MPI_COMM_WORLD);
-		sleep(1);
-	}
 	
     MPI_Type_free(&atype);
     MPI_Comm_free(&machineComm);

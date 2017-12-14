@@ -43,7 +43,7 @@ globalism cGlob;
 jsons inJ;
 jsons solution;
 
-//Always prepared for periodic boundary conditions.
+//Always prepared for periodic boundary conditions.P
 void makeMPI(int argc, char* argv[])
 {
     MPI_Init(&argc, &argv);
@@ -53,8 +53,6 @@ void makeMPI(int argc, char* argv[])
     lastproc = nprocs-1;
     ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
-    cGlob.hasGpu = detection::detector(ranks[1], nprocs);
-    MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 }
 
 // I think this needs a try except for string inputs.
@@ -66,7 +64,7 @@ void parseArgs(int argc, char *argv[])
         for (int k=4; k<argc; k+=2)
         {
             inarg = argv[k];
-            inJ[inarg] = atof(argv[k+1]);   
+            inJ[inarg] = atof(argv[k+1]);
         }
     }
 }
@@ -79,7 +77,7 @@ void initArgs()
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);
     cGlob.tpb = inJ["tpb"].asInt();
-    
+
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
@@ -89,6 +87,17 @@ void initArgs()
     // for (int k = 0; k<3; k++) std::cout << ranks[k] << " ";
     // std::cout << std::endl;
 
+    if (!cGlob.gpuA)
+    {
+        cGlob.hasGpu = 0;
+        cGlob.nGpu = 0;
+    }
+    else
+    {
+        cGlob.hasGpu = detection::detector(ranks[1], nprocs);
+        MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    }
+
     if (inJ["nX"].asInt() == 0)
     {
         if (inJ["cBks"].asInt() == 0)
@@ -96,7 +105,7 @@ void initArgs()
             cGlob.gBks = inJ["gBks"].asInt();
             cGlob.cBks = cGlob.gBks/cGlob.gpuA;
         }
-        else 
+        else
         {
             cGlob.cBks = inJ["cBks"].asInt();
             cGlob.gBks = cGlob.cBks*cGlob.gpuA;
@@ -120,8 +129,8 @@ void initArgs()
     cGlob.htm = cGlob.ht-1;
     cGlob.htp = cGlob.ht+1;
     // Derived quantities
-    cGlob.xcpu = cGlob.cBks * cGlob.tpb;  
-    cGlob.xg = cGlob.gBks * cGlob.tpb;  
+    cGlob.xcpu = cGlob.cBks * cGlob.tpb;
+    cGlob.xg = cGlob.gBks * cGlob.tpb;
 
     // inJ["gpuAA"] = (double)cGlob.gBks/(double)cGlob.cBks; // Adjusted gpuA.
     inJ["cBks"] = cGlob.cBks;

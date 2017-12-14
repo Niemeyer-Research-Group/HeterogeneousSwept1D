@@ -146,12 +146,12 @@ __host__ void equationSpecificArgs(jsons inJs)
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.Fo = AL*dtx/(dxx*dxx);
-    std::cout << heqConsts.Fo << std::endl;
+
     if (heqConsts.Fo>.5)
     {
         std::cout << "Fourier too high: " << heqConsts.Fo << std::endl;
-        std::cin >> stPass;
     }
+
     double lxx = inJs["lx"].asDouble();
     bound[0] = icond(0.0);
     bound[1] = icond(lxx);

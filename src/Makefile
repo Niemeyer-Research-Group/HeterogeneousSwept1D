@@ -33,7 +33,7 @@ default: ech $(OBJS)
 ech:
 	echo $(DEF)
 
-$(OBJS): $(BINPATH)%: $(EQPATH)%.h $(CPREQ) $(DH) Makefile
+$(OBJS): $(BINPATH)%: $(EQPATH)%.h $(CPREQ) $(DH) $(UTILPATH)/gpuDetector.h Makefile
 	$(eval IFL:=$(shell echo $(@F) | tr '[:lower:]' '[:upper:]'))
 	$(NVCC) $(CPREQ) -o $@ $(IPATH) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS) $(LPATH) $(LIBS) 
 

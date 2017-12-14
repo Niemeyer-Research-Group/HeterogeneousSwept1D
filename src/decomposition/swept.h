@@ -44,7 +44,7 @@ __global__ void upTriangle(states *state, int tstep)
 */
 __global__
 void
-downTriangle(states *state, int tstep, int offset)
+downTriangle(states *state, const int tstep, const int offset)
 {
 	extern __shared__ states temper[];
 
@@ -91,7 +91,7 @@ downTriangle(states *state, int tstep, int offset)
 */
 __global__
 void
-wholeDiamond(states *state, int tstep, int offset)
+wholeDiamond(states *state, const int tstep, const int offset)
 {
 	extern __shared__ states temper[];
 
@@ -101,13 +101,14 @@ wholeDiamond(states *state, int tstep, int offset)
     int gid = blockDim.x * blockIdx.x + threadIdx.x + offset;
 
     int tnow = tstep;
+	int k;
     if (threadIdx.x<2) temper[threadIdx.x] = state[gid];
     __syncthreads();
     temper[tidx+1] = state[gid + 2];
 
     __syncthreads();
 
-	for (int k=mid; k>0; k--)
+	for (k=mid; k>0; k--)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
@@ -118,7 +119,7 @@ wholeDiamond(states *state, int tstep, int offset)
 	}
 
 
-	for (int k=2; k<=mid; k++)
+	for (k=2; k<=mid; k++)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
@@ -241,7 +242,7 @@ void splitDiamondCPU(states *state, int tstep)
     }
 }
 
-void passSwept(states *passer, states *getter, int tstep, int turn)
+void passSwept(states *passer, states *getter, const int tstep, const int turn)
 {
     int rx = turn^1;
     int t0;
@@ -265,8 +266,9 @@ void passSwept(states *passer, states *getter, int tstep, int turn)
 
 
 // Now we need to put the last value in a bucket, and append that to the start of the next array.
-double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
+double sweptWrapper(states **state, const ivec xpts, const ivec alen, int *tstep)
 {
+	if (!ranks[1]) cout << "SWEPT Decomposition" << endl;
     int tmine = *tstep;
     int t0;
     const int bkL = cGlob.cBks - 1;
@@ -278,10 +280,6 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
     stPass = cGlob.htp;
     numPass = NSTATES * stPass;
 
-    // states putSt[stPass];
-    // states getSt[stPass];
-    // REAL putRe[numPass];
-    // REAL getRe[numPass];
     int tou = 2000;
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
@@ -305,7 +303,6 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         states *dState;
 
         cudaMalloc((void **)&dState, gpusize);
-
         cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
 
         /*
@@ -322,8 +319,6 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             ix = 2*bx;
             upTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
         }
-
-        cout << "UP " << endl;
 
         // ------------ Pass Edges ------------ //
         // -- FRONT TO BACK -- //
@@ -342,7 +337,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
         // ------------ Step Forward ------------ //
         // ------------ SPLIT ------------ //
-        cout << "SPLIT CALL" << endl;
+        // cout << "SPLIT CALL" << endl;
 
         wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
@@ -360,7 +355,7 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
             }
         }
 
-        cout << "SPLIT " << endl;
+        // cout << "SPLIT " << endl;
 
         // ------------ Pass Edges ------------ //
         // -- BACK TO FRONT -- //
@@ -374,16 +369,13 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
         // passSwept(&putRe[0], &getRe[0], tmine+1, 1);
         passSwept(state[2] + xc, state[0], tmine+1, 1);
 
-        // restructify(&getSt[0], &getRe[0]);
-        // for (int k=0; k<cGlob.htp; k++)  state[0][k] = getSt[k];
-
         // Increment Counter and timestep
         tmine += cGlob.ht;
         t_eq = cGlob.dt * (tmine/NSTEPS);
 
         if (!ranks[1]) state[0][0] = bound[0];
         if (ranks[1]==lastproc) state[2][xcp] = bound[1];
-        cout << "WHILE " << endl;
+        // cout << "WHILE " << endl;
 
         while(t_eq < cGlob.tf)
         {
@@ -612,6 +604,10 @@ double sweptWrapper(states **state, ivec xpts, ivec alen, int *tstep)
 
         while (t_eq < cGlob.tf)
         {
+			#ifdef PULSE
+				if (!tmine/cGlob.tpb && !ranks[0]) cout << "It's alive: " << tmine << endl;
+			#endif
+
             for (int k=0; k<cGlob.cBks; k++)
             {
                 wholeDiamondCPU(state[0] + k*cGlob.tpb, tmine);

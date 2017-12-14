@@ -27,20 +27,19 @@ inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=f
 
 int main(int argc, char *argv[])
 {
+
     makeMPI(argc, argv);
+
+    #ifdef NOS
+        if (!ranks[1]) std::cout << "No Solution Version." << std::endl;
+    #endif
+
 
     std::string i_ext = ".json";
     std::string s_ext = ".dat";
     std::string t_ext = ".csv";
     std::string myrank = std::to_string(ranks[1]);
     std::string scheme = argv[1];
-
-
-    //Get the number of GPUs in front of the current process.
-    int gpuPlaces[nprocs];
-    MPI_Allgather(&cGlob.hasGpu, 1, MPI_INT, &gpuPlaces[0], 1, MPI_INT, MPI_COMM_WORLD);
-    cGlob.nGpu=0;
-    for (int k=0; k<ranks[1]; k++) cGlob.nGpu+=gpuPlaces[k];
 
     // Equation, grid, affinity data
     std::ifstream injson(argv[2], std::ifstream::in);
@@ -50,13 +49,19 @@ int main(int argc, char *argv[])
     parseArgs(argc, argv);
     initArgs();
 
-    /*
-        Essentially it should associate some unique (UUID?) for the GPU with the CPU.
-        Pretend you now have a (rank, gpu) map in all memory. because you could just retrieve it with a function.
-    */
-    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * cGlob.nGpu;
+    int prevGpu=0; //Get the number of GPUs in front of the current process.
+
+    //If there are no GPUs or if the GPU Affinity is 0, this block is unnecessary.
+    if (cGlob.nGpu > 0)
+    {
+        int gpuPlaces[nprocs]; //Array of 1 or 0 for number of GPUs assigned to process
+        MPI_Allgather(&cGlob.hasGpu, 1, MPI_INT, &gpuPlaces[0], 1, MPI_INT, MPI_COMM_WORLD);
+        for (int k=0; k<ranks[1]; k++) prevGpu+=gpuPlaces[k];
+    }
+
+    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * prevGpu;
     states **state;
-    
+
     int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
     int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
     int nrows = (cGlob.hasGpu) ? 3 : 1;
@@ -65,9 +70,10 @@ int main(int argc, char *argv[])
     std::string pth = string(argv[3]);
     std::vector<int> xpts(1, strt); //Index at which pointer array starts.
     std::vector<int> alen(1, xc + 1); //Write out | Init args vector
+
     if (cGlob.hasGpu)
     {
-
+		cout << "Rank: " << ranks[1] << " has a GPU." << endl;
         state = new states* [3];
         cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));
         cudaCheckError(cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault));
@@ -103,6 +109,12 @@ int main(int argc, char *argv[])
     {
         int tstep = 1;
         double timed, tfm;
+
+		if (!ranks[1])
+		{
+            printf ("Scheme: %s - Grid Size: %d - Affinity: %.2f\n", scheme.c_str(), cGlob.nX, cGlob.gpuA);
+            printf ("threads/blk: %d - timesteps: %.2f\n", cGlob.tpb, cGlob.tf/cGlob.dt);
+		}
 
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = MPI_Wtime();
@@ -140,7 +152,7 @@ int main(int argc, char *argv[])
 
         if (!ranks[1])
         {
-            //READ OUT JSONS
+
             timed *= 1.e6;
 
             double n_timesteps = tfm/cGlob.dt;
@@ -150,6 +162,7 @@ int main(int argc, char *argv[])
             std::cout << n_timesteps << " timesteps" << std::endl;
             std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
+            // Write out performance data as csv
             std::string tpath = pth + "/t" + fspec + scheme + t_ext;
             FILE * timeOut;
             timeOut = fopen(tpath.c_str(), "a+");
@@ -158,12 +171,14 @@ int main(int argc, char *argv[])
             fclose(timeOut);
         }
     }
-
+        //WRITE OUT JSON solution to differential equation
+	#ifndef NOS
         std::string spath = pth + "/s" + fspec + "_" + myrank + i_ext;
         std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
         if (!ranks[1]) solution["meta"] = inJ;
         soljson << solution;
         soljson.close();
+	#endif
 
     if (cGlob.hasGpu)
     {

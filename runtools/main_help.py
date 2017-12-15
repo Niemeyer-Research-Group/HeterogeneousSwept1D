@@ -107,9 +107,14 @@ def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=
     print(execut)
     exeStr = shlex.split(execut)
     proc = sp.Popen(exeStr, stdout=sp.PIPE)
-    cout, err = proc.communicate()
+    ce, er = proc.communicate()
 
-    return cout
+    ce = ce.decode('utf8') if ce else "None"
+    er = er.decode('utf8') if er else "None"
+
+    print(er)
+
+    return ce
 
 # Read notes into a dataFrame. Sort by date and get sha
 

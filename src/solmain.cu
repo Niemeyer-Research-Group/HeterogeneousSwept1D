@@ -34,7 +34,6 @@ int main(int argc, char *argv[])
         if (!ranks[1]) std::cout << "No Solution Version." << std::endl;
     #endif
 
-
     std::string i_ext = ".json";
     std::string s_ext = ".dat";
     std::string t_ext = ".csv";
@@ -50,11 +49,11 @@ int main(int argc, char *argv[])
     initArgs();
 
     int prevGpu=0; //Get the number of GPUs in front of the current process.
+    int gpuPlaces[nprocs]; //Array of 1 or 0 for number of GPUs assigned to process
 
     //If there are no GPUs or if the GPU Affinity is 0, this block is unnecessary.
     if (cGlob.nGpu > 0)
     {
-        int gpuPlaces[nprocs]; //Array of 1 or 0 for number of GPUs assigned to process
         MPI_Allgather(&cGlob.hasGpu, 1, MPI_INT, &gpuPlaces[0], 1, MPI_INT, MPI_COMM_WORLD);
         for (int k=0; k<ranks[1]; k++) prevGpu+=gpuPlaces[k];
     }
@@ -152,7 +151,7 @@ int main(int argc, char *argv[])
 
         if (!ranks[1])
         {
-
+            cout << printout(state[0], 0) << endl;
             timed *= 1.e6;
 
             double n_timesteps = tfm/cGlob.dt;
@@ -172,8 +171,10 @@ int main(int argc, char *argv[])
         }
     }
         //WRITE OUT JSON solution to differential equation
+    if (ranks[1] == lastproc) cout << printout(state[0] + alen[0]-1, 0) << " " << printout(state[0] + alen[0], 0) << " " << myrank << endl;
 	#ifndef NOS
         std::string spath = pth + "/s" + fspec + "_" + myrank + i_ext;
+        cout << spath << endl;
         std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
         if (!ranks[1]) solution["meta"] = inJ;
         soljson << solution;
@@ -195,3 +196,4 @@ int main(int argc, char *argv[])
     endMPI();
     return 0;
 }
+

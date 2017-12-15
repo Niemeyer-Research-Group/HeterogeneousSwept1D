@@ -1,8 +1,5 @@
 
 
-
-
-
 ## TIMING HELP!!
 class PerformOld(object):
 

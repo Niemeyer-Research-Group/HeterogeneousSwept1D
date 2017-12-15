@@ -15,52 +15,64 @@ thispath = op.abspath(op.dirname(__file__))
 os.chdir(thispath)
 toppath = op.dirname(thispath)
 pypath = op.join(toppath, "runtools")
-binpath = op.join(thispath, "bin")
-resultpath = op.join(toppath, "results")
-rawresultpath = op.join(thispath, "rslts")
-eqfpath = op.join(thispath, "tests")
 
 sys.path.append(pypath)
 import result_help as rh
-import main_help as mh
+from main_help import *
 
 prob=["Euler", "Heat", "Const"]
 
-if len(sys.argv) <2:
-    pch = 0
+def justPlot(eq, shw=True, save=False):
+    kj = prob[eq]
+    dm, lemmesee = rh.jmerge(rspath, kj)
+
+    meta = {}
+    if "meta" in dm.keys():
+        print(dm["meta"])
+        meta[kj] = dm.pop("meta")
+    
+    if not eq:
+        pj = (2, 2)
+    else:
+        pj = (1, 1)
+
+    jdf = rh.Solved(dm)
+    fg, axi = plt.subplots(pj[0], pj[1])
+    jdf.metaparse(meta)
+    jdf.plotResult(fg, axi)
+
+    if shw==True:
+        plt.show()
+    
+    if save==True:
+        jdf.savePlot(fg, resultpath, shw=True)
+
+    dff = jdf.ddf
+
+    return dff
+    
+
+if __name__ == "__main__":
+
     rn = False
-else:
-    pch = int(sys.argv[1])
-    sch = " " + sys.argv[2] + " "
-    extra = " " + " ".join(sys.argv[3:]) + " "
-    rn = True
 
-if not pch:
-    sp = (2, 2)
-else:
-    sp = (1, 1)
+    if len(sys.argv) <2:
+        pch = 0
+        
+    else:
+        pch = int(sys.argv[1]) 
+        sch = " " + sys.argv[2] + " " 
+        extra = " " + " ".join(sys.argv[3:]) + " "
+        rn = True
 
-kj = prob[pch]
+    kj = prob[pch]
 
-if rn:
-    ex = op.join(binpath, kj.lower())
-    km = [k for k in os.listdir(eqfpath) if kj.lower() in k]
-    eqf = op.join(eqfpath, km[0])
-    mh.runMPICUDA(ex, 8, sch, eqf + " ", outdir=rawresultpath, eqopt=extra)
+    if rn:
+        ex = op.join(binpath, kj.lower())
+        km = [k for k in os.listdir(testpath) if kj.lower() in k]
+        eqf = op.join(testpath, km[0])
+        cout = runMPICUDA(ex, 8, sch, eqf + " ", outdir=rspath, eqopt=extra)
 
-dm, lemmesee = rh.jmerge(rawresultpath, kj)
+    print(cout)
+    dfp = justPlot(pch)
 
-meta = {}
-if "meta" in dm.keys():
-    print(dm["meta"])
-    meta[kj] = dm.pop("meta")
-
-jdf = rh.Solved(dm)
-fg, axi = plt.subplots(sp[0], sp[1])
-jdf.metaparse(meta)
-jdf.plotResult(fg, axi)
-jdf.savePlot(fg, resultpath, shw=True)
-dff = jdf.ddf
-ddfk = list(dff.keys())
-dsam = dff[ddfk[0]]
-dsk = dsam.columns.values.tolist()

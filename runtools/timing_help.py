@@ -5,27 +5,29 @@
 
 # Dependencies: gitpython, palettable, cycler
 
-import os
-import sys
-import os.path as op
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-from cycler import cycler
-import numpy as np
-import pandas as pd
-import palettable.colorbrewer as pal
 import collections
-import git
-import json
-import statsmodels.api as sm
-from datetime import datetime
-from sklearn import linear_model
-from sklearn.metrics import mean_squared_error, r2_score
 import itertools
+import json
+import math
+import os
+import os.path as op
+import sys
+from datetime import datetime
 from random import random
 
-from main_help import *
+import git
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+import palettable.colorbrewer as pal
+import pandas as pd
+import statsmodels.api as sm
+from cycler import cycler
+from sklearn import linear_model
+from sklearn.metrics import mean_squared_error, r2_score
+
 import result_help as rh
+from main_help import *
 
 plt.rc('axes', prop_cycle=cycler('color', pal.qualitative.Dark2_8.mpl_colors))
 
@@ -182,7 +184,6 @@ class Perform(object):
         self.pFrame = pd.DataFrame(np.vstack((xInt.T, yInt.T)).T, columns=cols)
         
 
-
     def transformz(self):
         self.ffy = self.pFrame.set_index(cols[0]).set_index(cols[1], append=True)
         self.fffy = self.ffy.set_index(cols[2], append=True)
@@ -206,12 +207,9 @@ class Perform(object):
             if shower:
                 plt.show()
 
-def compare(dfS, dfC):
-    return dfS['time']/dfc['time']
-
 def xinterp3(dfn):
-    gA = np.linspace(min(dfn.gpuA), max(dfn.gpuA), 50)
-    nXA = np.linspace(min(dfn.nX), max(dfn.nX), 50)
+    nXA = np.logspace(np.log2(min(dfn.nX)), np.log2(max(dfn.nX)), base=2)
+    gA = np.unique(dfn.gpuA)[::3]
     tpbs = np.unique(dfn.tpb)
 
     # There should be a combinatorial function.
@@ -242,9 +240,16 @@ class perfModel(Perform):
         self.logY = pd.DataFrame({self.respvar: self.oFrame[self.respvar], "log"+self.respvar: np.log(self.oFrame[self.respvar])})
         self.mdl = sm.OLS(y, X)
         self.res = self.mdl.fit() 
+        pv = self.mdl.pvalues
+        psig = [k>0.01 for k in pv]
+        if sum(psig):
+            #redo regression because there's an insignificant param
+            pass
+        else:
+            #The regression is fine.
+            pass
         
     def makedf(self, lists):
-
         if isinstance(lists[0], list):
             dct = {k:[] for k in self.xo}
             for a in lists:
@@ -255,7 +260,7 @@ class perfModel(Perform):
             dct = dict(zip(self.xo, lists))
             dct = {0: dct}
                 
-            return pd.DataFrame.from_dict(dct, orient='index')
+        return pd.DataFrame.from_dict(dct, orient='index')
     
         
     def transform(self, frame):     
@@ -266,13 +271,11 @@ class perfModel(Perform):
         return fr
 
     def predict(self, newVals):
-        
         newFrame = self.makedf(newVals)
         newFrame = newFrame[self.xo]
         fr = self.transform(newFrame)
         return self.res.predict(fr)
         
-
     def model(self):
         xi = xinterp3(self.oFrame)
         xi = pd.DataFrame(xi, columns=self.xo)
@@ -299,18 +302,41 @@ class perfModel(Perform):
             dfn.plot.scatter(*ncols[-2:], ax=a, label="{:1}".format(n), color=cr)
             
         a.set_title(self.title)    
-        
              
     def pr(self):
         print(self.title)
         print(self.res.summary())
+        
+    def plotLine(self, plotpath=".", saver=True, shower=False):
+        f, ax = plt.subplots(2, 2, figsize=(14,8))
+        ax = ax.ravel()
+        df = self.model()
+        plotname = op.join(plotpath, self.title + "Contour.pdf")
+        for th, a in zip(np.unique(df.index.values), ax):
+            dfn = df.xs(th).pivot(*self.cols[1:]).T
+            dfn.plot(ax=a, logx=True, logy=True)
+            a.set_xscale("log")
+            a.set_ylabel("gpuA")
+            a.set_xlabel(xlbl)
+            a.set_title(str(th))
+
+        f.tight_layout(pad=0.2, w_pad=0.75, h_pad=1.0)
+        f.subplots_adjust(bottom=0.08, right=0.82, top=0.9)
+        plt.suptitle(self.title)
+
+        if saver:
+            f.savefig(plotname, dpi=1000, bbox_inches="tight")
+        if shower:
+            plt.show()
+            
+        return df
         
     def plotContour(self, plotpath=".", saver=True, shower=False):
         f, ax = plt.subplots(2, 2, figsize=(14,8))
         ax = ax.ravel()
         df = self.model()
         plotname = op.join(plotpath, self.title + "Contour.pdf")
-        for th, a in zip(self.uniques[0], ax):
+        for th, a in zip(np.unique(df.index.values), ax):
             dfn = df.xs(th).pivot(*self.cols[1:])
             self.b = dfn
             X, Y = np.meshgrid(dfn.columns.values, dfn.index.values)
@@ -423,8 +449,14 @@ if __name__ == "__main__":
     abc = pp.byFlop()
     f, a = plt.subplots(1, 1, figsize=(14,8))
     #ax = a.ravel()
-    pp.plotFlop(abc, f, a)
+    # pp.plotFlop(abc, f, a)
+    # print(pp.res.resid)
+    # plt.scatter(pp.oFrame.nX, np.abs(pp.res.resid)/pp.oFrame.time)
+    # plt.xscale("log")
+    # plt.show()
+    print(list(zip(pp.res.params, pp.res.pvalues)))
     
+
 #    for p in perfs:
 #        p.glmBytpb(rrg)
 #        #p.plotContour(plotpath=resultpath)

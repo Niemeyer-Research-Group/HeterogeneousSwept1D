@@ -14,8 +14,8 @@
 #include <sstream>
 #include <string>
 
-namespace detection
-{
+// namespace detection
+// {
 
 #define RLEN 80
 
@@ -32,8 +32,8 @@ int getHost(hvec &ids, hname *newHost)
 {
     char machineName[RLEN];
     int rb = RLEN;
-    int nGpu;
-    cudaGetDeviceCount(&nGpu);
+    int nGo;
+    cudaGetDeviceCount(&nGo);
     MPI_Get_processor_name(&machineName[0],  &rb);
     for (int i=0; i<ids.size(); i++)
     {
@@ -44,16 +44,16 @@ int getHost(hvec &ids, hname *newHost)
     }
 
     strcpy(newHost->hostname, machineName);
-    newHost->ng = nGpu;
+    newHost->ng = nGo;
     return ids.size();
 }
 
 // Test device sight.
-bool detector(int ranks, int sz)
+int detector(const int ranko, const int sz)
 {
     hvec ledger;
     int machineID;
-    int hasgpu = 0;
+    int hasG = 0;
 
 	hname hBuf;
     MPI_Datatype atype;
@@ -65,7 +65,7 @@ bool detector(int ranks, int sz)
 
     for (int k=0; k<sz; k++)
     {
-        if(ranks == k)
+        if(ranko == k)
         {
             machineID = getHost(ledger, &hBuf);
         }
@@ -83,28 +83,29 @@ bool detector(int ranks, int sz)
 			ledger.push_back(hBuf);
 		}
     }
+    MPI_Barrier(MPI_COMM_WORLD);
 
 	MPI_Comm machineComm;
-    MPI_Comm_split(MPI_COMM_WORLD, machineID, ranks, &machineComm);
+    MPI_Comm_split(MPI_COMM_WORLD, machineID, ranko, &machineComm);
     int machineRank, machineSize;
     MPI_Comm_rank(machineComm, &machineRank);
     MPI_Comm_size(machineComm, &machineSize);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-	int nGpu = ledger[machineID].ng;
-    int pcivec[nGpu*3];
+	int nGo = ledger[machineID].ng;
+    int pcivec[nGo*3];
 	cudaDeviceProp props;
 
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	if (machineRank == 0)
     {
-        for (int k = 0; k < nGpu; k++)
+        for (int k = 0; k < nGo; k++)
         {
             cudaGetDeviceProperties(&props, k);
             cout << "----------------------" << endl;
-			cout << "Rank " << ranks << " device - " << k << " ";
+			cout << "Rank " << ranko << " device - " << k << " ";
             cout << props.name << " " << props.pciBusID << endl;
             cout << std::hex << props.pciDomainID << ":" <<  props.pciBusID << ":" << props.pciDeviceID << endl;
 
@@ -114,7 +115,7 @@ bool detector(int ranks, int sz)
     	}
     }
 
-	MPI_Bcast(&pcivec[0], 3*nGpu, MPI_INT, 0, machineComm);
+	MPI_Bcast(&pcivec[0], 3*nGo, MPI_INT, 0, machineComm);
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	int nset = 0;
@@ -124,7 +125,7 @@ bool detector(int ranks, int sz)
 
     for (int i = 1; i<machineSize; i++)
     {
-        if ((nGpu - nset) == 0)
+        if ((nGo - nset) == 0)
         {
             break;
         }
@@ -135,7 +136,7 @@ bool detector(int ranks, int sz)
             cudaDeviceGetByPCIBusId(&dev, bufs.str().c_str());
             cudaGetDeviceProperties(&props, dev);
 
-            cout << "Global Rank: " << ranks << " Machine Rank: " << machineRank << std::endl;
+            cout << "Global Rank: " << ranko << " Machine Rank: " << machineRank << std::endl;
             cout << "on machine " << ledger[machineID].hostname << std::endl;
             cout << i << " " << bufs.str() << " " << props.name << endl;
 
@@ -147,7 +148,7 @@ bool detector(int ranks, int sz)
             {
                 cudaSetDevice(dev);
                 cout << "Acquired GPU: " << props.name << " with pciID: " << bufs.str() << endl;
-                hasgpu = 1;
+                hasG = 1;
             }
             cout << "----------------------" << endl;
             nset++;
@@ -159,7 +160,8 @@ bool detector(int ranks, int sz)
     MPI_Type_free(&atype);
     MPI_Comm_free(&machineComm);
     MPI_Barrier(MPI_COMM_WORLD);
-    return hasgpu;
+    return hasG;
 }
-}
+
+//}
 #endif

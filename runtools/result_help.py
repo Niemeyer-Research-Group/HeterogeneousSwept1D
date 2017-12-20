@@ -15,9 +15,7 @@ import json as j
 import pandas as pd
 import palettable.colorbrewer as pal
 import subprocess as sp
-import collections
 from main_help import *
-# import datetime.datetime as dt
 
 plt.rc("axes", prop_cycle=cycler("color", pal.qualitative.Dark2_8.mpl_colors))
 
@@ -74,15 +72,7 @@ class Solved(object):
             pdi = probspec[self.pr[0]]
             self.plotname = self.pr[0] + "_" + str(pdi["nX"])
             
-        
-        
-        # self.vals = np.genfromtxt(dataTuple, skip_header=1)[:,2:]
-        # self.varNames = np.genfromtxt(dataTuple, skip_header=1, dtype="string")[:,0]
-        # self.tFinal = np.around(np.genfromtxt(dataTuple, skip_header=1)[:,1], decimals=7)
-        # self.utFinal = np.unique(self.tFinal)
-        # self.plotTitles = np.unique(self.varNames)
-        # self.plotname = self.datafilename.split("_")[0]
-        # self.subpl = "Euler" in self.plotname            
+    
         
     def plotResult(self, f, a):   
         
@@ -138,9 +128,9 @@ class Solved(object):
             fh.subplots_adjust(bottom=0.08, right=0.85, top=0.9, 
                                 wspace=0.15, hspace=0.25)
 
-    def savePlot(self, fh, plotpath, shw=False):
+    def savePlot(self, fh, shw=False):
         
-        plotfile = op.join(plotpath, self.plotname + self.ext)
+        plotfile = op.join(resultpath, self.plotname + self.ext)
         fh.savefig(plotfile, dpi=200, bbox_inches="tight")
         if shw:
             plt.show()
@@ -188,28 +178,30 @@ class Solved(object):
                 for a in ax:
                     a.clear()
 
-        # st = "linux"
-        # if st in sys.platform:
-        #     try (sp.call(["ffmpeg", "-i", "V_%d.png", "-r", "4", avifile])):
-        #         print("Writing avi")
-        #         sp(call(["ffmpeg", "-i", avifile, giffile])
-        #         print("Writing gif")
-        #     except:
-        #         print("------------------")
-        #         print( "Install ffmpeg with: sudo apt-get install ffmpeg")
-        #         f = os.listdir(".")
-        #         for fm in f:
-        #             os.remove(fm)
-                    
-        #         raise SystemExit
-
-        #     f = o(.listdir(".")
-        #     for fm in f:
-        #         o.remove(fm)
-        # else
-        #     print("------------------")
-        #     print( "This script only makes gifs on linux with ffmpeg.")
-        #     print("The images are still in the folder under ResultPlots/Gifs/Temp.")
+                st = "linux"
+                if st in sys.platform:
+                    try: 
+                        (sp.call(["ffmpeg", "-i", "V_%d.png", "-r", "4", avifile]))
+                    except:
+                        print("------------------")
+                        print( "Install ffmpeg with: sudo apt-get install ffmpeg")
+                        f = os.listdir(".")
+                        for fm in f:
+                            os.remove(fm)
+                            
+                        raise SystemExit
+                
+                print("Writing avi")
+                sp.call(["ffmpeg", "-i", avifile, giffile])
+                print("Writing gif")
+                
+                f = os.listdir(".")
+                for fm in f:
+                    os.remove(fm)
+                else:
+                    print("------------------")
+                    print( "This script only makes gifs on linux with ffmpeg.")
+                    print("The images are still in the folder under ResultPlots/Gifs/Temp.")
             
         
 

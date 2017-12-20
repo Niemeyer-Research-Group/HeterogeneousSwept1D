@@ -3,7 +3,7 @@
 #$ -cwd
 #$ -N hSweptSingleRun
 #$ -q mime4
-#$ -pe mpich2 12
+#$ -pe mpich2 20
 #$ -j y
 #$ -R y
 #$ -l h=compute-e-1
@@ -12,6 +12,7 @@ hostname
 
 eq=$1
 
-$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ./bin/$eq C ./tests/"$eq"Test.json ./rslts
+sch=$2
 
+$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ./bin/$eq $sch ./tests/"$eq"Test.json ./rslts tpb 64 nX 65536 gpuA 5.0 lx 79.2523156451219993
 

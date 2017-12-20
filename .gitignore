@@ -13,13 +13,12 @@ bin/
 cubin/
 /misc/
 .vscode/
-tempSol.json
+temp*
 src/trslt/*.json
 src/rslts/*.json
-main.pdf
+*.pdf
 src/utilities/js*
 src/conf
-*.o*
-*.po*
 nohup*
 *~*
+src/*.sh

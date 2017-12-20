@@ -28,9 +28,13 @@ EQI:=$(foreach eq, $(EQS), $(basename $(notdir $(eq))))
 
 OBJS:=$(foreach eq, $(EQI), $(BINPATH)/$(eq))
 
+XL:=$(foreach lp, $(LPATH), -Xlinker=-rpath,$(lp))
+
+LPATHS:=$(foreach lp, $(LPATH), -L$(lp))
+
 default: $(OBJS) 
 
 $(OBJS): $(BINPATH)%: $(EQPATH)%.h $(CPREQ) $(DH) $(UTILPATH)/gpuDetector.h Makefile
 	$(eval IFL:=$(shell echo $(@F) | tr '[:lower:]' '[:upper:]'))
-	$(NVCC) $(CPREQ) -o $@ $(IPATH) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS) $(LPATH) $(LIBS) 
+	$(NVCC) $(CPREQ) -o $@ $(IPATH) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS) $(XL) $(LPATHS) $(LIBS) 
 

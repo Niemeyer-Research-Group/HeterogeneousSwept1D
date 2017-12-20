@@ -73,7 +73,6 @@ void passClassic(REAL *puti, REAL *geti, const int tstep)
 // Classic Discretization wrapper.
 double classicWrapper(states **state, const ivec xpts, const ivec alen, int *tstep)
 {
-    if (!ranks[1]) cout << "CLASSIC Decomposition" << endl;
     int tmine = *tstep;
 
     double t_eq = 0.0;

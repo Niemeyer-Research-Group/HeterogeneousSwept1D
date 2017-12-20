@@ -196,7 +196,7 @@ __host__ inline states icond(double xs, double lx)
     int side = (xs > HALF*lx);
     s.Q[0] = hBounds[side];
     s.Q[1] = hBounds[side];
-    s.Pr = -10.0;
+    s.Pr = 0.0;
     return s;
 }
 
@@ -259,6 +259,7 @@ __host__ void mpi_type(MPI_Datatype *dtype)
 
     MPI_Type_free(&vtype);
 }
+
 
 /*
     // MARK : Equation procedure

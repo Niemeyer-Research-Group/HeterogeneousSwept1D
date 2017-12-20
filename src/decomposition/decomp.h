@@ -5,7 +5,8 @@
 */
 
 #include <string>
-#include "gpuDetector.h"
+#include <typeinfo>
+
 
 #define TAGS(x) x & 32767
 
@@ -28,10 +29,10 @@ struct globalism {
     double gpuA;
 
 // Geometry
+	int szState;
     int tpb, tpbp, base;
     int cBks, gBks;
     int ht, htm, htp;
-    int szState;
 
 // Iterator
     double tf, freq, dt, dx, lx;
@@ -39,18 +40,21 @@ struct globalism {
     // Initialize passing both sides.
 };
 
+#include "gpuDetector.h"
+
 globalism cGlob;
 jsons inJ;
 jsons solution;
 
-//Always prepared for periodic boundary conditions.P
-void makeMPI(int argc, char* argv[])
+//Always prepared for periodic boundary conditions.
+void makeMPI(int argc, char** argv)
 {
     MPI_Init(&argc, &argv);
     mpi_type(&struct_type);
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
+	cGlob.tpb = 128;
     ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
 }
@@ -64,7 +68,7 @@ void parseArgs(int argc, char *argv[])
         for (int k=4; k<argc; k+=2)
         {
             inarg = argv[k];
-            inJ[inarg] = atof(argv[k+1]);
+			inJ[inarg] = atof(argv[k+1]);
         }
     }
 }
@@ -73,30 +77,39 @@ void parseArgs(int argc, char *argv[])
 
 void initArgs()
 {
-    using namespace std;
-    cGlob.lx = inJ["lx"].asDouble();
-    cGlob.szState = sizeof(states);
-    cGlob.tpb = inJ["tpb"].asInt();
+	cGlob.gpuA = inJ["gpuA"].asDouble();
+	int ranker = ranks[1];
+	int sz = nprocs;
 
-    cGlob.dt = inJ["dt"].asDouble();
-    cGlob.tf = inJ["tf"].asDouble();
-    cGlob.freq = inJ["freq"].asDouble();
-    cGlob.gpuA = inJ["gpuA"].asDouble();
-    if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
-
-    // for (int k = 0; k<3; k++) std::cout << ranks[k] << " ";
-    // std::cout << std::endl;
-
-    if (!cGlob.gpuA)
+	if (!cGlob.gpuA)
     {
         cGlob.hasGpu = 0;
         cGlob.nGpu = 0;
     }
     else
     {
-        cGlob.hasGpu = detection::detector(ranks[1], nprocs);
+        cGlob.hasGpu = detector(ranker, sz);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     }
+
+    cGlob.lx = inJ["lx"].asDouble();
+    cGlob.szState = sizeof(states);
+    std::string fu = inJ["tpb"].asString();
+	cGlob.tpb = stoi(fu);
+//	for(int k=0; k<5; k++)
+//	{
+//		if (ranker == k) {
+//		cout << ranker << " " << fu << " " << cGlob.tpb << " " << inJ["tpb"].asDouble() << endl;
+//		}
+//		MPI_Barrier(MPI_COMM_WORLD);
+//	}
+
+    cGlob.dt = inJ["dt"].asDouble();
+    cGlob.tf = inJ["tf"].asDouble();
+    cGlob.freq = inJ["freq"].asDouble();
+	// cout << ranks[1] << " " << cGlob.tpb << " ";
+
+    if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
     if (inJ["nX"].asInt() == 0)
     {
@@ -116,11 +129,12 @@ void initArgs()
     else
     {
         cGlob.nX = inJ["nX"].asInt();
-        cGlob.cBks = std::round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
+        cGlob.cBks = round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
         if (cGlob.cBks & 1) cGlob.cBks++;
         cGlob.gBks = cGlob.gpuA*cGlob.cBks;
     }
     // Need to reset this after figuring out partitions.
+
     cGlob.nX = cGlob.tpb * (nprocs * cGlob.cBks + cGlob.nGpu * cGlob.gBks);
 
     cGlob.base = cGlob.tpb+2;
@@ -131,6 +145,8 @@ void initArgs()
     // Derived quantities
     cGlob.xcpu = cGlob.cBks * cGlob.tpb;
     cGlob.xg = cGlob.gBks * cGlob.tpb;
+
+    // cout << ranks[1] << " - ht: " << cGlob.ht << " - htp: " << cGlob.htp << " - tpb: " << cGlob.tpb << " - cBks: " << cGlob.cBks << " - gBks " << cGlob.gBks << " - nGpu " << cGlob.nGpu << " - hGpu " << cGlob.hasGpu << endl;
 
     // inJ["gpuAA"] = (double)cGlob.gBks/(double)cGlob.cBks; // Adjusted gpuA.
     inJ["cBks"] = cGlob.cBks;
@@ -153,7 +169,7 @@ void initArgs()
     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.
-    if (!ranks[1])  cout << "Initialized Arguments" << endl;
+    if (!ranks[1])  cout << endl << "Initialized Arguments" << endl;
 
 }
 
@@ -174,7 +190,7 @@ void solutionOutput(states *outState, double tstamp, int idx, int strt)
 
 void endMPI()
 {
-    MPI_Type_free(&struct_type);
 	MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Type_free(&struct_type);
 	MPI_Finalize();
 }

@@ -19,5 +19,7 @@ src/rslts/*.json
 main.pdf
 src/utilities/js*
 src/conf
+*.o*
+*.po*
 nohup*
 *~*

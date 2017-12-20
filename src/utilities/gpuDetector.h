@@ -135,7 +135,6 @@ bool detector(int ranks, int sz)
             cudaDeviceGetByPCIBusId(&dev, bufs.str().c_str());
             cudaGetDeviceProperties(&props, dev);
 
-
             cout << "Global Rank: " << ranks << " Machine Rank: " << machineRank << std::endl;
             cout << "on machine " << ledger[machineID].hostname << std::endl;
             cout << i << " " << bufs.str() << " " << props.name << endl;

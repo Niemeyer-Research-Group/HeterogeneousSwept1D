@@ -6,9 +6,6 @@
 import os
 import os.path as op
 import matplotlib.pyplot as plt
-# from cycler import cycler
-#
-# import palettable.colorbrewer as pal
 
 import pandas as pd
 import shlex
@@ -48,12 +45,6 @@ def readj(f):
     fobj.close()
     return j.loads(fr)
 
-# def writej(f, j):
-#     fobj = open(f, 'w')
-#     fr = fobj.read()
-#     fobj.close()
-#     return "Wrote"
-
 def undict(d, kind='dict'):
     dp = depth(d)
     if dp>2:
@@ -72,27 +63,6 @@ def makeList(v):
         return [v]
 
 #Divisions and threads per block need to be lists (even singletons) at least.
-def runCUDA(Prog, divisions, threadsPerBlock, timeStep, finishTime, frequency,
-    decomp, varfile='temp.dat', timefile=""):
-
-    threadsPerBlock = makeList(threadsPerBlock)
-    divisions = makeList(divisions)
-    for tpb in threadsPerBlock:
-        for i, dvs in enumerate(divisions):
-            print("---------------------")
-            print("Algorithm #divs #tpb dt endTime")
-            print(decomp, dvs, tpb, timeStep, finishTime)
-
-            execut = Prog +  ' {0} {1} {2} {3} {4} {5} {6} {7}'.format(dvs, tpb, timeStep,
-                    finishTime, frequency, decomp, varfile, timefile)
-
-            exeStr = shlex.split(execut)
-            proc = sp.Popen(exeStr)
-            sp.Popen.wait(proc)
-
-    return None
-
-#Divisions and threads per block need to be lists (even singletons) at least.
 def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=""):
 
     # if n[-1] != " ": n += " " for each function input.
@@ -100,16 +70,20 @@ def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=
     runnr = "mpirun -np "
     print("---------------------")
     os.chdir(spath)
-    testpath = op.join(spath, "tests")
-
+    
     execut = runnr + "{0} ".format(nproc) + mpiopt + exece + scheme + eqfile + outdir + eqopt
 
     print(execut)
     exeStr = shlex.split(execut)
     proc = sp.Popen(exeStr, stdout=sp.PIPE)
-    cout, err = proc.communicate()
+    ce, er = proc.communicate()
 
-    return cout
+    ce = ce.decode('utf8') if ce else "None"
+    er = er.decode('utf8') if er else "None"
+
+    print(er)
+
+    return ce
 
 # Read notes into a dataFrame. Sort by date and get sha
 

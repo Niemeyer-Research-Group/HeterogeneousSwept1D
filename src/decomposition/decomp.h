@@ -43,7 +43,7 @@ globalism cGlob;
 jsons inJ;
 jsons solution;
 
-//Always prepared for periodic boundary conditions.P
+//Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
 {
     MPI_Init(&argc, &argv);
@@ -84,9 +84,6 @@ void initArgs()
     cGlob.gpuA = inJ["gpuA"].asDouble();
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
-    // for (int k = 0; k<3; k++) std::cout << ranks[k] << " ";
-    // std::cout << std::endl;
-
     if (!cGlob.gpuA)
     {
         cGlob.hasGpu = 0;
@@ -116,7 +113,7 @@ void initArgs()
     else
     {
         cGlob.nX = inJ["nX"].asInt();
-        cGlob.cBks = std::round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
+        cGlob.cBks = round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
         if (cGlob.cBks & 1) cGlob.cBks++;
         cGlob.gBks = cGlob.gpuA*cGlob.cBks;
     }

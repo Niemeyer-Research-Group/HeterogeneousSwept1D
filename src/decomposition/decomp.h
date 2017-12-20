@@ -43,7 +43,7 @@ globalism cGlob;
 jsons inJ;
 jsons solution;
 
-//Always prepared for periodic boundary conditions.P
+//Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char* argv[])
 {
     MPI_Init(&argc, &argv);

@@ -3,15 +3,6 @@
 */
 #include <fstream>
 
-#define cudaCheckError(ans) { cudaCheck((ans), __FILE__, __LINE__); }
-inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false)
-{
-   if (code != cudaSuccess)
-   {
-      fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
 
 #include "heads.h"
 #include "decomp.h"
@@ -27,12 +18,11 @@ inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=f
 
 int main(int argc, char *argv[])
 {
-
     makeMPI(argc, argv);
 
-    #ifdef NOS
-        if (!ranks[1]) std::cout << "No Solution Version." << std::endl;
-    #endif
+    // #ifdef NOS
+    //     if (!ranks[1]) std::cout << "No Solution Version." << std::endl;
+    // #endif
 
     std::string i_ext = ".json";
     std::string s_ext = ".dat";
@@ -74,21 +64,21 @@ int main(int argc, char *argv[])
     {
 		cout << "Rank: " << ranks[1] << " has a GPU." << endl;
         state = new states* [3];
-        cudaCheckError(cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault));
-        cudaCheckError(cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault));
-        cudaCheckError(cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault));
+        cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
 
         xpts.push_back(strt + xc);
         alen.push_back(cGlob.xg + 1);
         xpts.push_back(strt + xc + cGlob.xg);
         alen.push_back(xc + 1);
 
-        cudaCheckError(cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts)));
+        cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
 
         if (sizeof(REAL)>6)
         {
-            cudaCheckError(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
-        }
+            cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+    }
     }
     else
     {
@@ -197,3 +187,11 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false)
+{
+   if (code != cudaSuccess)
+   {
+      fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}

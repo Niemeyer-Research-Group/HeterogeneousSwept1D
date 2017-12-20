@@ -28,10 +28,7 @@ EQI:=$(foreach eq, $(EQS), $(basename $(notdir $(eq))))
 
 OBJS:=$(foreach eq, $(EQI), $(BINPATH)/$(eq))
 
-default: ech $(OBJS) 
-
-ech:
-	echo $(DEF)
+default: $(OBJS) 
 
 $(OBJS): $(BINPATH)%: $(EQPATH)%.h $(CPREQ) $(DH) $(UTILPATH)/gpuDetector.h Makefile
 	$(eval IFL:=$(shell echo $(@F) | tr '[:lower:]' '[:upper:]'))

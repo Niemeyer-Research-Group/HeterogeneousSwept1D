@@ -614,7 +614,7 @@ double sweptWrapper(states **state, const ivec xpts, const ivec alen, int *tstep
                 for (int k=0; k<cGlob.cBks; k++)
                 {
                     downTriangleCPU(state[0] + k*cGlob.tpb, tmine);
-                
+                }
 
                 // Increment Counter and timestep
                 tmine += cGlob.ht;

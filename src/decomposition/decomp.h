@@ -5,8 +5,6 @@
 */
 
 #include <string>
-#include <typeinfo>
-
 
 #define TAGS(x) x & 32767
 
@@ -80,7 +78,8 @@ void initArgs()
 	cGlob.gpuA = inJ["gpuA"].asDouble();
 	int ranker = ranks[1];
 	int sz = nprocs;
-
+	int t0, tSelect;
+	if(!ranks[1]) t0 = MPI_Wtime();
 	if (!cGlob.gpuA)
     {
         cGlob.hasGpu = 0;
@@ -91,23 +90,20 @@ void initArgs()
         cGlob.hasGpu = detector(ranker, sz);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     }
+	if(!ranks[1])
+	{
+		tSelect = MPI_Wtime()-t0;
+		cout << "GPU section time (s): " << tSelect << endl;
+	}
 
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);
-    std::string fu = inJ["tpb"].asString();
-	cGlob.tpb = stoi(fu);
-//	for(int k=0; k<5; k++)
-//	{
-//		if (ranker == k) {
-//		cout << ranker << " " << fu << " " << cGlob.tpb << " " << inJ["tpb"].asDouble() << endl;
-//		}
-//		MPI_Barrier(MPI_COMM_WORLD);
-//	}
+    cGlob.tpb = inJ["tpb"].asInt();
 
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
-	// cout << ranks[1] << " " << cGlob.tpb << " ";
+	//cout << ranks[1] << " " << cGlob.tpb << " ";
 
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
@@ -169,7 +165,7 @@ void initArgs()
     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.
-    if (!ranks[1])  cout << endl << "Initialized Arguments" << endl;
+    if (!ranks[1])  cout << "Initialized Arguments" << endl;
 
 }
 

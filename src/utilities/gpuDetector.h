@@ -69,7 +69,7 @@ int detector(const int ranko, const int sz)
         {
             machineID = getHost(ledger, &hBuf);
         }
-
+        //Broadcast the updated host list - vis GPUs to all procs.
         MPI_Bcast(&hBuf, 1, atype, k, MPI_COMM_WORLD);
 		if (ledger.size() > 0)
 		{
@@ -108,6 +108,10 @@ int detector(const int ranko, const int sz)
 			cout << "Rank " << ranko << " device - " << k << " ";
             cout << props.name << " " << props.pciBusID << endl;
             cout << std::hex << props.pciDomainID << ":" <<  props.pciBusID << ":" << props.pciDeviceID << endl;
+            cout << "DISPLAY " << props.tccDriver << std::dec << endl;
+
+            // cudaDriverGetVersion(&driverVersion);
+            // cudaRuntimeGetVersion(&runtimeVersion);
 
 			pcivec[3*k] = props.pciDomainID;
 			pcivec[3*k+1] = props.pciBusID;
@@ -139,7 +143,7 @@ int detector(const int ranko, const int sz)
             cout << "Global Rank: " << ranko << " Machine Rank: " << machineRank << std::endl;
             cout << "on machine " << ledger[machineID].hostname << std::endl;
             cout << i << " " << bufs.str() << " " << props.name << endl;
-
+            //props.kernelExecTimeoutEnabled tccDriver?
             if (props.kernelExecTimeoutEnabled)
             {
                 cout << "DEVICE IS DISPLAY, NOT ASSIGNED" << endl;

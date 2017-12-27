@@ -14,5 +14,5 @@ eq=$1
 
 sch=$2
 
-$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ./bin/$eq $sch ./tests/"$eq"Test.json ./rslts tpb 64 nX 65536 gpuA 5.0 lx 79.2523156451219993
+$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ./bin/$eq $sch ./tests/"$eq"Test.json ./rslts tpb 512  nX 867432 gpuA 5.0 lx 79.2523156451219993
 

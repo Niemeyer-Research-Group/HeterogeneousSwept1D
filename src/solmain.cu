@@ -8,7 +8,6 @@
 #include "decomp.h"
 #include "classic.h"
 #include "swept.h"
-#include <unistd.h>
 
 /**
 ----------------------
@@ -62,11 +61,12 @@ int main(int argc, char *argv[])
 
     if (cGlob.hasGpu)
     {
-		cout << "Rank: " << ranks[1] << " has a GPU." << endl;
         state = new states* [3];
         cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
+
+        cout << "Rank: " << ranks[1] << " has a GPU" << endl;
 
         xpts.push_back(strt + xc);
         alen.push_back(cGlob.xg + 1);
@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
         if (sizeof(REAL)>6)
         {
             cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
-    }
+        }
     }
     else
     {

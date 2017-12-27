@@ -165,7 +165,6 @@ void downTriangleCPU(states *state, int tstep)
     }
 }
 
-// Now you can call this on a split for all proc/threads except (0,0)
 void wholeDiamondCPU(states *state, int tnow)
 {
     for (int k=cGlob.ht; k>0; k--)
@@ -198,13 +197,13 @@ void splitDiamondCPU(states *state, int tnow)
             if (n == cGlob.ht)
             {
                 ssLeft[0] = state[n-1], ssLeft[1] = state[n];
-                stepUpdate(&ssLeft[0], n, tnow);
+                stepUpdate(&ssLeft[0], 1, tnow);
                 state[n] = ssLeft[1];
             }
             else if (n == cGlob.htp)
             {
                 ssRight[1] = state[n], ssRight[2] = state[n+1];
-                stepUpdate(&ssRight[0], n, tnow);
+                stepUpdate(&ssRight[0], 1, tnow);
                 state[n] = ssRight[1];
             }
             else
@@ -222,13 +221,13 @@ void splitDiamondCPU(states *state, int tnow)
             if (n == cGlob.ht)
             {
                 ssLeft[0] = state[n-1], ssLeft[1] = state[n];
-                stepUpdate(&ssLeft[0], n, tnow);
+                stepUpdate(&ssLeft[0], 1, tnow);
                 state[n] = ssLeft[1];
             }
             else if (n == cGlob.htp)
             {
                 ssRight[1] = state[n], ssRight[2] = state[n+1];
-                stepUpdate(&ssRight[0], n, tnow);
+                stepUpdate(&ssRight[0], 1, tnow);
                 state[n] = ssRight[1];
             }
             else
@@ -528,6 +527,7 @@ double sweptWrapper(states **state, const ivec xpts, const ivec alen, int *tstep
         }
   
         passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
+
 
         //Split
         for (int k=0; k<cGlob.cBks; k++)

@@ -21,4 +21,3 @@ src/utilities/js*
 src/conf
 nohup*
 *~*
-src/*.sh

@@ -19,7 +19,7 @@ ls rslts
 for eq in euler heat
 do
 	for sc in S C
-
+	do
 		for t in $(seq 1 12)
 		do
 			tpb=$((64*$t))

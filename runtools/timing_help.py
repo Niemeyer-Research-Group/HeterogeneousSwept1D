@@ -43,7 +43,6 @@ mpl.rcParams["figure.subplot.wspace"] = 0.15
 mpl.rcParams["figure.subplot.hspace"] = 0.25
 mpl.rcParams["figure.subplot.left"] = 0.05
 
-
 ylbl = "Time per timestep (us)"
 xlbl = "Grid Size"
 ext = ".json"

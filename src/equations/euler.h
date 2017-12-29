@@ -276,7 +276,7 @@ REAL pressureRoe(REALthree qH)
 */
 __device__ __host__
 __forceinline__
-void pressureRatio(states *state, int idx, int tstep)
+void pressureRatio(states *state, const int idx, const int tstep)
 {
     state[idx].Pr = (pressure(state[idx+1].Q[tstep]) - pressure(state[idx].Q[tstep]))/(pressure(state[idx].Q[tstep]) - pressure(state[idx-1].Q[tstep]));
 }

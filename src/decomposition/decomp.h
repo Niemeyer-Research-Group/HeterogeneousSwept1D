@@ -24,6 +24,7 @@ struct globalism {
 // Topology
     int nGpu, nX;
     int xg, xcpu;
+    int xStart;
     int nWrite;
     int hasGpu;
     double gpuA;
@@ -96,18 +97,18 @@ void initArgs()
     cGlob.szState = sizeof(states);
     std::string fu = inJ["tpb"].asString();
 	cGlob.tpb = stoi(fu);
-//	for(int k=0; k<5; k++)
-//	{
-//		if (ranker == k) {
-//		cout << ranker << " " << fu << " " << cGlob.tpb << " " << inJ["tpb"].asDouble() << endl;
-//		}
-//		MPI_Barrier(MPI_COMM_WORLD);
-//	}
+	for(int k=0; k<5; k++)
+	{
+		if (ranker == k) {
+		cout << ranker << " " << fu << " " << cGlob.tpb << " " << inJ["tpb"].asDouble() << endl;
+		}
+		MPI_Barrier(MPI_COMM_WORLD);
+	}
 
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
-	// cout << ranks[1] << " " << cGlob.tpb << " ";
+	//cout << ranks[1] << " " << cGlob.tpb << " ";
 
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
@@ -173,12 +174,9 @@ void initArgs()
 
 }
 
+
 void solutionOutput(states *outState, double tstamp, int idx, int strt)
 {
-    #ifdef NOS
-        return; // Prevents write out in performance experiments so they don't take all day.
-    #endif
-
     std::string tsts = std::to_string(tstamp);
     double xpt = indexer(cGlob.dx, idx, strt);
     std::string xpts = std::to_string(xpt);
@@ -187,6 +185,52 @@ void solutionOutput(states *outState, double tstamp, int idx, int strt)
         solution[outVars[k]][tsts][xpts] = printout(outState + idx, k);
     }
 }
+
+void writeOut(states *outState, double tstamp)
+{
+    #ifdef NOS
+        return; // Prevents write out in performance experiments so they don't take all day.
+    #endif
+    static const int ax[2] = {cGlob.xcpu/2, cGlob.xg};
+    static const int bx[3] = {0, ax[0], ax[0]+ax[1]};
+
+    if (cGlob.hasGpu)
+    {
+        for (int i=0; i<3; i++)
+        {
+            for(int k=1, k<=ax[i&1]; k++)
+            {
+                solutionOutput(outState, tstamp, k, cGlob.xStart+bx[i]);
+            }
+        }
+    }
+    else
+    {
+        for(int k=1, k<=cGlob.xcpu; k++)
+        {
+            solutionOutput(outState, tstamp, k, cGlob.xStart);
+        }
+    }
+}
+
+// class itime:
+// {
+//     private std::vector<double> timer;
+//     private double t0;
+
+//     public void tinit()
+//     {
+//         t0 = MPI_Wtime();
+//     }
+//     public void tfinal()
+//     {
+//         timer.push_back(MPI_Wtime()-t0);
+//     }
+//     public int avgt()
+//     {
+//         return timer.sum()/timer.size();
+//     }
+// }
 
 void endMPI()
 {

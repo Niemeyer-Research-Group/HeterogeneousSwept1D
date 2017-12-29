@@ -25,7 +25,6 @@ int main(int argc, char *argv[])
     #endif
 
     std::string i_ext = ".json";
-    std::string s_ext = ".dat";
     std::string t_ext = ".csv";
     std::string myrank = std::to_string(ranks[1]);
     std::string scheme = argv[1];
@@ -49,6 +48,7 @@ int main(int argc, char *argv[])
     }
 
     int strt = cGlob.xcpu * ranks[1] + cGlob.xg * prevGpu;
+    cGlob.strt = strt;
     states **state;
 
     int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
@@ -62,11 +62,12 @@ int main(int argc, char *argv[])
 
     if (cGlob.hasGpu)
     {
-		cout << "Rank: " << ranks[1] << " has a GPU." << endl;
         state = new states* [3];
         cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
+
+        cout << "Rank: " << ranks[1] << " has a GPU. gridpt Allocation: " << 2*xalloc + cGlob.xg * exSpace << endl;
 
         xpts.push_back(strt + xc);
         alen.push_back(cGlob.xg + 1);
@@ -78,12 +79,13 @@ int main(int argc, char *argv[])
         if (sizeof(REAL)>6)
         {
             cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
-    }
+        }
     }
     else
     {
         state = new states*[1];
         state[0] = new states[xalloc * cGlob.szState];
+        cout << "Rank: " << ranks[1] << " no GPU. gridpt Allocation: " << xalloc << endl;
     }
 
     for (int i=0; i<nrows; i++)

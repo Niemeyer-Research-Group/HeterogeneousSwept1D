@@ -55,7 +55,6 @@ cols = ["tpb", "gpuA", "nX", "time"]
 
 crs=["r", "b", "k", "g"]
 
-
 def find_all(name, path):
     result = []
     for root, dirs, files in os.walk(path):
@@ -81,17 +80,7 @@ def parseCsv(fb):
     jframe.columns = cols
     jframe = jframe[(jframe.nX !=0)]
 
-    return jframe
-
-
-class RunParse(object):
-    def __init__(self, dataMat):
-        self.bestRun = pd.DataFrame(dataMat.min(axis=1))
-        bestIdx = dataMat.idxmin(axis=1)
-        self.bestLaunch = bestIdx.value_counts()
-        self.bestLaunch.index = pd.to_numeric(self.bestLaunch)
-        self.bestLaunch.sort_index(inplace=True)
-        
+    return jframe        
 
 # Takes list of dfs? title of each df, longterm hd5, option to overwrite 
 # incase you write wrong.  Use carefully!
@@ -235,7 +224,6 @@ class perfModel(Perform):
         newFrame = newFrame[self.xo]
         return self.res.predict(newFrame)    
     
-        
     def model(self):
         xi = xinterp3(self.oFrame)
         xi = pd.DataFrame(xi, columns=self.xo)
@@ -249,7 +237,23 @@ class perfModel(Perform):
         newHead="Updates/us"
         dfn[newHead] = dfn["nX"]/dfn["time"]
         return dfn[self.cols[:2] + [newHead]]
+
+    def bestG(self, n, th):
+        return -(self.pv["gpuA"] + self.pv["tpb:gpuA"]*th + self.pv["tpb:nX"]*n)/(2.0*self.pv["I(gpuA ** 2)"]) 
     
+    def buildGPU(self):
+        nxs = np.logspace(*np.log2(self.minmaxes[-1]), base=2, num=1000)
+        tpbs = np.arange(self.minmaxes[0][0], self.minmaxes[0][1]+1, 32)
+        dfg = pd.DataFrame(columns=self.cols[1:-1], index=nxs)
+        gt = [(0 , k) for k in tpbs]
+        for n in nxs:
+            tb = min([(self.bestG(n, k[1]), k[1]) for k in gt])
+            dfg.loc[n] = list(tb)
+        
+        dfg = dfg.reset_index()
+        dfg['time'] = self.predict(dfg)
+        return dfg
+
     def plotFlop(self, df, f, a):
         ncols=list(df.columns.values)
         df = df.set_index(ncols[0])
@@ -363,8 +367,6 @@ def predictNew(eq, alg, args, nprocs=8):
         
     return oldPerf.predict(np.array(confi))
 
-
-    
 
 # Change the source code?  Run it here to compare to the same
 # result in the old version

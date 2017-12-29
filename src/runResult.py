@@ -51,7 +51,6 @@ def justPlot(eq, shw=True, save=False):
 
     return dff
     
-
 if __name__ == "__main__":
 
     rn = False

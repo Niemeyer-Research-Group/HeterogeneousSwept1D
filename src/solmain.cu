@@ -8,7 +8,6 @@
 #include "decomp.h"
 #include "classic.h"
 #include "swept.h"
-#include <unistd.h>
 
 /**
 ----------------------
@@ -67,7 +66,7 @@ int main(int argc, char *argv[])
         cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
 
-        cout << "Rank: " << ranks[1] << " has a GPU. gridpt Allocation: " << 2*xalloc + cGlob.xg * exSpace << endl;
+        cout << "Rank: " << ranks[1] << " has a GPU" << endl;
 
         xpts.push_back(strt + xc);
         alen.push_back(cGlob.xg + 1);

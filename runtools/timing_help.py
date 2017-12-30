@@ -134,12 +134,34 @@ class Perform(object):
         self.oFrame = df
         self.title = name
         self.cols = list(df.columns.values)
+        self.xo = self.cols[:-1]
         self.uniques, self.minmaxes = [], []
             
-        for k in self.cols[:-1]:
+        for k in self.xo:
             self.uniques.append(list(np.unique(self.oFrame[k])))
             self.minmaxes.append( (min(self.uniques[-1]), max(self.uniques[-1])) ) 
+            
+        ap = []
+        for k, g in self.oFrame.groupby('tpb'):
+            for kk, gg in g.groupby('gpuA'):
+                ap.append(gg['nX'].max())
                 
+        maxx = min(ap)
+        
+        ap = []
+        for k, g in self.oFrame.groupby('tpb'):
+            for kk, gg in g.groupby('gpuA'):
+                ap.append(gg['nX'].min())
+                
+        minx = max(ap)
+        self.minmaxes[-1] = (minx, maxx)
+        
+    def fullTest(self):
+        nxs = np.logspace(*np.log2(self.minmaxes[-1]), base=2, num=1000)
+        iters = itertools.product(self.uniques[0], self.uniques[1], nxs)
+        df = pd.DataFrame(list(iters), columns=self.xo)
+        return df
+            
     def saveplot(self, cat, pt):
         #Category: i.e regression, Equation: i.e. EulerClassic , plot
         tplotpath = op.join(resultpath, cat)
@@ -167,7 +189,7 @@ class perfModel(Perform):
         super().__init__(datadf, name)
         self.va = vargs #Dictionary of additional arguments to stats models
         self.respvar = self.cols[-1]
-        self.xo = self.cols[:-1]
+        
         self.xof = self.xo[:]
         if morder == "Q":
             for i, x in enumerate(self.xo):
@@ -195,6 +217,9 @@ class perfModel(Perform):
         
         #self.res.params = (self.res.pvalues<0.1) * self.res.params
         
+    def doAll(self):
+        self.uniques[-1] = self.uniques[-1]
+        
     def plotResid(self, saver=True):
         for x in self.xo:
             fig = sm.graphics.plot_regress_exog(self.res, x)
@@ -219,9 +244,9 @@ class perfModel(Perform):
 
     def predict(self, newVals):
         if not isinstance(newVals, dftype):
-            newFrame = self.makedf(newVals)
+            newVals = self.makedf(newVals)
         
-        newFrame = newFrame[self.xo]
+        newFrame = newVals[self.xo]
         return self.res.predict(newFrame)    
     
     def model(self):
@@ -239,19 +264,21 @@ class perfModel(Perform):
         return dfn[self.cols[:2] + [newHead]]
 
     def bestG(self, n, th):
-        return -(self.pv["gpuA"] + self.pv["tpb:gpuA"]*th + self.pv["tpb:nX"]*n)/(2.0*self.pv["I(gpuA ** 2)"]) 
+        return -(self.pv["gpuA"] + self.pv["tpb:gpuA"]*th + self.pv["gpuA:nX"]*n)/(2.0*self.pv["I(gpuA ** 2)"]) 
     
     def buildGPU(self):
         nxs = np.logspace(*np.log2(self.minmaxes[-1]), base=2, num=1000)
         tpbs = np.arange(self.minmaxes[0][0], self.minmaxes[0][1]+1, 32)
-        dfg = pd.DataFrame(columns=self.cols[1:-1], index=nxs)
-        gt = [(0 , k) for k in tpbs]
-        for n in nxs:
-            tb = min([(self.bestG(n, k[1]), k[1]) for k in gt])
-            dfg.loc[n] = list(tb)
+        tmpdf = pd.DataFrame(columns=self.xo[:-1])
+        dfg = tmpdf.copy()
+        tmpdf['tpb'] = self.uniques[0]
         
-        dfg = dfg.reset_index()
-        dfg['time'] = self.predict(dfg)
+        for n in nxs:
+            tmpdf['nX'] = n
+            tmpdf['gpuA'] = self.bestG(tmpdf['nX'], tmpdf['tpb'])
+            tmpdf['time'] = self.predict(tmpdf)
+            dfg = dfg.append(tmpdf.loc[tmpdf['time'].idxmin()], ignore_index=True)
+    
         return dfg
 
     def plotFlop(self, df, f, a):
@@ -307,7 +334,7 @@ class perfModel(Perform):
             mnz = np.min(np.min(Z))*1.1
             lvl = np.linspace(mnz, mxz, 10)
             a.contourf(X, Y, Z, levels=lvl)
-            # a.clabel(CS, inline=1, fontsize=10)
+            a.clabel(CS, inline=1, fontsize=10)
             a.set_xscale("log")
             a.set_ylabel("gpuA")
             a.set_xlabel(xlbl)
@@ -411,14 +438,32 @@ if __name__ == "__main__":
 #    rrg = linear_model.LinearRegression()
     perfs = []
     eqs = np.unique(recentdf.index.values)
+    pex = perfModel(recentdf.xs(eqs[0]), eqs[0])
+    parms = pex.fullTest()    
+    nxs = parms['nX'].unique()
+    finalFrame = pd.DataFrame(index=nxs, columns=eqs)
+    sFrame=pd.DataFrame()
+    rawFrame = pd.DataFrame()
 
     for ty in eqs:
-        perfs.append(perfModel(recentdf.xs(ty), ty))
+        pmod = perfModel(recentdf.xs(ty), ty)
+        perfs.append(pmod)
+        parms['time'] = pmod.predict(parms)
+        
+        for k, g in parms.groupby('tpb'):
+            sFrame[k] = g.pivot(index='nX', columns='gpuA', values='time').min(axis=1)
+            
+        finalFrame[ty] = sFrame.min(axis=1)
+            
         print("------------")
-        perfs[-1].pr()
+        pmod.pr()
+        pmodz = pmod.oFrame.set_index('nX')
+        rawFrame[ty] = pmodz['time']
+
+    finalFrame.plot(loglog=True)
 
 #    print("RSquared values for GLMs:")
-    pp = perfs[0]
+    pp = perfs[3]
     stride = len(pp.uniques[0])/4
     
     abc = pp.byFlop()
@@ -426,20 +471,19 @@ if __name__ == "__main__":
     for p in perfs:
         dft = p.res.params
         a = 4*dft[coef[0]]*dft[coef[1]] - dft[coef[2]]**2
-        print(p.title, a, dft[coef[1]])
-        f, a = plt.subplots(2,2)
-        ax = a.ravel()
-        tpbs = p.uniques[0]
-        for i in range(4):
-            idx = int(stride * i)
-            ha, lb = p.plotAffinity(ax[i], tpbs[idx])
-
-        plt.legend(ha, lb, bbox_to_anchor=(1.05, 2), loc=2, title="Grid Size", borderaxespad=0.)
-        f.suptitle(p.title, x=0.45, fontweight='bold')
+#        f, a = plt.subplots(2,2)
+#        ax = a.ravel()
+#        tpbs = p.uniques[0]
+#        for i in range(4):
+#            idx = int(stride * i)
+#            ha, lb = p.plotAffinity(ax[i], tpbs[idx])
+#
+#        plt.legend(ha, lb, bbox_to_anchor=(1.05, 2), loc=2, title="Grid Size", borderaxespad=0.)
+#        f.suptitle(p.title, x=0.45, fontweight='bold')
+#        
+#        p.saveplot("Affinity", "wkstn")
         
-        p.saveplot("Affinity", "wkstn")
-        
-        
+    
         
         
 #    for p in perfs:

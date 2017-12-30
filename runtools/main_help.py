@@ -91,7 +91,7 @@ def mostRecentResults(rpath):
     note = readj(op.join(rpath, "notes.json"))
     hfive = op.join(rpath, "rawResults.h5")
     nframe = pd.DataFrame.from_dict(note).T
-    nframe = nframe.sort_values("date")
+    nframe = nframe.sort_values("date", ascending=False)
     sha = nframe.index.values[0]
     hframe = pd.HDFStore(hfive)
     outframe = hframe[sha]

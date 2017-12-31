@@ -243,7 +243,6 @@ void passSwept(states *passer, states *getter, int tstep, int turn)
 {
     int rx = turn^1;
 
-    // if (ranks[1] == lastproc || ranks[1] == 0) cout << ranks[1] << " Pass: " << ranks[2*turn] << " - Get: " << ranks[2*rx] << " - Step: " << tstep << endl;
     MPI_Isend(passer, cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
             MPI_COMM_WORLD, &req[0]);
 
@@ -264,7 +263,7 @@ void passSwept(states *passer, states *getter, int tstep, int turn)
 
 
 // Now we need to put the last value in a bucket, and append that to the start of the next array.
-double sweptWrapper(states **state, const ivec xpts, const ivec alen, int *tstep)
+double sweptWrapper(states **state,  int *tstep)
 {
 	if (!ranks[1]) cout << "SWEPT Decomposition " << cGlob.tpb << endl;
 
@@ -442,11 +441,8 @@ double sweptWrapper(states **state, const ivec xpts, const ivec alen, int *tstep
 
                 cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
 
-                for (int i=0; i<3; i++)
-                {
-                    for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
-                }
-
+                writeOut(state, t_eq);
+                
                 upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
 
                 for (int k=0; k<cGlob.cBks; k++)
@@ -527,7 +523,6 @@ double sweptWrapper(states **state, const ivec xpts, const ivec alen, int *tstep
   
         passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
 
-
         //Split
         for (int k=0; k<cGlob.cBks; k++)
         {
@@ -552,10 +547,6 @@ double sweptWrapper(states **state, const ivec xpts, const ivec alen, int *tstep
 
         while (t_eq < cGlob.tf)
         {
-			#ifdef PULSE
-				if (!tmine/cGlob.tpb % 1000) cout << ranks[1] << " It's alive: " << tmine << endl;
-			#endif
-
             for (int k=0; k<cGlob.cBks; k++)
             {
                 wholeDiamondCPU(state[0] + k*cGlob.tpb, tmine);
@@ -596,7 +587,7 @@ double sweptWrapper(states **state, const ivec xpts, const ivec alen, int *tstep
                 tmine += cGlob.ht;
                 t_eq = cGlob.dt * (tmine/NSTEPS);
 
-                for (int k=1; k<alen[0]; k++)  solutionOutput(state[0], t_eq, k, xpts[0]);
+                writeOut(state, t_eq);
 
                 for (int k=0; k<cGlob.cBks; k++)
                 {
@@ -641,5 +632,6 @@ double sweptWrapper(states **state, const ivec xpts, const ivec alen, int *tstep
     }
 
     *tstep = tmine;
+    //atomicWrite(timeit.typ, timeit.times);
     return t_eq;
 }

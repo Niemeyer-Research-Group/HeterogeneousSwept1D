@@ -4,7 +4,8 @@
 ---------------------------
 */
 
-#include <string>
+#include <numeric>
+#include "gpuDetector.h"
 
 #define TAGS(x) x & 32767
 
@@ -36,10 +37,9 @@ struct globalism {
 // Iterator
     double tf, freq, dt, dx, lx;
     bool bCond[2] = {true, true};
-    // Initialize passing both sides.
 };
 
-#include "gpuDetector.h"
+std::string fname = "GranularTime.csv";
 
 globalism cGlob;
 jsons inJ;
@@ -168,7 +168,6 @@ void initArgs()
 
 }
 
-
 void solutionOutput(states *outState, double tstamp, int idx, int strt)
 {
     std::string tsts = std::to_string(tstamp);
@@ -180,51 +179,100 @@ void solutionOutput(states *outState, double tstamp, int idx, int strt)
     }
 }
 
-void writeOut(states *outState, double tstamp)
+void writeOut(states **outState, double tstamp)
 {
     #ifdef NOS
         return; // Prevents write out in performance experiments so they don't take all day.
     #endif
     static const int ax[2] = {cGlob.xcpu/2, cGlob.xg};
-    static const int bx[3] = {0, ax[0], ax[0]+ax[1]};
+    static const int bx[3] = {cGlob.xStart, cGlob.xStart+ax[0], cGlob.xStart+ax[0]+ax[1]};
+    int k;
 
     if (cGlob.hasGpu)
     {
         for (int i=0; i<3; i++)
         {
-            for(int k=1, k<=ax[i&1]; k++)
+            for(k=1; k<=ax[i&1]; k++)
             {
-                solutionOutput(outState, tstamp, k, cGlob.xStart+bx[i]);
+                solutionOutput(outState[i], tstamp, k, bx[i]);
             }
         }
     }
     else
     {
-        for(int k=1, k<=cGlob.xcpu; k++)
+        for(k=1; k<=cGlob.xcpu; k++)
         {
-            solutionOutput(outState, tstamp, k, cGlob.xStart);
+            solutionOutput(outState[0], tstamp, k, cGlob.xStart);
         }
     }
 }
 
-// class itime:
-// {
-//     private std::vector<double> timer;
-//     private double t0;
 
-//     public void tinit()
-//     {
-//         t0 = MPI_Wtime();
-//     }
-//     public void tfinal()
-//     {
-//         timer.push_back(MPI_Wtime()-t0);
-//     }
-//     public int avgt()
-//     {
-//         return timer.sum()/timer.size();
-//     }
-// }
+struct cudaTime
+{
+    std::vector<double> times;
+    cudaEvent_t start, stop;
+	float ti;
+    std::string typ = "GPU";
+
+    cudaTime() {
+        cudaEventCreate( &start );
+	    cudaEventCreate( &stop );
+    }
+    ~cudaTime()
+    {
+        cudaEventDestroy( start );
+	    cudaEventDestroy( stop );
+    }
+
+    void tinit(){ cudaEventRecord( start, 0); }
+
+    void tfinal() { 
+        cudaEventRecord(stop, 0);
+	    cudaEventSynchronize(stop);
+	    cudaEventElapsedTime( &ti, start, stop);
+        times.push_back(ti); }
+
+    int avgt() { 
+        return std::accumulate(times.begin(), times.end(), 0)/ times.size();
+        }
+};
+
+struct mpiTime
+{
+    std::vector<double> times;
+    double ti;
+    std::string typ = "CPU";
+
+    void tinit(){ ti = MPI_Wtime(); }
+
+    void tfinal() { times.push_back((MPI_Wtime()-ti)*1000.0); }
+
+    int avgt() { 
+        return std::accumulate(times.begin(), times.end(), 0)/ (float)times.size();
+        }
+};
+
+void atomicWrite(std::string st, std::vector<double> t)
+{
+    FILE *tTemp;
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    for (int k=0; k<nprocs; k++)
+    {
+        if (ranks[1] == k)
+        {
+            tTemp = fopen(fname.c_str(), "a+");
+            fseek(tTemp, 0, SEEK_END);
+            fprintf(tTemp, "\n%d,%s", ranks[1], st.c_str());
+            for (auto i = t.begin(); i != t.end(); ++i)
+            {
+                fprintf(tTemp, ",%4f", *i);
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+}
 
 void endMPI()
 {

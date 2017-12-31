@@ -180,5 +180,4 @@ void stepUpdate(states *heat, int idx, int tstep)
     int itx = (otx^1); //Opposite in input place.
 
     heat[idx].T[otx] = DIMS.Fo*(heat[idx-1].T[itx] + heat[idx+1].T[itx]) + (1.0-2.0*DIMS.Fo) * heat[idx].T[itx];
-    // if (abs(heat[idx].T[itx]) < 0.1) printf("tstep: %.i | loc: %.i | includes: %.2f, %.2f, %.2f \n", tstep, idx, heat[idx-1].T[itx], heat[idx].T[itx], heat[idx+1].T[itx]);
 }

@@ -14,10 +14,9 @@
     @param States The working array result of the kernel call before last (or initial condition) used to calculate the RHS of the discretization
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
-#include <unistd.h>
+
 using namespace std;
 
-typedef std::vector<int> ivec;
 
 __global__ void classicStep(states *state, const int ts)
 {
@@ -51,27 +50,8 @@ void classicPass(states *putSt, states *getSt, int tstep)
 
 }
 
-// Blocks because one is called and then the other so the PASS blocks.
-void passClassic(REAL *puti, REAL *geti, const int tstep)
-{
-    int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
-    int rnk;
-
-    MPI_Isend(puti, NSTATES, MPI_R, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
-
-    MPI_Isend(puti + NSTATES, NSTATES, MPI_R, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
-
-    MPI_Recv(geti + NSTATES, NSTATES, MPI_R, ranks[2], t0, MPI_COMM_WORLD, &stat[0]);
-
-    MPI_Recv(geti, NSTATES, MPI_R, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
-
-    MPI_Wait(&req[0], &stat[0]);
-    MPI_Wait(&req[1], &stat[1]);
-}
-
-
 // Classic Discretization wrapper.
-double classicWrapper(states **state, const ivec xpts, const ivec alen, int *tstep)
+double classicWrapper(states **state, int *tstep)
 {
     int tmine = *tstep;
 
@@ -85,10 +65,11 @@ double classicWrapper(states **state, const ivec xpts, const ivec alen, int *tst
     states getSt[stPass];
 
     int t0, t1;
-    int nomar;
+
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
         cout << "Classic Decomposition GPU" << endl;
+        cudaTime timeit;
         const int xc = cGlob.xcpu/2;
         int xcp = xc+1;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
@@ -112,7 +93,9 @@ double classicWrapper(states **state, const ivec xpts, const ivec alen, int *tst
 
         while (t_eq < cGlob.tf)
         {
+            timeit.tinit();
             classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
+            timeit.tfinal();
             classicStepCPU(state[0], xcp, tmine);
             classicStepCPU(state[2], xcp, tmine);
 
@@ -124,6 +107,7 @@ double classicWrapper(states **state, const ivec xpts, const ivec alen, int *tst
             putSt[0] = state[0][1];
             putSt[1] = state[2][xc];
             classicPass(&putSt[0], &getSt[0], tmine);
+
             if (cGlob.bCond[0]) state[0][0] = getSt[0];
             if (cGlob.bCond[1]) state[2][xcp] = getSt[1];
 
@@ -134,19 +118,14 @@ double classicWrapper(states **state, const ivec xpts, const ivec alen, int *tst
             // OUTPUT
             if (t_eq > twrite)
             {
-                cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
-
-                for (int i=0; i<3; i++)
-                {
-                    for (int k=0; k<=alen[i]; k++)  solutionOutput(state[i], t_eq, k, xpts[i]);
-                }
-
+                writeOut(state, t_eq);
                 twrite += cGlob.freq;
             }
-            if (!(tmine % 200000)) std::cout << tmine << " | " << t_eq << " | " << std::endl;
         }
 
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+        cout << ranks[1] << " ----- " << timeit.avgt() << endl;
+        atomicWrite(timeit.typ, timeit.times);
 
         cudaStreamDestroy(st1);
         cudaStreamDestroy(st2);
@@ -158,10 +137,12 @@ double classicWrapper(states **state, const ivec xpts, const ivec alen, int *tst
     else
     {
         int xcp = cGlob.xcpu + 1;
+        mpiTime timeit;
         while (t_eq < cGlob.tf)
         {
+            timeit.tinit();
             classicStepCPU(state[0], xcp, tmine);
-            // sleep(ranks[1]+1);
+            timeit.tfinal();
 
             putSt[0] = state[0][1];
             putSt[1] = state[0][cGlob.xcpu];
@@ -170,19 +151,20 @@ double classicWrapper(states **state, const ivec xpts, const ivec alen, int *tst
             if (cGlob.bCond[0]) state[0][0] = getSt[0];
             if (cGlob.bCond[1]) state[0][xcp] = getSt[1];
 
-            if (!(tmine % NSTEPS))
-            {
-                t_eq += cGlob.dt;
-            }
-            tmine++;
+            // Increment Counter and timestep
+            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
+            tmine++;            
 
             if (t_eq > twrite)
             {
-                for (int k=1; k<alen[0]; k++)  solutionOutput(state[0], t_eq, k, xpts[0]);
+                writeOut(state, t_eq);
                 twrite += cGlob.freq;
             }
         }
+        cout << ranks[1] << " ----- " << timeit.avgt() << endl;
+        atomicWrite(timeit.typ, timeit.times);
     }
     *tstep = tmine;
+
     return t_eq;
 }

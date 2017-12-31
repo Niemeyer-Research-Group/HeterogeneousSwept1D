@@ -9,6 +9,15 @@
 #include "classic.h"
 #include "swept.h"
 
+void cudaRunCheck()
+{
+    int rv, dv;
+    cudaDriverGetVersion(&dv);
+    cudaRuntimeGetVersion(&rv);
+    printf("CUDA Driver Version / Runtime Version  --- %d.%d / %d.%d\n", dv/1000, (dv%100)/10, rv/1000, (rv%100)/10);
+}
+
+
 /**
 ----------------------
     MAIN PART
@@ -18,6 +27,8 @@
 int main(int argc, char *argv[])
 {
     makeMPI(argc, argv);
+
+    if (!ranks[1]) cudaRunCheck();
 
     #ifdef NOS
         if (!ranks[1]) std::cout << "No Solution Version." << std::endl;
@@ -46,8 +57,7 @@ int main(int argc, char *argv[])
         for (int k=0; k<ranks[1]; k++) prevGpu+=gpuPlaces[k];
     }
 
-    int strt = cGlob.xcpu * ranks[1] + cGlob.xg * prevGpu;
-    cGlob.strt = strt;
+    cGlob.xStart = cGlob.xcpu * ranks[1] + cGlob.xg * prevGpu;
     states **state;
 
     int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
@@ -56,8 +66,6 @@ int main(int argc, char *argv[])
     int xalloc = xc + exSpace;
 
     std::string pth = string(argv[3]);
-    std::vector<int> xpts(1, strt); //Index at which pointer array starts.
-    std::vector<int> alen(1, xc + 1); //Write out | Init args vector
 
     if (cGlob.hasGpu)
     {
@@ -67,31 +75,27 @@ int main(int argc, char *argv[])
         cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
 
         cout << "Rank: " << ranks[1] << " has a GPU" << endl;
-
-        xpts.push_back(strt + xc);
-        alen.push_back(cGlob.xg + 1);
-        xpts.push_back(strt + xc + cGlob.xg);
-        alen.push_back(xc + 1);
+        int ii[3] = {xc, cGlob.xg, xc};
+        int xi;
+        for (int i=0; i<3; i++)
+        {
+            xi = cGlob.xStart-1;
+            for (int n=0; n<i; n++) xi += ii[n];
+            for (int k=0; k<(ii[i]+2); k++)  initialState(inJ, state[i], k, xi);
+        }
 
         cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
 
-        if (sizeof(REAL)>6)
-        {
-            cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
-        }
+//        cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
     }
     else
     {
         state = new states*[1];
         state[0] = new states[xalloc * cGlob.szState];
-        cout << "Rank: " << ranks[1] << " no GPU. gridpt Allocation: " << xalloc << endl;
+        for (int k=0; k<(xc+2); k++)  initialState(inJ, state[0], k, cGlob.xStart-1);
     }
 
-    for (int i=0; i<nrows; i++)
-    {
-        for (int k=0; k<=alen[i]; k++)  initialState(inJ, state[i], k, xpts[i]-1);
-        for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], 0.0, k, xpts[i]);
-    }
+    writeOut(state, 0.0);
 
     // If you have selected scheme I, it will only initialize and output the initial values.
 
@@ -111,26 +115,22 @@ int main(int argc, char *argv[])
 
         if (!scheme.compare("C"))
         {
-            tfm = classicWrapper(state, xpts, alen, &tstep);
+            tfm = classicWrapper(state, &tstep);
         }
         else if  (!scheme.compare("S"))
         {
-            tfm = sweptWrapper(state, xpts, alen, &tstep);
+            tfm = sweptWrapper(state, &tstep);
         }
         else
         {
             std::cerr << "Incorrect or no scheme given" << std::endl;
         }
 
-
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = (MPI_Wtime() - timed);
         if (cGlob.hasGpu)  cudaDeviceSynchronize();
 
-        for (int i=0; i<nrows; i++)
-        {
-            for (int k=1; k<alen[i]; k++)  solutionOutput(state[i], tfm, k, xpts[i]);
-        }
+        writeOut(state, tfm);
 
         cudaError_t error = cudaGetLastError();
         if(error != cudaSuccess)
@@ -155,7 +155,9 @@ int main(int argc, char *argv[])
             std::string tpath = pth + "/t" + fspec + scheme + t_ext;
             FILE * timeOut;
             timeOut = fopen(tpath.c_str(), "a+");
-            if (timeOut==NULL) fprintf(timeOut, "tpb,gpuA,nX,time\n");
+            fseek(timeOut, 0, SEEK_END);
+            int ft = ftell(timeOut);
+            if (!ft) fprintf(timeOut, "tpb,gpuA,nX,time\n");
             fprintf(timeOut, "%d,%.4f,%d,%.8f\n", cGlob.tpb, cGlob.gpuA, cGlob.nX, per_ts);
             fclose(timeOut);
         }
@@ -164,7 +166,6 @@ int main(int argc, char *argv[])
 
 	#ifndef NOS
         std::string spath = pth + "/s" + fspec + "_" + myrank + i_ext;
-        cout << spath << endl;
         std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
         if (!ranks[1]) solution["meta"] = inJ;
         soljson << solution;

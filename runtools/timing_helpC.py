@@ -21,7 +21,11 @@ import palettable.colorbrewer as pal
 import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+from scipy.interpolate import griddata, CloughTocher2DInterpolator
 from cycler import cycler
+import random
+
+cti = CloughTocher2DInterpolator
 
 import result_help as rh
 from main_help import *
@@ -121,7 +125,7 @@ def longTerm(dfs, titles, fhdf, overwrite=False):
     return dfcat
 
 class Perform(object):
-    def __init__(self, df, name):
+    def __init__(self, df, name=""):
         self.oFrame = df
         self.title = name
         self.cols = list(df.columns.values)
@@ -150,8 +154,11 @@ class Perform(object):
     def fullTest(self):
         nxs = np.logspace(*np.log2(self.minmaxes[-1]), base=2, num=1000)
         nxs = nxs[100:900]
-        iters = itertools.product(self.uniques[0], self.uniques[1], nxs)
-        df = pd.DataFrame(list(iters), columns=self.xo)
+#        tpbs = np.arange(self.minmaxes[0][0], self.minmaxes[0][1]+1, 32)
+        gpuas = np.arange(self.minmaxes[1][0], self.minmaxes[1][1]+.01, .5)
+        iters = itertools.product(gpuas, nxs)
+        df = pd.DataFrame(list(iters), columns=self.xo[1:3])
+#        grd = np.meshgrid(tpbs, gpuas, nxs)
         return df
             
     def saveplot(self, cat, pt):
@@ -423,40 +430,50 @@ if __name__ == "__main__":
     pointSpeed = "Speed"
     pointLabel = "MGridPts/s"
     recentdf[pointSpeed] = recentdf[cols[-2]]/recentdf[cols[-1]]
-    rVar = pointSpeed
+    rVar = timed
     rLabel = timeLabel
     perfs = []
-    eqs = np.unique(recentdf.index.values)
-    pex = perfModel(recentdf.xs(eqs[0]), eqs[0], rVar)
+    eqs = list(set(recentdf.index.values))
+    tpbs = set(recentdf.tpb)
+    pex = Perform(recentdf.xs(eqs[0]))
     parms = pex.fullTest()    
-    nxs = parms['nX'].unique()
+
+    #nxs = parms['nX'].unique()
     finalFrame = pd.DataFrame(index=nxs, columns=eqs)
     sFrame=pd.DataFrame()
-    rawFrame = pd.DataFrame()
-
+    gFrame=pd.DataFrame()
+    # Flatten the parms for interpolant requiring grid.
+    
     for ty in eqs:
-        pmod = perfModel(recentdf.xs(ty), ty, rVar)
-        perfs.append(pmod)
-        parms[rVar] = pmod.predict(parms)
+        dfo = recentdf.xs(ty).set_index('tpb')
+        f, a = plt.subplots(1, 1)
+        plt.suptitle(ty)
         
-        for k, g in parms.groupby('tpb'):
-            sFrame[k] = g.pivot(index='nX', columns='gpuA', values=rVar).min(axis=1)
-            
-        finalFrame[ty] = sFrame.min(axis=1)
-            
-        print("------------")
-        pmod.pr()
-        pmodz = pmod.oFrame.set_index('nX')
-        rawFrame[ty] = pmodz[rVar]
-        
-        
-        pmod.plotRaw()
+        for tp in tpbs:
+            df = dfo.xs(tp)
+            dcol = list(df.columns.values)
+            ctiFill = cti(df[dcol[:2]], df[rVar])
+            tmpdf = pd.DataFrame(parms, columns=dcol[:2])
+            tmpdf[rVar] = ctiFill(parms)
+            sFrame[tp] = tmpdf.pivot(index='nX', columns='gpuA', values=rVar).min(axis=1)
 
-    finalFrame.plot(loglog=True)
+        sFrame.plot(ax=a, logx=True)
 
-#    print("RSquared values for GLMs:")
-    pp = perfs[3]
-    stride = len(pp.uniques[0])/4
+
+#    
+#       def plotRaw(self):
+#        for k, g in self.oFrame.groupby(self.xo[0]):
+#            if (k/32 %2):
+#                f, a = plt.subplots(1, 1)
+#                
+#                for kk, gg in g.groupby(self.xo[1]):
+#                    
+#                    a.semilogx(gg[self.xo[-1]], gg[self.respvar], label=str(kk))
+#            
+#                h, l = a.get_legend_handles_labels()
+#                plt.legend(h,l)
+#                plt.title(self.title + str(k))
+            
     
 #    abc = pp.byFlop()
 #    coef = ["I(tpb ** 2)", "I(gpuA ** 2)", "tpb:gpuA"] #inflection test

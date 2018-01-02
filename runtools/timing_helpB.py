@@ -21,7 +21,9 @@ import palettable.colorbrewer as pal
 import pandas as pd
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
+from scipy import interpolate 
 from cycler import cycler
+import random
 
 import result_help as rh
 from main_help import *
@@ -148,10 +150,13 @@ class Perform(object):
         self.minmaxes[-1] = (minx, maxx)
         
     def fullTest(self):
-        nxs = np.logspace(*np.log2(self.minmaxes[-1]), base=2, num=1000)
-        nxs = nxs[100:900]
-        iters = itertools.product(self.uniques[0], self.uniques[1], nxs)
-        df = pd.DataFrame(list(iters), columns=self.xo)
+        nxs = np.logspace(*np.log2(self.minmaxes[-1]), base=2, num=400)
+        nxs = nxs[10:390]
+        # tpbs = np.arange(self.minmaxes[0][0], self.minmaxes[0][1]+1, 32)
+        gpuas = np.arange(self.minmaxes[1][0], self.minmaxes[1][1]+.01, .5)
+        iters = itertools.product(gpuas, nxs)
+        df = pd.DataFrame(list(iters), columns=self.xo[1:3])
+        # grd = np.meshgrid(gpuas, nxs)
         return df
             
     def saveplot(self, cat, pt):
@@ -423,40 +428,46 @@ if __name__ == "__main__":
     pointSpeed = "Speed"
     pointLabel = "MGridPts/s"
     recentdf[pointSpeed] = recentdf[cols[-2]]/recentdf[cols[-1]]
-    rVar = pointSpeed
+    rVar = timed
     rLabel = timeLabel
     perfs = []
     eqs = np.unique(recentdf.index.values)
-    pex = perfModel(recentdf.xs(eqs[0]), eqs[0], rVar)
-    parms = pex.fullTest()    
-    nxs = parms['nX'].unique()
-    finalFrame = pd.DataFrame(index=nxs, columns=eqs)
+    pex = Perform(recentdf.xs(eqs[0]), eqs[0])
+    parms = pex.fullTest()   
+    finalFrame = pd.DataFrame(index=pex.uniques[-1], columns=eqs)
     sFrame=pd.DataFrame()
-    rawFrame = pd.DataFrame()
-
+    gFrame=pd.DataFrame()
+    of = recentdf.xs(eqs[0])
+    pm = parms['nX']
     for ty in eqs:
-        pmod = perfModel(recentdf.xs(ty), ty, rVar)
-        perfs.append(pmod)
-        parms[rVar] = pmod.predict(parms)
-        
-        for k, g in parms.groupby('tpb'):
-            sFrame[k] = g.pivot(index='nX', columns='gpuA', values=rVar).min(axis=1)
-            
-        finalFrame[ty] = sFrame.min(axis=1)
-            
-        print("------------")
-        pmod.pr()
-        pmodz = pmod.oFrame.set_index('nX')
-        rawFrame[ty] = pmodz[rVar]
-        
-        
-        pmod.plotRaw()
+        df = recentdf.xs(ty).reset_index().drop('eqs', axis=1)
+        for k, g in df.groupby('tpb'):
+            for kk, gg in df.groupby('gpuA'):
+                gin = interpolate.interp1d(gg['nX'], gg[rVar], kind='cubic')
+                grow = gin(pm)
+                sFrame[] = grow.min()
 
-    finalFrame.plot(loglog=True)
+            gFrame[k] = parms.pivot(index='nX', columns='gpuA', values=rVar).idxmin(axis=1)
+            print(ty, k, g.head())
 
-#    print("RSquared values for GLMs:")
-    pp = perfs[3]
-    stride = len(pp.uniques[0])/4
+        f, a = plt.subplots(1, 2)
+        aa = a.ravel()
+        sFrame.plot(ax=aa[0], logx=True)
+        gFrame.plot(ax=aa[1], logx=True)
+#    
+#       def plotRaw(self):
+#        for k, g in self.oFrame.groupby(self.xo[0]):
+#            if (k/32 %2):
+#                f, a = plt.subplots(1, 1)
+#                
+#                for kk, gg in g.groupby(self.xo[1]):
+#                    
+#                    a.semilogx(gg[self.xo[-1]], gg[self.respvar], label=str(kk))
+#            
+#                h, l = a.get_legend_handles_labels()
+#                plt.legend(h,l)
+#                plt.title(self.title + str(k))
+            
     
 #    abc = pp.byFlop()
 #    coef = ["I(tpb ** 2)", "I(gpuA ** 2)", "tpb:gpuA"] #inflection test

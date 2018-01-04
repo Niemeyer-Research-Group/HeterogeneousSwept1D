@@ -79,7 +79,6 @@ void initArgs()
 	cGlob.gpuA = inJ["gpuA"].asDouble();
 	int ranker = ranks[1];
 	int sz = nprocs;
-	int t0, tSelect;
 	if(!ranks[1]) t0 = MPI_Wtime();
 	if (!cGlob.gpuA)
     {
@@ -104,7 +103,6 @@ void initArgs()
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
-	//cout << ranks[1] << " " << cGlob.tpb << " ";
 
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 

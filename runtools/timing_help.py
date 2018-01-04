@@ -366,11 +366,6 @@ if __name__ == "__main__":
                 gg = gg.drop_duplicates('nX')
                 gin = interpolate.interp1d(gg[cols[2]], gg[rVar], kind='cubic')
                 bon = gin(newx)
-                # if np.sum(bon<0) > 0:
-                #     print(ty, k, kk)
-                #     print(gg)
-                #     plt.semilogx(newx, bon)
-                #     plt.show()
 
                 tFrame[kk] = bon
 
@@ -392,24 +387,24 @@ if __name__ == "__main__":
         tpbf = fullFrame['time'].idxmin(axis=1)
         cFrame[opt[0]][opt[1]] = timef
 
-        # f, a = plt.subplots(1, 2)
-        # aa = a.ravel()
-        # timef.plot(ax=aa[0], logx=True)
-        # aa[0].set_title("Best Time")
-        # aa[0].set_ylabel(ylbl)
-        # aa[0].set_xlabel(xlbl)
-        # tpbf.plot(ax=aa[1], logx=True)
-        # aa[1].set_title("Best Tpb")
-        # aa[1].set_ylabel("Threads per block")
-        # aa[1].set_xlabel(xlbl)
-        # plt.suptitle(ty)
-        # plt.show()
-
-    speedFrame = {}
     for r in runs[0]:
-        speeder = cFrame[r]["Classic"]/cFrame[r]["Swept"]
-        speeder[speeder<0] = 0
-        speedFrame[r] = speeder
+        bestFrame = pd.DataFrame(cFrame[r])
+        speeder = bestFrame["Classic"]/bestFrame["Swept"]
+        speeder[speeder<0] = 1
         plt.semilogx(newx, speeder)
         plt.title(r)
-        plt.show()
+        
+        f, a = plt.subplots(1, 2)
+        aa = a.ravel()
+        bestFrame.loglog(ax=aa[0], logx=True)
+        aa[0].set_title("Best Time")
+        aa[0].set_ylabel(ylbl)
+        aa[0].set_xlabel(xlbl)
+        tpbf.plot(ax=aa[1], logx=True)
+        aa[1].set_title("Best Tpb")
+        aa[1].set_ylabel("Threads per block")
+        aa[1].set_xlabel(xlbl)
+        plt.suptitle(r, fontweight='bold')
+        
+        
+        

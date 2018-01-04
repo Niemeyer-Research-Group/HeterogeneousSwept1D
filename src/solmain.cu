@@ -128,17 +128,19 @@ int main(int argc, char *argv[])
 
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = (MPI_Wtime() - timed);
-        if (cGlob.hasGpu)  cudaDeviceSynchronize();
+        if (cGlob.hasGpu)  
+		{
+			cudaError_t error = cudaGetLastError();
+        	if(error != cudaSuccess)
+        	{
+            	// print the CUDA error message and exit
+            	printf("CUDA error: %s\n", cudaGetErrorString(error));
+            	exit(-1);
+        	}
+			cudaDeviceSynchronize();
+		}
 
         writeOut(state, tfm);
-
-        cudaError_t error = cudaGetLastError();
-        if(error != cudaSuccess)
-        {
-            // print the CUDA error message and exit
-            printf("CUDA error: %s\n", cudaGetErrorString(error));
-            exit(-1);
-        }
 
         if (!ranks[1])
         {

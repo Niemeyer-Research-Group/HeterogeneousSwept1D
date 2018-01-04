@@ -15,7 +15,18 @@
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
 
+#ifdef GTIME
+#define TIMEIN  timeit.tinit()
+#define TIMEOUT timeit.tfinal()
+#define WATOM atomicWrite(timeit.typ, timeit.times)
+#else
+#define TIMEIN  
+#define TIMEOUT 
+#define WATOM
+#endif
+
 using namespace std;
+
 
 
 __global__ void classicStep(states *state, const int ts)
@@ -93,9 +104,9 @@ double classicWrapper(states **state, int *tstep)
 
         while (t_eq < cGlob.tf)
         {
-            timeit.tinit();
+            //TIMEIN;
             classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
-            timeit.tfinal();
+            //TIMEOUT;
             classicStepCPU(state[0], xcp, tmine);
             classicStepCPU(state[2], xcp, tmine);
 
@@ -124,8 +135,8 @@ double classicWrapper(states **state, int *tstep)
         }
 
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
-        cout << ranks[1] << " ----- " << timeit.avgt() << endl;
-        atomicWrite(timeit.typ, timeit.times);
+        // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
+        //WATOM;
 
         cudaStreamDestroy(st1);
         cudaStreamDestroy(st2);
@@ -140,9 +151,9 @@ double classicWrapper(states **state, int *tstep)
         mpiTime timeit;
         while (t_eq < cGlob.tf)
         {
-            timeit.tinit();
+            //TIMEIN;
             classicStepCPU(state[0], xcp, tmine);
-            timeit.tfinal();
+            //TIMEOUT;
 
             putSt[0] = state[0][1];
             putSt[1] = state[0][cGlob.xcpu];
@@ -161,8 +172,8 @@ double classicWrapper(states **state, int *tstep)
                 twrite += cGlob.freq;
             }
         }
-        cout << ranks[1] << " ----- " << timeit.avgt() << endl;
-        atomicWrite(timeit.typ, timeit.times);
+        // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
+        //WATOM;
     }
     *tstep = tmine;
 

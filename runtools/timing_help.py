@@ -58,6 +58,7 @@ def formatSubplot(f, nsub):
         return f
     elif nsub == 4:
         f.subplots_adjust(top=0.9, bottom=0.08, right=0.85, left=0.05, wspace=0.15, hspace=0.25)
+
     return f
 
 
@@ -87,6 +88,9 @@ def parseCsv(fb):
     jframe = jframe[(jframe.nX !=0)]
 
     return jframe
+
+def cartProd(y):
+    return pd.DataFrame(list(itertools.product(*y))).values
 
 # Takes list of dfs? title of each df, longterm hd5, option to overwrite
 # incase you write wrong.  Use carefully!
@@ -133,39 +137,10 @@ class Perform(object):
         self.title = name
         self.cols = list(df.columns.values)
         self.xo = self.cols[:3]
-        self.uniques, self.minmaxes = [], []
+        self.uniques, self.minmaxes = {}, {}
 
         for k in self.xo:
-            self.uniques.append(list(np.unique(self.oFrame[k])))
-            self.minmaxes.append( (min(self.uniques[-1]), max(self.uniques[-1])) )
-
-        ap = []
-        for k, g in self.oFrame.groupby('tpb'):
-            for kk, gg in g.groupby('gpuA'):
-                ap.append(gg['nX'].max())
-
-        maxx = min(ap)
-
-        ap = []
-        for k, g in self.oFrame.groupby('tpb'):
-            for kk, gg in g.groupby('gpuA'):
-                ap.append(gg['nX'].min())
-
-        minx = max(ap)
-        self.minmaxes[-1] = (minx, maxx)
-
-    def nxRange(self, buffer=10, nums=400):
-        nxs = np.logspace(*np.log2(self.minmaxes[-1]), base=2, num=nums)
-        return nxs[buffer:-buffer]
-
-    def fullTest(self, **kwargs):
-        nxs = nxRange(**kwargs)
-        # tpbs = np.arange(self.minmaxes[0][0], self.minmaxes[0][1]+1, 32)
-        gpuas = np.arange(self.minmaxes[1][0], self.minmaxes[1][1]+.01, .5)
-        iters = itertools.product(gpuas, nxs)
-        df = pd.DataFrame(list(iters), columns=self.xo[1:3])
-        # grd = np.meshgrid(gpuas, nxs)
-        return df
+            self.uniques[k] = self.oFrame[k].unique()
 
     def saveplot(self, cat, pt):
         #Category: i.e regression, Equation: i.e. EulerClassic , plot
@@ -187,18 +162,39 @@ class Perform(object):
             ms = ms + self.cols[i] + ": \n " + str(s) + "\n"
         return ms
 
-    def plotRaw(self):
-        for k, g in self.oFrame.groupby(self.xo[0]):
-            if (k/32 %2):
-                f, a = plt.subplots(1, 1)
+    def plotRaw(self, subax, respvar):
 
-                for kk, gg in g.groupby(self.xo[1]):
+        legax = self.xo[1] if subax==self.xo[1] else self.xo[0] 
+        saxVal = self.uniques[subax]
+        ff = []
+        for i in range(saxVal//4):
+            f, ai = plt.subplots(2,2)
+            ap = ai.ravel()
+            ff.append(f)
+            for aa, t in zip(ap, saxVal[i::2]):
+                ad[t] = aa
+            plt.suptitle("Raw Data by " + subax)
 
-                    a.semilogx(gg[self.xo[-1]], gg[self.respvar], label=str(kk))
+        for k, g in self.oFrame.groupby(subax):
+            gg = g.pivot(index='nX', columns=saxVal, values=respvar)
+            gg.plot(ax = ad[k], logy=True, logx=True, grid=True)
+            ad[k].set_title(k)
 
-                h, l = a.get_legend_handles_labels()
-                plt.legend(h,l)
-                plt.title(self.title + str(k))
+        for i, fi in enumerate(ff):
+            fi = formatSubplot(fi, 4)
+            self.saveplot("Raw" , "Raw" + str(i))
+
+
+    def getBest(self, mGrp):
+        for k, g in self.oFrame.groupby(subax):
+            gg = g.pivot(index='nX', columns=saxVal, values=respvar)
+            gg.plot(ax = ad[k], logy=True, logx=True, grid=True)
+            ad[k].set_title(k)
+            
+            gbest = gg.min(axis=1)
+            gpbest = gg.idxmin(axis=1)
+            ga[k] = gbest
+            gb[k] = gpbest
 
     def makedf(self, lists):
         if isinstance(lists[0], list):
@@ -376,11 +372,7 @@ if __name__ == "__main__":
             collectFrame.append(appFrame)
 
         fullFrame = pd.concat(collectFrame)
-        print(ty, "----------------")
-        print(fullFrame.head())
         fullFrame = fullFrame.pivot("nX", "tpb")
-        print(fullFrame.head())
-        print(fullFrame['time'].head())
 
         collFrame[opt[0]][opt[1]] = fullFrame
         timef = fullFrame['time'].min(axis=1)

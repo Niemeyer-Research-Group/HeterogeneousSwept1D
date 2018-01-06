@@ -17,7 +17,6 @@ import git
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-import palettable.colorbrewer as pal
 import pandas as pd
 from scipy import interpolate
 from cycler import cycler
@@ -26,24 +25,18 @@ import re
 import result_help as rh
 from main_help import *
 
-plt.rc('axes', prop_cycle=cycler('color', pal.qualitative.Dark2_8.mpl_colors))
+plt.rc('axes', prop_cycle=cycler('color', plt.cm.Accent.colors)+cycler('marker', ['D', 'o', 'h', '*', '^', 'x', 'v', '8']))
 
 mpl.rcParams['lines.linewidth'] = 3
-#mpl.rcParams['lines.markersize'] = 8
+mpl.rcParams['lines.markersize'] = 8
 mpl.rcParams["figure.figsize"] = 14,8
+mpl.rcParams["figure.titlesize"]="x-large"
+mpl.rcParams["figure.titleweight"]="bold"
 mpl.rcParams["grid.alpha"] = 0.5
 mpl.rcParams["axes.grid"] = True
 mpl.rcParams["savefig.dpi"] = 1000
 mpl.rcParams["savefig.bbox"] = "tight"
 
-# mpl.rcParams["figure.subplot.bottom"] = 0.08
-# mpl.rcParams["figure.subplot.right"] = 0.85
-# mpl.rcParams["figure.subplot.top"] = 0.9
-# mpl.rcParams["figure.subplot.wspace"] = 0.15
-# mpl.rcParams["figure.subplot.hspace"] = 0.25
-# mpl.rcParams["figure.subplot.left"] = 0.05
-
-ylbl = "Time per timestep (us)"
 xlbl = "Grid Size"
 ext = ".json"
 
@@ -51,7 +44,9 @@ dftype=pd.core.frame.DataFrame #Compare types
 
 schemes = {"C": "Classic", "S": "Swept"}
 
-crs=["r", "b", "k", "g"]
+meas = {"time": "us per timestep", "efficiency": "MGridPts/s", "SpeedupAlg":"Speedup", "SpeedupGPU":"Speedup", "Best tpb":"Best tpb comparison"}
+
+fc = {'time':'min', 'efficiency': 'max'}
 
 def formatSubplot(f, nsub):
     if nsub == 1:
@@ -60,7 +55,6 @@ def formatSubplot(f, nsub):
         f.subplots_adjust(top=0.9, bottom=0.08, right=0.85, left=0.05, wspace=0.15, hspace=0.25)
 
     return f
-
 
 def find_all(name, path):
     result = []
@@ -131,6 +125,43 @@ def longTerm(dfs, titles, fhdf, overwrite=False):
     opStore.close()
     return dfcat
 
+def saveplot(self, cat, pt):
+    #Category: i.e regression, Equation: i.e. EulerClassic , plot
+    tplotpath = op.join(resultpath, cat)
+    if not op.isdir(tplotpath):
+        os.mkdir(tplotpath)
+
+    plotpath = op.join(tplotpath)
+    if not op.isdir(plotpath):
+        os.mkdir(plotpath)
+
+    plotname = op.join(plotpath, ".pdf")
+    plt.savefig(plotname)
+
+# At this point the function is independent
+def getBestAll(df, respvar):
+    f = fc[respvar]
+    ifx = 'idx'+f
+    ti = list(df.columns.names)
+    ti.remove('metric')
+    ixvar = list(ti)[0]
+    print(ixvar)
+    to = list(df.columns.get_level_values('metric').unique())
+    print(to)
+    to.remove(respvar)
+    oxvar = to[0]
+
+    dfb = pd.DataFrame(df[respvar].apply(f, axis=1), columns=[respvar])
+    dfb[ixvar] = pd.DataFrame(df[respvar].apply(ifx, axis=1))
+
+    bCollect = []
+    for i, k in zip(dfb.index, dfb[ixvar].values):
+        bCollect.append(df[oxvar].loc[i, k])
+
+    dfb[oxvar] = bCollect
+
+    return dfb
+
 class Perform(object):
     def __init__(self, df, name):
         self.oFrame = df
@@ -138,22 +169,16 @@ class Perform(object):
         self.cols = list(df.columns.values)
         self.xo = self.cols[:3]
         self.uniques, self.minmaxes = {}, {}
+        self.iFrame = pd.DataFrame()
+        self.bFrame = pd.DataFrame()
 
         for k in self.xo:
-            self.uniques[k] = self.oFrame[k].unique()
+            tmp = self.oFrame[k].unique()
+            self.uniques[k] = tmp
+            self.minmaxes[k] = [tmp.min() , tmp.max()]
 
-    def saveplot(self, cat, pt):
-        #Category: i.e regression, Equation: i.e. EulerClassic , plot
-        tplotpath = op.join(resultpath, cat)
-        if not op.isdir(tplotpath):
-            os.mkdir(tplotpath)
-
-        plotpath = op.join(tplotpath, self.title)
-        if not op.isdir(plotpath):
-            os.mkdir(plotpath)
-
-        plotname = op.join(plotpath, str(pt) + self.title + ".pdf")
-        plt.savefig(plotname)
+        self.minmaxes['nX'] = [self.oFrame.groupby(self.xo[:2]).min()['nX'].max(), 
+                                self.oFrame.groupby(self.xo[:2]).max()['nX'].min()]
 
     def __str__(self):
         ms = "%s \n %s \n Unique Exog: \n" % (self.title, self.oFrame.head())
@@ -162,39 +187,54 @@ class Perform(object):
             ms = ms + self.cols[i] + ": \n " + str(s) + "\n"
         return ms
 
-    def plotRaw(self, subax, respvar):
+    def efficient(self):
+        self.oFrame['efficiency'] = self.oFrame['nX']/self.oFrame['time']
+        if not self.iFrame.empty:
+            self.iFrame['efficiency'] = self.iFrame['nX']/self.iFrame['time']
 
-        legax = self.xo[1] if subax==self.xo[1] else self.xo[0] 
+    def plotRaw(self, subax, respvar, legstep=1):
+        legax = self.xo[1] if subax==self.xo[0] else self.xo[0] 
+        
+        drops = self.uniques[legax][1::legstep] if legstep > 1 else []
         saxVal = self.uniques[subax]
         ff = []
-        for i in range(saxVal//4):
+        ad = {}
+        for i in range(len(saxVal)//4):
             f, ai = plt.subplots(2,2)
             ap = ai.ravel()
             ff.append(f)
             for aa, t in zip(ap, saxVal[i::2]):
                 ad[t] = aa
-            plt.suptitle("Raw Data by " + subax)
+
+            plt.suptitle(self.title + " - Raw Data by " + subax)
 
         for k, g in self.oFrame.groupby(subax):
-            gg = g.pivot(index='nX', columns=saxVal, values=respvar)
-            gg.plot(ax = ad[k], logy=True, logx=True, grid=True)
+            g = g.drop_duplicates('nX')
+            gg = g.pivot(index='nX', columns=legax, values=respvar)
+            gg = gg.drop(drops, axis=1)
+            gg.plot(ax=ad[k], logy=True, logx=True, grid=True)
             ad[k].set_title(k)
 
         for i, fi in enumerate(ff):
             fi = formatSubplot(fi, 4)
-            self.saveplot("Raw" , "Raw" + str(i))
+            #self.saveplot("Raw" , "Raw" + str(i))
 
+    def getBest(self, subax, respvar, df=None):
+        f = fc[respvar]
+        ifx = 'idx'+f
+        legax = self.xo[1] if subax==self.xo[0] else self.xo[0] 
+        blankidx = pd.MultiIndex(levels=[[],[]], labels=[[],[]], names=['metric', subax])
+        fCollect = pd.DataFrame(columns=blankidx)
 
-    def getBest(self, mGrp):
-        for k, g in self.oFrame.groupby(subax):
-            gg = g.pivot(index='nX', columns=saxVal, values=respvar)
-            gg.plot(ax = ad[k], logy=True, logx=True, grid=True)
-            ad[k].set_title(k)
-            
-            gbest = gg.min(axis=1)
-            gpbest = gg.idxmin(axis=1)
-            ga[k] = gbest
-            gb[k] = gpbest
+        if not df:
+            df = self.iFrame
+
+        for k, g in df.groupby(subax):
+            gg = g.pivot(index='nX', columns=legax, values=respvar)
+            fCollect[respvar, k] = gg.apply(f, axis=1)
+            fCollect[legax, k] = gg.apply(ifx, axis=1)
+
+        return fCollect
 
     def makedf(self, lists):
         if isinstance(lists[0], list):
@@ -209,74 +249,74 @@ class Perform(object):
 
         return pd.DataFrame.from_dict(dct, orient='index')
 
-    def predict(self, newVals):
-        if not isinstance(newVals, dftype):
-            newVals = self.makedf(newVals)
+    def nxRange(self, n):
+        return np.logspace(*(np.log2(self.minmaxes['nX'])), base=2, num=n)
 
-        newFrame = newVals[self.xo]
-        return self.res.predict(newFrame)
+    def simpleNGrid(self):
+        xint = [self.uniques['tpb'], self.uniques['gpuA']]
+        xint.append(self.nxRange(100))
+        return xint
 
-    def model(self):
-        xi = self.fullTest()
-        fdf = self.res.predict(xi)
-        xi[self.repvar] = fdf
-        return xi.set_index(self.xo[0])
 
-    def plotLine(self, plotpath=".", saver=True, shower=False):
-        f, ax = plt.subplots(2, 2, figsize=(14,8))
-        ax = ax.ravel()
-        df = self.model()
-        plotname = op.join(plotpath, self.title + "Contour.pdf")
-        for th, a in zip(np.unique(df.index.values), ax):
-            dfn = df.xs(th).pivot(*self.cols[1:]).T
-            dfn.plot(ax=a, logx=True, logy=True)
-            a.set_xscale("log")
-            a.set_ylabel("gpuA")
-            a.set_xlabel(xlbl)
-            a.set_title(str(th))
+class Interp1(Perform):
+    def __init__(self, datadf, name):
+        super().__init__(datadf, name)
 
-        f.tight_layout(pad=0.2, w_pad=0.75, h_pad=1.0)
-        f.subplots_adjust(bottom=0.08, right=0.82, top=0.9)
-        plt.suptitle(self.title)
+    def interpit(self, bycol=['tpb', 'gpuA']):
+        subj='nX'
+        if 'nX' not in bycol:
+            xint = self.nxRange(100)
+        elif 'gpuA' not in bycol:
+            subj = 'gpuA'
+            xint = np.around(np.linspace(self.minmaxes['gpuA'][0], self.minmaxes('gpuA'), 50), decimals=1)
 
-        if saver:
-            f.savefig(plotname, dpi=1000, bbox_inches="tight")
-        if shower:
-            plt.show()
+        fCollect = []
+        dff = pd.DataFrame(index=xint)
+        thisFrame = self.oFrame if self.iFrame.empty else self.iFrame
+        for (k, kk), g in thisFrame.groupby(bycol):
+            dff[bycol[0]]=k  
+            dff[bycol[1]]=kk
+            g = g.drop_duplicates(subj)
+            interper = interpolate.interp1d(g[subj], g['time'], kind='cubic')
+            fCollect.append(dff.assign(time=interper(xint)))
 
-        return df
+        newpd = pd.concat(fCollect).reset_index().rename(columns={'index': subj})
+        
+        if self.iFrame.empty:
+            self.iFrame = newpd
+      
+        return newpd
 
-    def plotContour(self, plotpath=".", saver=True, shower=False):
-        f, ax = plt.subplots(2, 2, figsize=(14,8))
-        ax = ax.ravel()
-        df = self.model()
-        plotname = op.join(plotpath, self.title + "Contour.pdf")
-        for th, a in zip(np.unique(df.index.values), ax):
-            dfn = df.xs(th).pivot(*self.cols[1:])
-            self.b = dfn
-            X, Y = np.meshgrid(dfn.columns.values, dfn.index.values)
-            Z=dfn.values
-            mxz = np.max(np.max(Z))/1.05
-            mnz = np.min(np.min(Z))*1.1
-            lvl = np.linspace(mnz, mxz, 10)
-            CS = a.contourf(X, Y, Z, levels=lvl)
-            a.clabel(CS, inline=1, fontsize=10)
-            a.set_xscale("log")
-            a.set_ylabel("gpuA")
-            a.set_xlabel(xlbl)
-            a.set_title(str(th))
 
-        f.tight_layout(pad=0.2, w_pad=0.75, h_pad=1.0)
-        f.subplots_adjust(bottom=0.08, right=0.82, top=0.9)
-        plt.suptitle(self.title)
-        plt.colorbar()
+class StatsMods(Perform):
+    def __init__(self, datadf, name):
+        super().__init__(datadf, name)
+        self.fm = self.__formu()
+        self.mod = smf.ols(formula=fm, data=self.oFrame().fit())
 
-        if saver:
-            f.savefig(plotname, dpi=1000, bbox_inches="tight")
-        if shower:
-            plt.show()
+    def interpit(self):
+        xint = self.simpleNGrid()
+        it = cartprod(xint)
+        self.iFrame = pd.DataFrame(it, columns=self.xo)
+        self.iFrame['time'] = mod.predict(self.iFrame)
 
-        return df
+    def __formu(self):
+        form = self.xo[:]
+        for i, x in enumerate(xo):
+            for xa in xo[i:]:
+                if x == xa:
+                    form.append("I(" + xa + "**2)")
+                else:
+                    form.append(x + ":" + xa)
+
+        return self.cols[-1] + " ~ " + " + ".join(form)
+
+    def pr(self):
+        print(self.title)
+        print(self.fm)
+        print(self.smod.summary())
+
+#------------------------------
 
 def predictNew(eq, alg, args, nprocs=8):
     oldF = mostRecentResults(resultpath)
@@ -332,71 +372,26 @@ def compareRuns(eq, alg, args, nprocs=8): #)mdl=linear_model.LinearRegression())
 
 if __name__ == "__main__":
     recentdf = mostRecentResults(resultpath)
-    cols = list(recentdf.columns.values)
-    print(cols)
-
-    timed = "time"
-    timeLabel = "us per timestep"
-    pointSpeed = "Speed"
-    pointLabel = "MGridPts/s"
-    recentdf[pointSpeed] = recentdf[cols[-2]]/recentdf[cols[-1]]
-    rVar = timed
-    rLabel = timeLabel
-    perfs = []
-    eqs = np.unique(recentdf.index.values)
-    pex = Perform(recentdf.xs(eqs[0]), eqs[0])
-    newx = pex.nxRange()
-    finalFrame = pd.DataFrame(index=newx, columns=eqs)
-    tFrame=pd.DataFrame(index=newx).rename_axis("nX")
-    sFrame=pd.DataFrame(index=newx).rename_axis("nX")
-    runtype=np.array([re.findall('[A-Z][^A-Z]*', k) for k in eqs])
-    runs = [np.unique(runtype[:,0]), np.unique(runtype[:,1])]
+    eqs = recentdf.index.unique()
     collFrame = collections.defaultdict(dict)
-    cFrame = collections.defaultdict(dict)
+
     for ty in eqs:
         df = recentdf.xs(ty).reset_index(drop=True)
+    
         opt = re.findall('[A-Z][^A-Z]*', ty)
-        collectFrame = []
-        for k, g in df.groupby(cols[0]):
-            for kk, gg in g.groupby(cols[1]):
-                gg = gg.drop_duplicates('nX')
-                gin = interpolate.interp1d(gg[cols[2]], gg[rVar], kind='cubic')
-                bon = gin(newx)
+        collFrame[opt[0]][opt[1]] = Interp1(df, ty)
 
-                tFrame[kk] = bon
+    for kc, ic in collFrame.items():
+        for k2, i2 in ic.items():
+            print(k2)
+            df = i2.interpit()
+            i2.efficient()
+            #i2.plotRaw('tpb', 'time')
+            i2.plotRaw('tpb', 'efficiency', 2)
 
-            sFrame["tpb"] = k
-            sFrame["gpuA"] = tFrame.idxmin(axis=1)
-            sFrame["time"] = tFrame.min(axis=1)
-            appFrame = sFrame.reset_index()
-            collectFrame.append(appFrame)
 
-        fullFrame = pd.concat(collectFrame)
-        fullFrame = fullFrame.pivot("nX", "tpb")
-
-        collFrame[opt[0]][opt[1]] = fullFrame
-        timef = fullFrame['time'].min(axis=1)
-        tpbf = fullFrame['time'].idxmin(axis=1)
-        cFrame[opt[0]][opt[1]] = timef
-
-    for r in runs[0]:
-        bestFrame = pd.DataFrame(cFrame[r])
-        speeder = bestFrame["Classic"]/bestFrame["Swept"]
-        speeder[speeder<0] = 1
-        plt.semilogx(newx, speeder)
-        plt.title(r)
         
-        f, a = plt.subplots(1, 2)
-        aa = a.ravel()
-        bestFrame.loglog(ax=aa[0], logx=True)
-        aa[0].set_title("Best Time")
-        aa[0].set_ylabel(ylbl)
-        aa[0].set_xlabel(xlbl)
-        tpbf.plot(ax=aa[1], logx=True)
-        aa[1].set_title("Best Tpb")
-        aa[1].set_ylabel("Threads per block")
-        aa[1].set_xlabel(xlbl)
-        plt.suptitle(r, fontweight='bold')
+
         
         
         

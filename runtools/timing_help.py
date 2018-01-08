@@ -22,13 +22,25 @@ from scipy import interpolate
 from cycler import cycler
 import re
 
-import result_help as rh
 from main_help import *
 
-plt.rc('axes', prop_cycle=cycler('color', plt.cm.Accent.colors)+cycler('marker', ['D', 'o', 'h', '*', '^', 'x', 'v', '8']))
+plt.close('all')
+
+myColors = [[27, 158, 119],
+ [217, 95, 2],
+ [117, 112, 179],
+ [231, 41, 138],
+ [102, 166, 30],
+ [230, 171, 2],
+ [166, 118, 29],
+ [102, 102, 102]]
+
+hxColors = ["#{:02x}{:02x}{:02x}".format(r,g,b) for r, g, b in myColors]
+
+plt.rc('axes', prop_cycle=cycler('color', hxColors)+cycler('marker', ['D', 'o', 'h', '*', '^', 'x', 'v', '8']))
 
 mpl.rcParams['lines.linewidth'] = 3
-mpl.rcParams['lines.markersize'] = 8
+#mpl.rcParams['lines.markersize'] = 8
 mpl.rcParams["figure.figsize"] = 14,8
 mpl.rcParams["figure.titlesize"]="x-large"
 mpl.rcParams["figure.titleweight"]="bold"
@@ -42,7 +54,9 @@ ext = ".json"
 
 dftype=pd.core.frame.DataFrame #Compare types
 
-schemes = {"C": "Classic", "S": "Swept"}
+schemes = ["Classic", "Swept"]
+
+schs = dict(zip([k[0] for k in schemes], schemes))
 
 meas = {"time": "us per timestep", "efficiency": "MGridPts/s", "SpeedupAlg":"Speedup", "SpeedupGPU":"Speedup", "Best tpb":"Best tpb comparison"}
 
@@ -159,7 +173,6 @@ def getBestAll(df, respvar):
         bCollect.append(df[oxvar].loc[i, k])
 
     dfb[oxvar] = bCollect
-
     return dfb
 
 class Perform(object):
@@ -187,7 +200,11 @@ class Perform(object):
             ms = ms + self.cols[i] + ": \n " + str(s) + "\n"
         return ms
 
-    def efficient(self):
+    def efficient(self, df=pd.DataFrame()):
+        if not df.empty:
+            df['efficiency'] = df['nX']/df['time']
+            return df
+        
         self.oFrame['efficiency'] = self.oFrame['nX']/self.oFrame['time']
         if not self.iFrame.empty:
             self.iFrame['efficiency'] = self.iFrame['nX']/self.iFrame['time']
@@ -217,16 +234,16 @@ class Perform(object):
 
         for i, fi in enumerate(ff):
             fi = formatSubplot(fi, 4)
-            #self.saveplot("Raw" , "Raw" + str(i))
+            #self.saveplot("Raw" , "Raw" + subax + str(i))
 
-    def getBest(self, subax, respvar, df=None):
+    def getBest(self, subax, respvar, df=pd.DataFrame()):
         f = fc[respvar]
         ifx = 'idx'+f
         legax = self.xo[1] if subax==self.xo[0] else self.xo[0] 
         blankidx = pd.MultiIndex(levels=[[],[]], labels=[[],[]], names=['metric', subax])
         fCollect = pd.DataFrame(columns=blankidx)
 
-        if not df:
+        if df.empty:
             df = self.iFrame
 
         for k, g in df.groupby(subax):
@@ -277,14 +294,14 @@ class Interp1(Perform):
             dff[bycol[0]]=k  
             dff[bycol[1]]=kk
             g = g.drop_duplicates(subj)
-            interper = interpolate.interp1d(g[subj], g['time'], kind='cubic')
+            interper = interpolate.interp1d(g[subj], g[respvar], kind='cubic')
             fCollect.append(dff.assign(time=interper(xint)))
 
         newpd = pd.concat(fCollect).reset_index().rename(columns={'index': subj})
         
         if self.iFrame.empty:
             self.iFrame = newpd
-      
+
         return newpd
 
 
@@ -298,7 +315,7 @@ class StatsMods(Perform):
         xint = self.simpleNGrid()
         it = cartprod(xint)
         self.iFrame = pd.DataFrame(it, columns=self.xo)
-        self.iFrame['time'] = mod.predict(self.iFrame)
+        self.iFrame[respvar] = mod.predict(self.iFrame)
 
     def __formu(self):
         form = self.xo[:]
@@ -320,7 +337,7 @@ class StatsMods(Perform):
 
 def predictNew(eq, alg, args, nprocs=8):
     oldF = mostRecentResults(resultpath)
-    mkstr = eq.title() + schemes[alg].title()
+    mkstr = eq.title() + schs[alg].title()
     oldF.columns=cols
     oldF = oldF.xs(mkstr).reset_index(drop=True)
     oldPerf = Perform(oldF, mkstr)
@@ -339,7 +356,7 @@ def predictNew(eq, alg, args, nprocs=8):
 # result in the old version
 def compareRuns(eq, alg, args, nprocs=8): #)mdl=linear_model.LinearRegression()):
     oldF = mostRecentResults(resultpath)
-    mkstr = eq.title() + schemes[alg].title()
+    mkstr = eq.title() + schs[alg].title()
     oldF.columns=cols
     oldF = oldF.xs(mkstr).reset_index(drop=True)
     oldPerf = perfModel(oldF, mkstr)
@@ -376,22 +393,41 @@ if __name__ == "__main__":
     collFrame = collections.defaultdict(dict)
 
     for ty in eqs:
-        df = recentdf.xs(ty).reset_index(drop=True)
-    
+        df = recentdf.xs(ty).reset_index(drop=True) 
         opt = re.findall('[A-Z][^A-Z]*', ty)
         collFrame[opt[0]][opt[1]] = Interp1(df, ty)
 
-    for kc, ic in collFrame.items():
-        for k2, i2 in ic.items():
-            print(k2)
-            df = i2.interpit()
-            i2.efficient()
-            #i2.plotRaw('tpb', 'time')
-            i2.plotRaw('tpb', 'efficiency', 2)
-
-
+    speedtypes = ["Raw", "Interpolated", "Best"]
+    dfSpeed={k: pd.DataFrame() for k in speedtypes}
+    collBestI = collections.defaultdict(dict)
+    collBest = collections.defaultdict(dict)
+    respvar='time'
+    
+    for ke, ie in collFrame.items():
+        fraw, axraw = plt.subplots(1,1)
+        fspeed, axspeed = plt.subplots(1,1)
+        feff, axeff = plt.subplots(1,1)
         
+        for ks, iss in ie.items():
+            df = iss.interpit()
+            iss.efficient()
+#            iss.plotRaw('tpb', 'time')
+#            iss.plotRaw('tpb', 'efficiency', 2)
 
+            dfBI = iss.getBest('tpb', respvar)
+            dfBF = getBestAll(dfBI, respvar)
+            dfBF= iss.efficient(dfBF.reset_index())
+            dfBF[respvar].plot(ax=axraw, logx=True, label=ks, title=ke+" Best Runs")
+            dfBF['efficiency'].plot(ax=axeff, logx=True, label=ks, title=ke+" Best Run Efficiency")
+            collBestI[ke][ks] = dfBI
+            collBest[ke][ks] = dfBF
+        
+        dfSpeed["Raw"][ke] = ie[schemes[0]].oFrame[respvar]/ ie[schemes[1]].oFrame[respvar]
+        dfSpeed["Interpolated"][ke] =  ie[schemes[0]].iFrame[respvar]/ie[schemes[1]].iFrame[respvar]
+        dfSpeed["Best"][ke] = collBest[ke][schemes[0]][respvar]/collBest[ke][schemes[1]][respvar]
+        dfSpeed['Best'][ke].plot(ax=axspeed, logx=True, title=ke+" Speedup")
+        axraw.legend()
+        axeff.legend()
         
         
         

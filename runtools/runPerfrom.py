@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 
 from main_help import *
 import timing_help as th
-from sklearn import linear_model
 import re
 
 schemes = {"C": "Classic", "S": "Swept"}

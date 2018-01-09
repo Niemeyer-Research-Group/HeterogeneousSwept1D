@@ -16,7 +16,6 @@ cubin/
 temp*
 src/trslt/*.json
 src/rslts/*.json
-*.pdf
 src/utilities/js*
 src/conf
 nohup*

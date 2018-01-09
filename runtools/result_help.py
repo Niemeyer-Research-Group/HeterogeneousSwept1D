@@ -104,29 +104,29 @@ class Solved(object):
 #                    axi.plot(self.xGrid, vn[:,i], label="{:.3f} (s)".format(tL))
 
 
-    def annotatePlot(self, fh, ax):
+    # def annotatePlot(self, fh, ax):
 
-        if not self.subpl:
+    #     if not self.subpl:
 
-            ax.set_ylabel(self.plotTitles[0])
-            ax.set_xlabel("Spatial point")
-            ax.set_title(self.plotname + " {0} spatial points".format(self.numpts))
-            hand, lbl = ax.get_legend_handles_labels()
-            fh.legend(hand, lbl, loc="upper right", fontsize="medium")
+    #         ax.set_ylabel(self.plotTitles[0])
+    #         ax.set_xlabel("Spatial point")
+    #         ax.set_title(self.plotname + " {0} spatial points".format(self.numpts))
+    #         hand, lbl = ax.get_legend_handles_labels()
+    #         fh.legend(hand, lbl, loc="upper right", fontsize="medium")
         
-        else:
-            fh.suptitle(self.plotname + 
-                " | {0} spatial points   ".format(self.numpts), 
-                fontsize="large", fontweight="bold")
+    #     else:
+    #         fh.suptitle(self.plotname + 
+    #             " | {0} spatial points   ".format(self.numpts), 
+    #             fontsize="large", fontweight="bold")
 
-            for axi, nm in zip(ax, self.plotTitles):
-                axi.set_title(nm)
+    #         for axi, nm in zip(ax, self.plotTitles):
+    #             axi.set_title(nm)
                 
-            hand, lbl = ax[0].get_legend_handles_labels()
-            fh.legend(hand, lbl, loc="upper right", fontsize="medium")
+    #         hand, lbl = ax[0].get_legend_handles_labels()
+    #         fh.legend(hand, lbl, loc="upper right", fontsize="medium")
 
-            fh.subplots_adjust(bottom=0.08, right=0.85, top=0.9, 
-                                wspace=0.15, hspace=0.25)
+    #         fh.subplots_adjust(bottom=0.08, right=0.85, top=0.9, 
+    #                             wspace=0.15, hspace=0.25)
 
     def savePlot(self, fh, shw=False):
         

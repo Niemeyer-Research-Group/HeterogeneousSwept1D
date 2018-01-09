@@ -55,17 +55,35 @@ def undict(d, kind='dict'):
         elif kind=="dict":
             return {int(k): float(v) for k, v in sorted(d.items())}
 
-
 def makeList(v):
     if isinstance(v, collections.Iterable):
         return v
     else:
         return [v]
 
+#Category: i.e Performance, RunDetail (comp_nprocs_date), plottitle
+def saveplot(f, cat, rundetail, titler):
+    #Category: i.e regression, Equation: i.e. EulerClassic , plot
+    tplotpath = op.join(resultpath, cat)
+    if not op.isdir(tplotpath):
+        os.mkdir(tplotpath)
+
+    plotpath = op.join(tplotpath, rundetail)
+    if not op.isdir(plotpath):
+        os.mkdir(plotpath)
+
+    if isinstance(f, collections.Iterable):
+        for i, fnow in enumerate(f):
+            plotname = op.join(plotpath, titler + str(i) + ".pdf")
+            fnow.savefig(plotname, bbox_inches='tight')
+
+    else:
+        plotname = op.join(plotpath, titler + ".pdf")
+        f.savefig(plotname, bbox_inches='tight')
+
+
 #Divisions and threads per block need to be lists (even singletons) at least.
 def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=""):
-
-    # if n[-1] != " ": n += " " for each function input.
 
     runnr = "mpirun -np "
     print("---------------------")
@@ -87,13 +105,24 @@ def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=
 
 # Read notes into a dataFrame. Sort by date and get sha
 
-def mostRecentResults(rpath):
+def getRecentResults(nBack, prints=None):
+    rpath = resultpath
     note = readj(op.join(rpath, "notes.json"))
     hfive = op.join(rpath, "rawResults.h5")
     nframe = pd.DataFrame.from_dict(note).T
     nframe = nframe.sort_values("date", ascending=False)
-    sha = nframe.index.values[0]
+    sha = nframe.index.values[nBack]
     hframe = pd.HDFStore(hfive)
     outframe = hframe[sha]
     hframe.close()
-    return outframe
+    if prints:
+       pr = makeList(prints)
+       for ky, it in note:
+           print("SHA: ", ky)
+           for p in pr:
+                if pr in it.keys():
+                    print(pr, it[pr])
+                else:
+                    print(pr, " Is not a key")
+
+    return outframe, note[sha]

@@ -205,7 +205,7 @@ class Perform(object):
     def plotRaw(self, subax, respvar, legstep=1):
         legax = self.xo[1] if subax==self.xo[0] else self.xo[0] 
         
-        drops = self.uniques[legax][1::legstep] if legstep > 1 else []
+        drops = self.uniques[legax][1::legstep]
         saxVal = self.uniques[subax]
         ff = []
         ad = {}
@@ -219,9 +219,10 @@ class Perform(object):
             plt.suptitle(self.title + " - Raw time by " + subax)
 
         for k, g in self.oFrame.groupby(subax):
-            gg = g.pivot(index='nX', columns=legax, values=respvar)
-            gg = gg.drop(drops, axis=1)
-            gg.plot(ax=ad[k], logy=True, logx=True, grid=True)
+            for kk, gg in g.groupby(legax):
+                if kk in drops:
+                    gg.plot(x='nX', y=respvar, ax=ad[k], loglog=True, grid=True, label=kk)
+            
             ad[k].set_title(k)
             ad[k].set_ylabel(meas[respvar])
             ad[k].set_xlabel(xlbl)
@@ -271,7 +272,6 @@ class Perform(object):
         xint = [self.uniques['tpb'], self.uniques['gpuA']]
         xint.append(self.nxRange(100))
         return xint
-
 
 class Interp1(Perform):
     def __init__(self, datadf, name):
@@ -414,6 +414,7 @@ if __name__ == "__main__":
    
         for ks, iss in ie.items():
             axn = axdct[ke + ks]
+            ists = iss.iFrame.set_index('nX')
             df = iss.interpit()
             iss.efficient()
             fRawT = iss.plotRaw('tpb', 'time')
@@ -433,7 +434,9 @@ if __name__ == "__main__":
             collBestI[ke][ks] = dfBI
             collBestIG[ke][ks] = dfBIG
             collBest[ke][ks] = dfBF
-            dfSpeed["NoGPU"][ke+ks] = dfBF['time']/iss.iFrame.loc[iss.iFrame['gpuA']<0.1]['time']
+
+            # NO.  YOU NEED TO DO THE BEST GPUA AT EACH TPB
+            dfSpeed["NoGPU"][ke+ks] = dfBF['time']/ists[ists['gpuA']<0.1]['time']
             dfBF.plot(y=respvar, ax=axn, logx=True, legend=False)
             iss.oFrame.plot(x='nX', y=respvar, ax=axn, c='gpuA', kind='scatter', legend=False, logx=True)
             axn.set_title(ke+ks)
@@ -473,7 +476,7 @@ if __name__ == "__main__":
             k = ke + ks
             bygpu = rowSelect(collBestIG[ke][ks], 5)
             bytpb = rowSelect(collBestI[ke][ks], 5)
-            bygpu[respvar].T.plot(ax=axG[k],  logy=True, title=k)
+            bygpu[respvar].T.plot(ax=axG[k], logy=True, title=k)
             bytpb[respvar].T.plot(ax=axT[k], logy=True, legend=False, title=k)
             hd, lb = axG[k].get_legend_handles_labels()
             axG[k].legend().remove()
@@ -484,6 +487,9 @@ if __name__ == "__main__":
     formatSubplot(figpu)
     saveplot(figpu, "Performance", plotDir, "Besttpb vs gpu")
     saveplot(fitpb, "Performance", plotDir, "BestGPU vs tpb")
+
+    for k, it in dfSpeed['NoGPU'].items():
+        it.plot(loglog=True, title=k)
 
 
 

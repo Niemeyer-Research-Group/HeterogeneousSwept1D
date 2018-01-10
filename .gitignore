@@ -14,6 +14,7 @@ cubin/
 /misc/
 .vscode/
 temp*
+*.pdf
 src/trslt/*.json
 src/rslts/*.json
 src/utilities/js*

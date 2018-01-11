@@ -1,16 +1,41 @@
+
+
+import os
+import os.path as op
+import sys
+
+import git
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
 from timing_help import *
 
-class PolyValued(Perform):
-    def __init__(self, datadf, name):
-        super().__init__(datadf, name)
+def expFit(pn):
+    return lambda x: np.exp(pn[1]) * x**(pn[0])
 
-    def interpit(self, respvar, bycol=['tpb', 'gpuA'], deg=2, expo="No"):
+class PolyValued(Perform):
+    def __init__(self, datadf, name, ic=False):
+        super().__init__(datadf, name, icept=ic)
+
+    def interpit(self, respvar, bycol=['tpb', 'gpuA'], deg=2, expo=False):
         subj='nX'
         if 'nX' not in bycol:
             xint = self.nxRange(100)
         elif 'gpuA' not in bycol:
             subj = 'gpuA'
             xint = np.around(np.linspace(self.minmaxes['gpuA'][0], self.minmaxes('gpuA'), 50), decimals=1)
+
+        if expo:
+            fitter = expFit
+            deg = 1  
+            ytrans = np.log
+            wf = lambda x: np.log(x)
+        else:
+            fitter = np.poly1d
+            ytrans = lambda y: y
+            wf = lambda x: x
 
         fCollect = []
         self.polys = collections.defaultdict(dict)
@@ -20,12 +45,9 @@ class PolyValued(Perform):
         for (k, kk), g in thisFrame.groupby(bycol):
             dff[bycol[0]]=k  
             dff[bycol[1]]=kk
-            #g.loc[0] = [0, 0]
-            pfit = np.poly1d(np.polyfit(g[subj], g[respvar], deg))
+            pfit = np.polyfit(np.log(g[subj]), np.log(g[respvar]), 1, w=wf(g[respvar]))
             self.polys[k][kk] = pfit
-            dff[respvar] = pfit(xint)
-            fCollect.append(dff.assign(time=pfit(xint)))
-            #dff.drop(respvar, axis=1, inplace=True)
+            fCollect.append(dff.assign(time=fitter(pfit)(xint)))
             
         self.bme = fCollect
         newpd = pd.concat(fCollect).reset_index().rename(columns={'index': subj})
@@ -37,8 +59,8 @@ class PolyValued(Perform):
 
 
 class Interp1(Perform):
-    def __init__(self, datadf, name):
-        super().__init__(datadf, name)
+    def __init__(self, datadf, name, ic=False):
+        super().__init__(datadf, name, icept=ic)
 
     def interpit(self, respvar, bycol=['tpb', 'gpuA']):
         subj='nX'
@@ -50,7 +72,7 @@ class Interp1(Perform):
 
         fCollect = []
         dff = pd.DataFrame(index=xint)
-        thisFrame = self.oFrame if self.iFrame.empty else self.iFrame
+        thisFrame = self.oFrame
 
         for (k, kk), g in thisFrame.groupby(bycol):
             dff[bycol[0]]=k  
@@ -67,8 +89,8 @@ class Interp1(Perform):
         return newpd
 
 class StatsMods(Perform):
-    def __init__(self, datadf, name):
-        super().__init__(datadf, name)
+    def __init__(self, datadf, name, ic=False):
+        super().__init__(datadf, name, icept=ic)
         self.fm = self.__formu()
         self.mod = smf.rlm(formula=self.fm, data=self.oFrame, M=sm.robust.norms.HuberT()).fit()
 
@@ -159,6 +181,72 @@ def checkInput(spec, roll):
 
     return roll[spec]
 
+def plotRaws(iobj, subax, respvar, nstep):
+    sax = makeList(subax)
+    rax = makeList(respvar)
+    figC = collections.defaultdict(dict)
+    for sx in sax:
+        for rx in rax:
+            figC[sx][rx] = iobj.plotRaw(sx, rx, nstep)
+
+    return figC
+
+def plotLines(cFrame):
+    dfo = cFrame.oFrame
+    respvar = 'time'
+    subax = 'tpb'
+    saxVal = dfo[subax].unique()
+    legax = 'gpuA' 
+    polys = cFrame.polys
+    
+    ff = []
+    ad = {}
+
+    for i in range(len(saxVal)//4):
+        f, ai = plt.subplots(2,2)
+        ap = ai.ravel()
+        ff.append(f)
+        for aa, t in zip(ap, saxVal[i::2]):
+            ad[t] = aa
+
+    fb = []
+    ab = {}
+
+    for i in range(len(saxVal)//4):
+        fin, ain = plt.subplots(2,2)
+        ap = ain.ravel()
+        fb.append(fin)
+        for aa, t in zip(ap, saxVal[i::2]):
+            ab[t] = aa
+
+    for k, g in dfo.groupby(subax):
+        for kk, gg in g.groupby(legax):
+            pnow = expFit(polys[k][kk])
+            newx = gg.copy()
+            newx['TimePredict'] = pnow(newx.loc[:, 'nX'])
+            newx.plot(x='nX', y='TimePredict', ax=ad[k], loglog=True, grid=True, label=kk)
+            newx.plot(x='nX', y=respvar, kind='scatter', ax=ad[k], loglog=True, marker='o', label="")
+            newx["Residual"] = (newx['TimePredict'] - newx[respvar])/newx[respvar]
+            newx.plot(x='nX', y='Residual', kind='scatter', ax=ab[k], logx=True, marker='o', legend=False)
+
+        ad[k].set_title(k)
+        ab[k].set_title(k)
+        ad[k].set_ylabel(meas[respvar])
+        ad[k].set_xlabel(xlbl)
+        ab[k].set_xlabel(xlbl)
+
+        hd, lb = ad[k].get_legend_handles_labels()
+        ad[k].legend().remove()
+
+    for fi, fbi in zip(ff, fb):
+        fi = formatSubplot(fi)
+        fi.legend(hd, lb, 'upper right', title=legax, fontsize="medium")
+        fi.suptitle(cFrame.title + " - Raw " +  respvar +  " by " + subax)
+        fbi = formatSubplot(fbi)
+        fbi.suptitle(cFrame.title + " - Residuals " +  respvar +  " by " + subax)
+
+    plt.show()
+
 if __name__ == "__main__":
 
     classRoll = {'Interp1': Interp1, "StatsMods": StatsMods, "PolyValued": PolyValued}
@@ -178,8 +266,11 @@ if __name__ == "__main__":
         def saveplot(f, *args):
             f = makeList(f)
             for ff in f:
-                ff.canvas.draw()
+                ff.show()
+                
+            g = input("Press Any Key: ")
 
+                
     recentdf, detail = getRecentResults(0)
     eqs = recentdf.index.unique()
     collFrame = collections.defaultdict(dict)
@@ -199,6 +290,12 @@ if __name__ == "__main__":
     totaltpb={}
     respvar='time'
 
+    # for ke, ie in collFrame.items():
+    #     for ks, iss in ie.items():
+    #         iss.interpit(respvar)
+    #         ohmy = plotLines(iss)
+
+
     fgt, axgt = plt.subplots(2, 1, sharex=True)
     fio, axio = plt.subplots(2, 2)
     fio.suptitle("Best interpolated run vs observation")
@@ -210,18 +307,20 @@ if __name__ == "__main__":
         feff, axeff = plt.subplots(1,1)
    
         for ks, iss in ie.items():
+            typ = ke+ks
             axn = axdct[ke + ks]
-            df = iss.interpit(respvar)
-
+            
+            df = iss.interpit(respvar, expo=True)
             ists = iss.iFrame.set_index('nX')
             iss.efficient()
-            fRawT = iss.plotRaw('tpb', 'time', 2)
-            saveplot(fRawT, "Performance", plotDir, "RawTimingTpb" + ke + ks)
-            fRawE = iss.plotRaw('tpb', 'efficiency', 2)  
-            saveplot(fRawE, "Performance", plotDir, "RawEfficiencyTpb" + ke + ks)
+
+            # fRawS = plotRaws(iss, 'tpb', ['time', 'efficiency'], 2)
+            # for rsub, it in fRawS.items():
+            #     for rleg, itt in it.items():
+            #         saveplot(itt, "Performance", plotDir, "Raw"+rleg+"By"+rsub+typ)
             
-            if not plotspec:
-                [plt.close(k) for k in fRawE + fRawT]
+            # if not plotspec:
+            #     [[plt.close(k) for i in fRawS.values() for k in i.values()]]
                 
             dfBI = iss.getBest('tpb', respvar)
             dfBIG = iss.getBest('gpuA', respvar)
@@ -232,7 +331,7 @@ if __name__ == "__main__":
             dfBF['tpb'].plot(ax=axgt[0], logx=True, label=ke+ks) 
             dfBF['gpuA'].plot(ax=axgt[1], logx=True, legend=False) 
 
-            dfBF[respvar].plot(ax=axraw, loglog=True, label=ks, title=ke+" Best Runs")
+            dfBF[respvar].plot(ax=axraw, logx=True, label=ks, title=ke+" Best Runs")
             dfBF['efficiency'].plot(ax=axeff, logx=True, label=ks, title=ke+" Best Run Efficiency")           
             collBestI[ke][ks] = dfBI
             collBestIG[ke][ks] = dfBIG

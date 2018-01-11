@@ -56,7 +56,7 @@ def undict(d, kind='dict'):
             return {int(k): float(v) for k, v in sorted(d.items())}
 
 def makeList(v):
-    if isinstance(v, collections.Iterable):
+    if isinstance(v, collections.Iterable) and not isinstance(v, str):
         return v
     else:
         return [v]

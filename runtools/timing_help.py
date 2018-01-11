@@ -173,7 +173,7 @@ def getBestAll(df, respvar):
     return dfb
 
 class Perform(object):
-    def __init__(self, df, name):
+    def __init__(self, df, name, icept=False):
         self.oFrame = df
         self.title = name
         self.cols = list(df.columns.values)
@@ -189,6 +189,9 @@ class Perform(object):
 
         self.minmaxes['nX'] = [self.oFrame.groupby(self.xo[:2]).min()['nX'].max(), 
                                 self.oFrame.groupby(self.xo[:2]).max()['nX'].min()]
+                
+        if icept:
+            addIntercept()
 
     def __str__(self):
         ms = "%s \n %s \n Unique Exog: \n" % (self.title, self.oFrame.head())
@@ -225,8 +228,6 @@ class Perform(object):
             for aa, t in zip(ap, saxVal[i::2]):
                 ad[t] = aa
 
-            plt.suptitle(self.title + " - Raw " +  respvar +  " by " + subax)
-
         for k, g in self.oFrame.groupby(subax):
             for kk, gg in g.groupby(legax):
                 if kk in drops:
@@ -241,6 +242,7 @@ class Perform(object):
         for i, fi in enumerate(ff):
             fi = formatSubplot(fi)
             fi.legend(hd, lb, 'upper right', title=legax, fontsize="medium")
+            fi.suptitle(self.title + " - Raw " +  respvar +  " by " + subax)
 
         return ff
 
@@ -269,6 +271,11 @@ class Perform(object):
         xint = [self.uniques['tpb'], self.uniques['gpuA']]
         xint.append(self.nxRange(100))
         return xint
+
+    def addIntercept(self):
+        iprod = cartProd(self.uniques['tpb'], self.uniques['gpuA'], [0.0], [0.0])
+        zros = pd.DataFrame(iprod, columns=self.cols)
+        self.oFrame = pd.concat(self.oFrame, zros)
 
 class PerformFilter(pd.DataFrame):
     def __init__(self, df):

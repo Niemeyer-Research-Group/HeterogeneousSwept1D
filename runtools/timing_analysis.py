@@ -26,7 +26,7 @@ class PolyValued(Perform):
         elif 'gpuA' not in bycol:
             subj = 'gpuA'
             xint = np.around(np.linspace(self.minmaxes['gpuA'][0], self.minmaxes('gpuA'), 50), decimals=1)
-
+        self.ind = bycol
         if expo:
             fitter = expFit
             deg = 1  
@@ -56,7 +56,22 @@ class PolyValued(Perform):
             self.iFrame = newpd
 
         return newpd
-
+    
+    def stats(self):
+        self.oFrame.copy()
+#        op = collections.defaultdict(dict)
+        ros, rw = [], []
+        for (k, kk), g in self.oFrame.groupby(self.ind):
+            resid = expFit(self.polys[k][kk])(g['nX'])
+            rs = g['time'] - resid
+            op = g['time'].mean()
+            ssresid = np.sum(rs)**2
+            sstot = np.sum((g['time'] - op)**2) 
+            R2 = 1-(ssresid/sstot)
+            ros.append(resid)
+            rw.append(R2)
+            
+        return rw, ros
 
 class Interp1(Perform):
     def __init__(self, datadf, name, ic=False):
@@ -250,8 +265,8 @@ def plotLines(cFrame):
 if __name__ == "__main__":
 
     classRoll = {'Interp1': Interp1, "StatsMods": StatsMods, "PolyValued": PolyValued}
-    print(sys.argv)
 
+    print(sys.argv)
     plotspec = 0
     useClass =  Interp1
 
@@ -279,7 +294,8 @@ if __name__ == "__main__":
     for ty in eqs:
         df = recentdf.xs(ty).reset_index(drop=True) 
         opt = re.findall('[A-Z][^A-Z]*', ty)
-        collFrame[opt[0]][opt[1]] = useClass(df, ty)
+        inst = useClass(df, ty)
+        collFrame[opt[0]][opt[1]] = inst
 
     speedtypes = ["Raw", "Interpolated", "Best", "NoGPU"]
     dfSpeed={k: pd.DataFrame() for k in speedtypes}
@@ -289,6 +305,8 @@ if __name__ == "__main__":
     totalgpu={}
     totaltpb={}
     respvar='time'
+    tt = [(k, kk) for k in inst.uniques['tpb'] for kk in inst.uniques['gpuA']]
+    stat = pd.DataFrame(columns=eqs)
 
     # for ke, ie in collFrame.items():
     #     for ks, iss in ie.items():
@@ -313,14 +331,16 @@ if __name__ == "__main__":
             df = iss.interpit(respvar, expo=True)
             ists = iss.iFrame.set_index('nX')
             iss.efficient()
+            r, _ = iss.stats()
+            stat[ke+ks] = r
 
-            # fRawS = plotRaws(iss, 'tpb', ['time', 'efficiency'], 2)
-            # for rsub, it in fRawS.items():
-            #     for rleg, itt in it.items():
-            #         saveplot(itt, "Performance", plotDir, "Raw"+rleg+"By"+rsub+typ)
-            
-            # if not plotspec:
-            #     [[plt.close(k) for i in fRawS.values() for k in i.values()]]
+            fRawS = plotRaws(iss, 'tpb', ['time', 'efficiency'], 2)
+            for rsub, it in fRawS.items():
+                for rleg, itt in it.items():
+                    saveplot(itt, "Performance", plotDir, "Raw"+rleg+"By"+rsub+typ)
+           
+            if not plotspec:
+                [plt.close(kk) for i in fRawS.values() for k in i.values() for kk in k]
                 
             dfBI = iss.getBest('tpb', respvar)
             dfBIG = iss.getBest('gpuA', respvar)
@@ -405,8 +425,8 @@ if __name__ == "__main__":
     formatSubplot(fngpu)
     saveplot(fngpu, "Performance", plotDir, "HybridvsGPUonly")
 
-    bestGpuTotal=pd.DataFrame(index=iss.iFrame['gpuA'])
-    bestTpbTotal=pd.DataFrame(index=iss.iFrame['gpuA'])
+    bestGpuTotal=pd.DataFrame(index=iss.iFrame['gpuA'].unique())
+    bestTpbTotal=pd.DataFrame(index=iss.iFrame['gpuA'].unique())
 
     for k in totaltpb.keys():
         bestGpuTotal[k]=totalgpu[k].sum(axis=1)
@@ -414,3 +434,4 @@ if __name__ == "__main__":
 
     bestGpuTotal.fillna(0, inplace=True)
     bestTpbTotal.fillna(0, inplace=True)
+    stat.index=tt

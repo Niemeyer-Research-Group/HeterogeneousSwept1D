@@ -123,8 +123,6 @@ def longTerm(dfs, titles, fhdf, overwrite=False):
 
     dfcat = pd.concat(nList)
 
-    print(len(dfcat))
-
     opStore = pd.HDFStore(fhdf)
     fnote = op.join(op.dirname(fhdf), "notes.json")
     if op.isfile(fnote):
@@ -156,9 +154,7 @@ def getBestAll(df, respvar):
     ti = list(df.columns.names)
     ti.remove('metric')
     ixvar = list(ti)[0]
-    print(ixvar)
     to = list(df.columns.get_level_values('metric').unique())
-    print(to)
     to.remove(respvar)
     oxvar = to[0]
 
@@ -191,7 +187,7 @@ class Perform(object):
                                 self.oFrame.groupby(self.xo[:2]).max()['nX'].min()]
                 
         if icept:
-            addIntercept()
+            self.addIntercept()
 
     def __str__(self):
         ms = "%s \n %s \n Unique Exog: \n" % (self.title, self.oFrame.head())

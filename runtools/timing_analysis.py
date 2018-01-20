@@ -74,6 +74,61 @@ class PolyValued(Perform):
             
         return rw, ros
 
+    # def plotLines(self):
+    #     dfo = self.oFrame
+    #     respvar = 'time'
+    #     subax = 'tpb'
+    #     saxVal = dfo[subax].unique()
+    #     legax = 'gpuA' 
+        
+    #     ff = []
+    #     ad = {}
+
+    #     for i in range(len(saxVal)//4):
+    #         f, ai = plt.subplots(2,2)
+    #         ap = ai.ravel()
+    #         ff.append(f)
+    #         for aa, t in zip(ap, saxVal[i::2]):
+    #             ad[t] = aa
+
+    #     fb = []
+    #     ab = {}
+
+    #     for i in range(len(saxVal)//4):
+    #         fin, ain = plt.subplots(2,2)
+    #         ap = ain.ravel()
+    #         fb.append(fin)
+    #         for aa, t in zip(ap, saxVal[i::2]):
+    #             ab[t] = aa
+
+    #     for k, g in dfo.groupby(subax):
+    #         for kk, gg in g.groupby(legax):
+    #             pnow = expFit(polys[k][kk])
+    #             newx = gg.copy()
+    #             newx['TimePredict'] = pnow(newx.loc[:, 'nX'])
+    #             newx.plot(x='nX', y='TimePredict', ax=ad[k], loglog=True, grid=True, label=kk)
+    #             newx.plot(x='nX', y=respvar, kind='scatter', ax=ad[k], loglog=True, marker='o', label="")
+    #             newx["Residual"] = (newx['TimePredict'] - newx[respvar])/newx[respvar]
+    #             newx.plot(x='nX', y='Residual', kind='scatter', ax=ab[k], logx=True, marker='o', legend=False)
+
+    #         ad[k].set_title(k)
+    #         ab[k].set_title(k)
+    #         ad[k].set_ylabel(meas[respvar])
+    #         ad[k].set_xlabel(xlbl)
+
+    #         hd, lb = ad[k].get_legend_handles_labels()
+    #         ad[k].legend().remove()
+
+    #     for fi, fbi in zip(ff, fb):
+    #         fi = formatSubplot(fi)
+    #         fi.legend(hd, lb, 'upper right', title=legax, fontsize="medium")
+    #         fi.suptitle(cFrame.title + " - Raw " +  respvar +  " by " + subax)
+    #         fbi = formatSubplot(fbi)
+    #         fbi.suptitle(cFrame.title + " - Residuals " +  respvar +  " by " + subax)
+
+    #     plt.show()
+
+
 class Interp1(Perform):
     def interpit(self, respvar, bycol=['tpb', 'gpuA']):
         subj='nX'

@@ -74,7 +74,7 @@ def todayDate():
 
 def formatSubplot(f):
     nsub = len(f.axes)
-    if nsub == 4:
+    if nsub > 3:
         f.tight_layout(pad=0.2, w_pad=0.75, h_pad=0.75)
         f.subplots_adjust(top=0.9, bottom=0.08, right=0.85, hspace=0.3, wspace=0.3)
         

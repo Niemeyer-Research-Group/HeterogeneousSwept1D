@@ -9,6 +9,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import math
 
 from timing_help import *
 
@@ -31,14 +32,16 @@ class RawInterp(Perform):
         self.iFrame = pd.concat(conc)
         return self.iFrame
 
-    def stats(self):
-        return 1, 0
 
-    def compareLike(self):
-        for (k, kk), g in self.nxi:
-            print(g)
-
-#------------------------------
+def plotContour(df, axi, annot):
+    x = df.columns.values
+    y = df.index.values
+    X, Y = np.meshgrid(x,y)
+    cs = axi.contourf(X, Y, df.values)
+    axi.set_ylabel(annot['yl'])
+    axi.set_title(annot['ti'])
+    axi.set_xlabel(annot['xl'])
+    return cs
 
 def predictNew(eq, alg, args, nprocs=8):
     oldF = mostRecentResults(resultpath)
@@ -99,66 +102,9 @@ def plotRaws(iobj, subax, respvar, nstep):
 
     return figC
 
-def plotLines(cFrame):
-    dfo = cFrame.oFrame
-    respvar = 'time'
-    subax = 'tpb'
-    saxVal = dfo[subax].unique()
-    legax = 'gpuA' 
-    polys = cFrame.polys
-    
-    ff = []
-    ad = {}
-
-    for i in range(len(saxVal)//4):
-        f, ai = plt.subplots(2,2)
-        ap = ai.ravel()
-        ff.append(f)
-        for aa, t in zip(ap, saxVal[i::2]):
-            ad[t] = aa
-
-    fb = []
-    ab = {}
-
-    for i in range(len(saxVal)//4):
-        fin, ain = plt.subplots(2,2)
-        ap = ain.ravel()
-        fb.append(fin)
-        for aa, t in zip(ap, saxVal[i::2]):
-            ab[t] = aa
-
-    for k, g in dfo.groupby(subax):
-        for kk, gg in g.groupby(legax):
-            pnow = expFit(polys[k][kk])
-            newx = gg.copy()
-            newx['TimePredict'] = pnow(newx.loc[:, 'nX'])
-            newx.plot(x='nX', y='TimePredict', ax=ad[k], loglog=True, grid=True, label=kk)
-            newx.plot(x='nX', y=respvar, kind='scatter', ax=ad[k], loglog=True, marker='o', label="")
-            newx["Residual"] = (newx['TimePredict'] - newx[respvar])/newx[respvar]
-            newx.plot(x='nX', y='Residual', kind='scatter', ax=ab[k], logx=True, marker='o', legend=False)
-
-        ad[k].set_title(k)
-        ab[k].set_title(k)
-        ad[k].set_ylabel(meas[respvar])
-        ad[k].set_xlabel(xlbl)
-
-        hd, lb = ad[k].get_legend_handles_labels()
-        ad[k].legend().remove()
-
-    for fi, fbi in zip(ff, fb):
-        fi = formatSubplot(fi)
-        fi.legend(hd, lb, 'upper right', title=legax, fontsize="medium")
-        fi.suptitle(cFrame.title + " - Raw " +  respvar +  " by " + subax)
-        fbi = formatSubplot(fbi)
-        fbi.suptitle(cFrame.title + " - Residuals " +  respvar +  " by " + subax)
-
-    plt.show()
-
 if __name__ == "__main__":
         
     plotspec = 1 if len(sys.argv) < 2 else int(sys.argv[1])
-    print(plotspec, sys.argv[1])
-
 
     if plotspec:
         def saveplot(f, *args):
@@ -168,12 +114,10 @@ if __name__ == "__main__":
                 
             g = input("Press Any Key: ")
 
-                
     recentdf, detail = getRecentResults(0)
     eqs = recentdf.index.unique()
     collInst = collections.defaultdict(dict)
     collFrame = collections.defaultdict(dict)
-    collFullPivot = collections.defaultdict(dict)
 
     plotDir="_".join([str(k) for k in [detail["System"], detail["np"], detail["date"]]]) 
 
@@ -183,7 +127,6 @@ if __name__ == "__main__":
         inst = RawInterp(df, ty)
         collInst[opt[0]][opt[1]] = inst
         collFrame[opt[0]][opt[1]] = inst.interpit()
-        collFullPivot[opt[0]][opt[1]] = pd.pivot_table(inst.iFrame, values='time', index='nX', columns=['tpb', 'gpuA'])
 
             
     speedtypes = ["Raw", "Interpolated", "Best", "NoGPU"]
@@ -195,7 +138,6 @@ if __name__ == "__main__":
     totaltpb={}
     respvar='time'
     tt = [(k, kk) for k in inst.uniques['tpb'] for kk in inst.uniques['gpuA']]
-    stat = pd.DataFrame(columns=eqs)
 
     # for ke, ie in collFrame.items():
     #     for ks, iss in ie.items():
@@ -206,7 +148,9 @@ if __name__ == "__main__":
     fgt, axgt = plt.subplots(2, 1, sharex=True)
     fio, axio = plt.subplots(2, 2)
     fio.suptitle("Best interpolated run vs observation")
+
     axdct = dict(zip(eqs, axio.ravel()))
+    annodict = {'ti':'10000' , 'yl': 'GPU Affinity', 'xl': 'threads per block'}
 
     for ke, ie in collInst.items():
         fraw, axraw = plt.subplots(1,1)
@@ -217,15 +161,30 @@ if __name__ == "__main__":
             typ = ke+ks
             axn = axdct[ke + ks]
 
+            dfCont = pd.pivot_table(iss.iFrame, values='time', index='gpuA', columns=['nX', 'tpb'])
+            fCont, axCont = plt.subplots(2, 2)
+            axc = axCont.ravel()
+
             ists = iss.iFrame.set_index('nX')
             iss.efficient()
-            r, _ = iss.stats()
-            stat[ke+ks] = r
 
             fRawS = plotRaws(iss, 'tpb', ['time', 'efficiency'], 2)
             for rsub, it in fRawS.items():
                 for rleg, itt in it.items():
                     saveplot(itt, "Performance", plotDir, "Raw"+rleg+"By"+rsub+typ)
+           
+            subidx = dfCont.columns.get_level_values('nX').unique()
+            stp = math.ceil(len(subidx)/4)
+            subidx = subidx[::stp]
+            for axi, nx in zip(axc, subidx):
+                annodict['ti'] = "GridSize: {:.2e}".format(nx) 
+                cs = plotContour(dfCont[nx], axi, annodict)
+                fCont.colorbar(cs, ax=axi, shrink=0.8)
+
+            formatSubplot(fCont)
+            fCont.suptitle(typ + " -- Time per timestep us") 
+            saveplot(fCont, "Performance", plotDir, "RawContour"+typ)
+            plt.close(fCont)
            
             if not plotspec:
                 [plt.close(kk) for i in fRawS.values() for k in i.values() for kk in k]
@@ -261,13 +220,12 @@ if __name__ == "__main__":
         formatSubplot(fraw)
         formatSubplot(feff)
         formatSubplot(fspeed)
-        axraw.set_ylabel(meas['time'])
         axeff.set_ylabel(meas['efficiency'])
-        axspeed.set_ylabel("Speedup vs Classic")
-
+        axspeed.set_ylabel(meas["spd"])
 
         for ao in [axraw, axeff, axspeed]:
             ao.set_xlabel(xlbl)
+
         axraw.set_ylabel(meas[respvar])
         saveplot(fraw, "Performance", plotDir, "BestRun" + respvar + ke)
         saveplot(fspeed, "Performance", plotDir, "BestSpeedup" + ke)
@@ -276,16 +234,14 @@ if __name__ == "__main__":
     axgt[0].set_title('Best tpb')
     axgt[1].set_title('Best Affinity')    
     axgt[1].set_xlabel(xlbl)  
-    axspeed.set_xlabel(xlbl)
-    axspeed.set_ylabel(meas["spd"])
+    
     hgo, lbo = axgt[0].get_legend_handles_labels()
     axgt[0].legend().remove()
     fgt.suptitle("Best Characteristics")    
     fgt.legend(hgo, lbo, 'upper right')
     saveplot(fgt, "Performance", plotDir, "BestRunCharacteristics")
 
-    fio.tight_layout(pad=0.2, w_pad=0.75, h_pad=1.5)
-    fio.subplots_adjust(top=0.9, bottom=0.08, right=0.85, hspace=0.3, wspace=0.3)    
+    formatSubplot(fio)  
     saveplot(fio, "Performance", plotDir, "BestLineAndAllLines")
     plt.close('all')
     
@@ -334,5 +290,3 @@ if __name__ == "__main__":
 
     bestGpuTotal.fillna(0, inplace=True)
     bestTpbTotal.fillna(0, inplace=True)
-
-    stat.index=tt

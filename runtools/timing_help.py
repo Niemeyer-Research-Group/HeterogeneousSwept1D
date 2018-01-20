@@ -62,7 +62,7 @@ schemes = ["Classic", "Swept"]
 
 schs = dict(zip([k[0] for k in schemes], schemes))
 
-meas = {"time": "us per timestep", "efficiency": "MGridPts/s", "SpeedupAlg":"Speedup", "SpeedupGPU":"Speedup", "Best tpb":"Best tpb comparison"}
+meas = {"time": "us per timestep", "efficiency": "MGridPts/s", "spd": "Speedup", "spdg":"Speedup vs GPU", "btpb":"Best tpb comparison"}
 
 fc = {'time':'min', 'efficiency': 'max'}
 
@@ -169,10 +169,11 @@ def getBestAll(df, respvar):
     return dfb
 
 class Perform(object):
-    def __init__(self, df, name, icept=False):
+    def __init__(self, df, name):
         self.oFrame = df
         self.title = name
         self.cols = list(df.columns.values)
+        self.nobs = len(df)
         self.xo = self.cols[:3]
         self.uniques, self.minmaxes = {}, {}
         self.iFrame = pd.DataFrame()
@@ -186,8 +187,6 @@ class Perform(object):
         self.minmaxes['nX'] = [self.oFrame.groupby(self.xo[:2]).min()['nX'].max(), 
                                 self.oFrame.groupby(self.xo[:2]).max()['nX'].min()]
                 
-        if icept:
-            self.addIntercept()
 
     def __str__(self):
         ms = "%s \n %s \n Unique Exog: \n" % (self.title, self.oFrame.head())
@@ -213,9 +212,9 @@ class Perform(object):
         ff = []
         ad = {}
         if respvar=='time':
-            kwarg = {'loglog':True}
+            kwarg = {'loglog': True}
         else:
-            kwarg = {'logx':True}
+            kwarg = {'logx': True}
 
         for i in range(len(saxVal)//4):
             f, ai = plt.subplots(2,2)
@@ -268,14 +267,9 @@ class Perform(object):
         xint.append(self.nxRange(100))
         return xint
 
-    def addIntercept(self):
-        iprod = cartProd(self.uniques['tpb'], self.uniques['gpuA'], [0.0], [0.0])
-        zros = pd.DataFrame(iprod, columns=self.cols)
-        self.oFrame = pd.concat(self.oFrame, zros)
 
-class PerformFilter(pd.DataFrame):
-    def __init__(self, df):
-        pass
-    
-    def oneKindofFilter(self):
-        pass
+
+def addIntercept(perf):
+    iprod = cartProd(perf.uniques['tpb'], perf.uniques['gpuA'], [0.0], [0.0])
+    zros = pd.DataFrame(iprod, columns=perf.cols)
+    return pd.concat(perf.oFrame, zros)

@@ -11,21 +11,13 @@ import json
 import os
 import os.path as op
 import sys
-from datetime import datetime
 
-import git
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from cycler import cycler
-import re
-
-from scipy import interpolate
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
  
-
 from main_help import *
 
 plt.close('all')
@@ -62,90 +54,35 @@ schemes = ["Classic", "Swept"]
 
 schs = dict(zip([k[0] for k in schemes], schemes))
 
-meas = {"time": "us per timestep", "efficiency": "MGridPts/s", "spd": "Speedup", "spdg":"Speedup vs GPU", "btpb":"Best tpb comparison"}
+meas = {"time": "time per timestep (us)", "efficiency": "MGridPts/s", "spd": "Speedup", "spdg":"Speedup vs GPU", "btpb":"Best tpb comparison"}
 
 fc = {'time':'min', 'efficiency': 'max'}
 
 def rowSelect(df, n):
     return df.iloc[::len(df.index)//n, :]
 
-def todayDate():
-    return datetime.date(datetime.today).isoformat().replace("-", "_")
-
 def formatSubplot(f):
     nsub = len(f.axes)
-    if nsub > 3:
+    if nsub ==4 :
         f.tight_layout(pad=0.2, w_pad=0.75, h_pad=0.75)
         f.subplots_adjust(top=0.9, bottom=0.08, right=0.85, hspace=0.3, wspace=0.3)
-        
+    if nsub > 4:
+        f.tight_layout(pad=0.2, w_pad=0.75, h_pad=0.75)
+        f.subplots_adjust(top=0.9, bottom=0.08, hspace=0.3, wspace=0.3)
+
     return f
-
-def find_all(name, path):
-    result = []
-    for root, dirs, files in os.walk(path):
-        if name in files:
-            result.append(os.path.join(root, name))
-    return result
-
-def swapKeys(d):
-    b = collections.defaultdict(dict)
-    for k0 in d.keys():
-        for k1 in d[k0].keys():
-            if d[k0][k1]:
-                b[k1][k0] = d[k0][k1]
-
-    return b
-
-def parseCsv(fb):
-    if isinstance(fb, str):
-        jframe = pd.read_csv(fb)
-    elif isinstance(fb, dftype):
-        jframe = fb
-
-    print(jframe)
-    jframe = jframe[(jframe.nX !=0)]
-
-    return jframe
 
 def cartProd(y):
     return pd.DataFrame(list(itertools.product(*y))).values
 
-# Takes list of dfs? title of each df, longterm hd5, option to overwrite
-# incase you write wrong.  Use carefully!
-def longTerm(dfs, titles, fhdf, overwrite=False):
-    today = str(datetime.date(datetime.today()))
-    repo = git.Repo(search_parent_directories=True)
-    sha = repo.head.object.hexsha
-    nList = []
-    for d, t in zip(dfs, titles):
-        d["eqs"] = [t]*len(d)
-        nList.append(d.set_index("eqs"))
+def nxRange(mmax, n):
+    rng=n//10 
+    return np.around(np.logspace(*(np.log2(mmax['nX'])), base=2, num=n), decimals=1)[rng:-rng]
 
-    dfcat = pd.concat(nList)
-
-    opStore = pd.HDFStore(fhdf)
-    fnote = op.join(op.dirname(fhdf), "notes.json")
-    if op.isfile(fnote):
-        dnote = readj(fnote)
-    else:
-        dnote = dict()
-
-    if sha in dnote.keys() and not overwrite:
-        opStore.close()
-        print("You need a new commit before you save this again")
-        return "Error: would overwrite previous entry"
-
-    dnote[sha] = {"date": today}
-    dnote[sha]["System"] = input("What machine did you run it on? ")
-    dnote[sha]["np"] = int(input("Input # MPI procs? "))
-    dnote[sha]["note"] = input("Write a note for this data save: ")
-
-    with open(fnote, "w") as fj:
-        json.dump(dnote, fj)
-
-    opStore[sha] = dfcat
-    opStore.close()
-    return dfcat
+def simpleNGrid(uniq, mmax):
+    xint = [uniq['tpb'], uniq['gpuA']]
+    xint.append(nxRange(mmax, 100))
+    return xint
 
 # At this point the function is independent
 def getBestAll(df, respvar):
@@ -257,16 +194,6 @@ class Perform(object):
             fCollect[legax, k] = gg.apply(ifx, axis=1)
 
         return fCollect
-
-    def nxRange(self, n):
-        rng=n//10 
-        return np.around(np.logspace(*(np.log2(self.minmaxes['nX'])), base=2, num=n), decimals=1)[rng:-rng]
-
-    def simpleNGrid(self):
-        xint = [self.uniques['tpb'], self.uniques['gpuA']]
-        xint.append(self.nxRange(100))
-        return xint
-
 
 
 def addIntercept(perf):

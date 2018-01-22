@@ -31,3 +31,9 @@ mpirun -np [nprocs] ./bin/[executable] [scheme (C or S) for classic or swept] [p
 python script stdExp will run standard experiment.
 
 json files in result folder are coded [s or t for solution or timing[problem eg Euler or Heat][_rank]or[S or C for swept or classic]]
+
+## ToDo
+- Make sure result_help new script portion works.
+- Refactor equations folder (script to make new equation?  hpp hpp base?)
+- Where to split between two and one dimension.
+- Complete this README, push and version.

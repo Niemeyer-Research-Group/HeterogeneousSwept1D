@@ -6,13 +6,13 @@
 #$ -pe mpich3i 40
 #$ -j y
 #$ -R y
-#$ -o ../.runOut/hAffine.out
+#$ -o ../../.runOut/hAffine.out
 #$ -l h='compute-e-[1-2]
 
 export JID=$JOB_ID
 
-tfile="trslt/otime.dat"
-opath="./trslt"
+tfile="../trslt/otime.dat"
+opath="../trslt"
 
 gEnd=$((2*$NSLOTS))
 gStep=$(($gEnd/10))
@@ -39,7 +39,7 @@ do
 					lx=$(($nx/10000 + 1))
 					S0=$SECONDS
 					
-					$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ./bin/$eq $sc ./tests/"$eq"Test.json $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf
+					$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ../bin/$eq $sc ../tests/"$eq"Test.json $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf
 
 					echo ---------------------------
 					echo len, eq, sch, tpb, gpuA, nX

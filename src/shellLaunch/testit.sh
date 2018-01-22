@@ -18,5 +18,5 @@ ex=$3
 
 echo $ex
 
-$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ./bin/$eq $sch ./tests/"$eq"Test.json ./rslts $ex
+$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ../bin/$eq $sch ../tests/"$eq"Test.json ../rslts $ex
 

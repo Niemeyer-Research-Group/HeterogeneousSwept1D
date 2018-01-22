@@ -12,6 +12,9 @@ import shlex
 import subprocess as sp
 import collections
 import json as j
+import git
+import re
+from datetime import datetime
 
 thispath = op.abspath(op.dirname(__file__))
 toppath = op.dirname(thispath)
@@ -20,6 +23,10 @@ binpath = op.join(spath, "bin")
 rspath = op.join(spath, "rslts")
 resultpath = op.join(toppath, "results")
 testpath = op.join(spath, "tests")
+
+schemes = {"C": "Classic", "S": "Swept"}
+
+todaytoday = str(datetime.date(datetime.today()).isoformat().replace("-", "_"))
 
 def numerica(df):
     df.columns = pd.to_numeric(df.columns.values)
@@ -126,3 +133,95 @@ def getRecentResults(nBack, prints=None):
                     print(pr, " Is not a key")
 
     return outframe, note[sha]
+
+def find_all(name, path):
+    result = []
+    for root, dirs, files in os.walk(path):
+        if name in files:
+            result.append(op.join(root, name))
+    return result
+
+def swapKeys(d):
+    b = collections.defaultdict(dict)
+    for k0 in d.keys():
+        for k1 in d[k0].keys():
+            if d[k0][k1]:
+                b[k1][k0] = d[k0][k1]
+
+    return b
+
+def parseCsv(fb):
+    if isinstance(fb, str):
+        jframe = pd.read_csv(fb)
+    elif isinstance(fb, dftype):
+        jframe = fb
+
+    jframe = jframe[(jframe.nX !=0)]
+
+    return jframe
+
+def readPath(fpth):
+
+    tfiles = sorted([k for k in os.listdir(fpth) if k.startswith('t')])
+
+    res = []
+    ti = []
+    for tf in tfiles:
+        pth = op.join(fpth, tf) 
+        opt = re.findall('[A-Z][^A-Z]*', tf)
+        ti.append(opt[0]+schemes[opt[1][0]])
+        res.append(parseCsv(pth))
+
+    return dict(zip(ti, res))
+
+# Takes list of dfs? title of each df, longterm hd5, option to overwrite
+# incase you write wrong.  Use carefully!
+def longTerm(dfs, titles, fhdf, overwrite=False):
+    today = todaytoday
+    repo = git.Repo(search_parent_directories=True)
+    sha = repo.head.object.hexsha
+    nList = []
+    for d, t in zip(dfs, titles):
+        d["eqs"] = [t]*len(d)
+        nList.append(d.set_index("eqs"))
+
+    dfcat = pd.concat(nList)
+
+    opStore = pd.HDFStore(fhdf)
+    fnote = op.join(op.dirname(fhdf), "notes.json")
+    if op.isfile(fnote):
+        dnote = readj(fnote)
+    else:
+        dnote = dict()
+
+    if sha in dnote.keys() and not overwrite:
+        opStore.close()
+        print("You need a new commit before you save this again")
+        return "Error: would overwrite previous entry"
+
+    dnote[sha] = {"date": today}
+    dnote[sha]["System"] = input("What machine did you run it on? ")
+    dnote[sha]["np"] = int(input("Input # MPI procs? "))
+    dnote[sha]["note"] = input("Write a note for this data save: ")
+
+    with open(fnote, "w") as fj:
+        json.dump(dnote, fj)
+
+    opStore[sha] = dfcat
+    opStore.close()
+    return dfcat
+
+if __name__ == "__main__":
+
+    getpath = rspath
+
+    if len(sys.argv) > 2:
+        if not op.exists(op.abspath(sys.argv[1])):
+            print("The path you entered doesn't exist. Make sure you enter the relative path to the result files from cwd with a period in front. Ex: ./src/rslts")
+            sys.exit(1)
+        else:
+            getpath = op.abspath(sys.argv[1])
+
+    rs, ty = readPath(getpath)
+    hdfpath = op.join(resultpath, "rawResults.h5")    
+    longTerm(rs, ty, hdfpath)

@@ -18,7 +18,7 @@ IPATH+=-I$(EQPATH) -I$(DECOMPPATH) -I$(UTILPATH)
 
 DH := $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
 
-CPREQ := $(MAKEPATH)solmain.cu $(UTILPATH)/jsoncpp.cpp
+CPREQ := $(MAKEPATH)sMain.cu $(UTILPATH)/jsoncpp.cpp
 
 EQINIT:=$(wildcard $(EQPATH)/*.h)
 

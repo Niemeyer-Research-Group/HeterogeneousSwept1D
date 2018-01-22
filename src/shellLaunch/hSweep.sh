@@ -6,7 +6,7 @@
 #$ -pe mpich3i 40
 #$ -j y
 #$ -R y
-#$ -o ../.runOut/hSweptTest.out
+#$ -o ../../.runOut/hSweptTest.out
 #$ -l h='compute-e-[1-2]
 
 ## Need to fix the strange duplicate of runs.
@@ -61,7 +61,7 @@ do
 							nx=$(($nxo + 0.5*$dvx*$nxo))
 							lx=$(($nxo/10000 + 1))
 							S0=$SECONDS
-							$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ./bin/$eq $sc ./tests/"$eq"Test.json ./rslts tpb $tpb gpuA $g nX $nx lx $lx tf $tf
+							$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ../bin/$eq $sc ../tests/"$eq"Test.json ../rslts tpb $tpb gpuA $g nX $nx lx $lx tf $tf
 							echo len, eq, sch, tpb, gpuA, nX
 							s1=$(($SECONDS-$S0))
 							echo $lx, $eq, $sc, $tpb, $g, $nx took $s1

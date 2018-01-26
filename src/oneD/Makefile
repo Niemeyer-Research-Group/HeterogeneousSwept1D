@@ -3,22 +3,24 @@
 # run make DEF="-DNOS"
 DEF=
 
-include conf
+include ../conf
 
-MAKEPATH:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+MAKEPATH := $(shell pwd)
+# MAKEPATH:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
 # LPATH+=
 
-BINPATH:=$(MAKEPATH)bin
-EQPATH:=$(MAKEPATH)equations
-DECOMPPATH:=$(MAKEPATH)decomposition
-UTILPATH:=$(MAKEPATH)utilities
+BINPATH:=$(MAKEPATH)/bin
+EQPATH:=$(MAKEPATH)/equations
+DECOMPPATH:=$(MAKEPATH)/decomposition
+SRCPATH:=$(dir $(MAKEPATH))
+UTILPATH:=$(SRCPATH)utilities
 
 IPATH+=-I$(EQPATH) -I$(DECOMPPATH) -I$(UTILPATH)
 
 DH := $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
 
-CPREQ := $(MAKEPATH)sMain.cu $(UTILPATH)/jsoncpp.cpp
+CPREQ := $(MAKEPATH)/sMain.cu $(UTILPATH)/jsoncpp.cpp
 
 EQINIT:=$(wildcard $(EQPATH)/*.h)
 

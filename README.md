@@ -18,9 +18,9 @@ mpirun -np [nprocs] ./bin/[executable] [scheme (C or S) for classic or swept] [p
 
 python script runTiming will run standard performance experiment, runResult will run a single instance and plot the solution to the equation.
 
-The equation solutions are written out to json files as dictionaries  in result folder are coded [s][problem eg Euler or Heat][_rank] 
-
-[S or C for swept or classic]]
+All results should be placed in the src/\*D/rslts folder by default since that is where the python scripts that analyze and plot them will look.
+The equation solutions are written out to json files as dictionaries.  The file names are coded [s][equation name]][_rank].
+The performance results are written to csv files and coded [t][equation name][S or C (for swept or classic)].
 
 ## Run
 
@@ -50,7 +50,7 @@ Python performance and accuracy analysis.
 
 Write your own equations and run them.
 
-1.) Run the newEq.py file in the equations folder it will prompt you for the name of the new equation, then make and set up the header file in the same folder.
+1.) Copy the newEquation.htpl
 
 2.) The header file is just a skeleton, you'll need to fill in the details of the scheme in the functions, variables, and #defines provided, and you'll likely need to define new functions.
 
@@ -75,8 +75,6 @@ Maybe in the wiki.
 
 ## ToDo
 - Kill "REAL" just do double
-- Wiki
-- Actually do newEq.py
-- Fix your partitioning problem.  Update conf and makefile.
-- Compart to Extend. (protoype 
+- Update conf and makefile.
+- Compart to Extend. protoype 
 - Complete this README, push and version.

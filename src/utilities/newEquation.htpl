@@ -1,0 +1,155 @@
+// TEMPLATE FOR NEW EQUATION HEADER
+
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
+#include <device_functions.h>
+#include <mpi.h>
+
+#include <iostream>
+#include <fstream>
+#include <ostream>
+#include <istream>
+
+#include <cstdio>
+#include <cstdlib>
+#include <cmath>
+#include <string>
+#include <vector>
+#include <algorithm>
+
+#include "myVectorTypes.h"
+#include "json/json.h"
+
+// We're just going to assume doubles
+#define REAL            double
+#define REALtwo         double2
+#define REALthree       double3
+#define MPI_R           MPI_DOUBLE
+#define ZERO            0.0
+#define QUARTER         0.25
+#define HALF            0.5
+#define ONE             1.0
+#define TWO             2.0
+#define SQUAREROOT(x)   sqrt(x)
+
+#define NSTEPS              4 // How many substeps in timestep.
+#define NVARS               4 // How many variables to output.
+#define NSTATES             7 // How many numbers in the struct.
+
+// Since anyone would need to write a header and functions file, why not just hardwire this.
+// If the user's number of steps isn't a power of 2 use the other one.
+
+#define MODULA(x)           x & (NSTEPS-1)
+// #define MODULA(x)           x % NSTEPS
+
+#define DIVMOD(x)           (MODULA(x)) >> 1
+
+struct eqConsts {
+    // Constant Values in Equation
+};
+
+struct states {
+    // The Solution
+};
+
+std::string outVars[NVARS] = {""}; //---------------//
+std::string fspec = "";
+
+/*
+	============================================================
+	CUDA GLOBAL VARIABLES
+	============================================================
+*/
+// The boundary points can't be on the device so there's no boundary device array.
+
+__constant__ eqConsts deqConsts;  //---------------//
+eqConsts heqConsts; //---------------//
+REALthree hBounds[2]; // Boundary Conditions
+states bound[2];
+
+
+typedef Json::Value jsons;
+
+
+
+__host__ double indexer(double dx, int i, int x)
+{
+    double pt = i+x;
+    double dx2 = dx/2.0;
+    return dx*pt - dx2;
+}
+
+__host__ inline REAL printout(states *state, int i)
+{
+    REALthree subj = state->Q[0];
+    REAL ret;
+
+    if (i == 0) ret = density(subj);
+    if (i == 1) ret = velocity(subj);
+    if (i == 2) ret = energy(subj);
+    if (i == 3) ret = pressure(subj);
+
+    return ret;
+}
+
+__host__ inline states icond(double xs, double lx)
+{
+    states s;
+    int side = (xs > HALF*lx);
+    s.Q[0] = hBounds[side];
+    s.Q[1] = hBounds[side];
+    s.Pr = 0.0;
+    return s;
+}
+
+__host__ void equationSpecificArgs(jsons inJs)
+{
+    heqConsts.gamma = inJs["gamma"].asDouble();
+    heqConsts.mgamma = heqConsts.gamma - 1;
+    double lx = inJs["lx"].asDouble();
+    REAL rhoL = inJs["rhoL"].asDouble();
+    REAL vL = inJs["vL"].asDouble();
+    REAL pL = inJs["pL"].asDouble();
+    REAL rhoR = inJs["rhoR"].asDouble();
+    REAL vR = inJs["vR"].asDouble();
+    REAL pR = inJs["pR"].asDouble();
+    hBounds[0].x = rhoL;
+    hBounds[0].y = vL*rhoL;
+    hBounds[0].z = pL/heqConsts.mgamma + HALF * rhoL * vL * vL;
+    hBounds[1].x = rhoR;
+    hBounds[1].y = vR*rhoR,
+    hBounds[1].z = pR/heqConsts.mgamma + HALF * rhoR * vR * vR;
+    REAL dtx = inJs["dt"].asDouble();
+    REAL dxx = inJs["dx"].asDouble();
+    heqConsts.dt_dx = dtx/dxx;
+    bound[0] = icond(0.0, lx);
+    bound[1] = icond(lx, lx);
+}
+
+// One of the main uses of global variables is the fact that you don't need to pass
+// anything so you don't need variable args.
+// lxh is half the domain length assuming starting at 0.
+__host__ void initialState(jsons inJs, states *inl, int idx, int xst)
+{
+    double dxx = inJs["dx"].asDouble();
+    double xss = indexer(dxx, idx, xst);
+    double lx = inJs["lx"].asDouble();
+    bool wh = inJs["IC"].asString() == "PARTITION";
+    if (wh)
+    {
+        inl[idx] = icond(xss, lx);
+    }
+}
+
+__host__ void mpi_type(MPI_Datatype *dtype)
+{
+    // Define the MPI_Datatype of your struct as dtype
+    MPI_Type_commit(dtype);
+}
+
+__device__ __host__
+void stepUpdate(states *state, const int idx, const int tstep)
+{
+    // Find the right equation for this particular step and call it with these inputs.
+}

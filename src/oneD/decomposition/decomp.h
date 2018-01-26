@@ -79,7 +79,7 @@ void initArgs()
 	cGlob.gpuA = inJ["gpuA"].asDouble();
 	int ranker = ranks[1];
 	int sz = nprocs;
-	if(!ranks[1]) t0 = MPI_Wtime();
+
 	if (!cGlob.gpuA)
     {
         cGlob.hasGpu = 0;
@@ -90,11 +90,7 @@ void initArgs()
         cGlob.hasGpu = detector(ranker, sz);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     }
-	if(!ranks[1])
-	{
-		tSelect = MPI_Wtime()-t0;
-		cout << "GPU section time (s): " << tSelect << endl;
-	}
+
 
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);

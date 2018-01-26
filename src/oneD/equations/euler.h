@@ -73,7 +73,6 @@ struct states {
 
 std::string outVars[NVARS] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------//
 std::string fspec = "Euler";
-int stPass, numPass; // Number of Passing states, total numbers in passing states.
 
 /*
 	============================================================
@@ -155,40 +154,6 @@ __host__ inline REAL printout(states *state, int i)
     return ret;
 }
 
-
-// Make the struct an array.
-__host__ inline void unstructify(states *putSt, REAL *putReal)
-{
-    int gap;
-    for (int k=0; k<stPass; k++)
-    {
-        gap = k*NSTATES;
-        putReal[gap] = putSt[k].Q[0].x;
-        putReal[gap+1] = putSt[k].Q[0].y;
-        putReal[gap+2] = putSt[k].Q[0].z;
-        putReal[gap+3] = putSt[k].Q[1].x;
-        putReal[gap+4] = putSt[k].Q[1].y;
-        putReal[gap+5] = putSt[k].Q[1].z;
-        putReal[gap+6] = putSt[k].Pr;
-    }
-}
-
-// Make the struct an array a struct.
-__host__ inline void restructify(states *getSt, REAL *getReal)
-{
-    int gap;
-    for (int k=0; k<stPass; k++)
-    {
-        gap = k*NSTATES;
-        getSt[k].Q[0].x = getReal[gap];
-        getSt[k].Q[0].y = getReal[gap+1];
-        getSt[k].Q[0].z = getReal[gap+2];
-        getSt[k].Q[1].x = getReal[gap+3];
-        getSt[k].Q[1].y = getReal[gap+4];
-        getSt[k].Q[1].z = getReal[gap+5];
-        getSt[k].Pr = getReal[gap+6];
-    }
-}
 
 __host__ inline states icond(double xs, double lx)
 {

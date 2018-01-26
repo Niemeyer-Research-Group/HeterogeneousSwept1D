@@ -1,0 +1,14 @@
+# THIS IS AN EXAMPLE CONFIGURATION FILE.  THIS FILE IS THE PORTION OF THE
+# MAKEFILE WHICH IS ARCHITECTURE SPECIFIC.  PUT ALL LIBRARY PATHS, NON-STANDARD
+# INCLUDE PATHS, etc HERE.
+
+GPUARCH=35
+
+#Any additional include paths
+IPATH=-I/usr/include/mpi
+#Any additional library paths
+LPATH=
+
+CUDAFLAG=-gencode arch=compute_$(GPUARCH),code=sm_$(GPUARCH) -restrict --ptxas-options=-v
+CFLAGS =-O3 -std=c++11
+CLIBS=-lm -lmpi 

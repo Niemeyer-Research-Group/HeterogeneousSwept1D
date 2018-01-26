@@ -61,16 +61,19 @@ def predictNew(eq, alg, args, nprocs=8):
 
 # Change the source code?  Run it here to compare to the same
 # result in the old version
-def compareRuns(eq, alg, args, mClass, nprocs=8): #)mdl=linear_model.LinearRegression()):
+def compareRuns(eq, alg, args, mClass, nprocs=8, dim=1): #)mdl=linear_model.LinearRegression()):
+    
+    bpath = obinpath if dim == 1 else tbinpath
+    tpath = otestpath if dim == 1 else ttestpath
     oldF = mostRecentResults(resultpath)
     mkstr = eq.title() + schs[alg].title()
     oldF = oldF.xs(mkstr).reset_index(drop=True)
     oldPerf = mClass(oldF, mkstr)
 
     #Run the new configuration
-    expath = op.join(binpath, eq.lower())
-    tp = [k for k in os.listdir(testpath) if eq.lower() in k]
-    tpath = op.join(testpath, tp[0])
+    expath = op.join(bpath, eq.lower())
+    tp = [k for k in os.listdir(tpath) if eq.lower() in k]
+    tpath = op.join(tpath, tp[0])
     outc = runMPICUDA(expath, nprocs, alg.upper(), tpath, eqopt=args)
 
     oc = outc.split()

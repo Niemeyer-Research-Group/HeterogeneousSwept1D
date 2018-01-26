@@ -15,9 +15,9 @@ cubin/
 .vscode/
 temp*
 *.pdf
-src/trslt/*.json
-src/rslts/*.json
-src/utilities/js*
-src/conf
+src/*/trslt/*.json
+src/*/rslts/*.json
+src/*/utilities/js*
+*/conf
 nohup*
 *~*

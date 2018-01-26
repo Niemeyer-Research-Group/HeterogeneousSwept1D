@@ -19,10 +19,15 @@ from datetime import datetime
 thispath = op.abspath(op.dirname(__file__))
 toppath = op.dirname(thispath)
 spath = op.join(toppath, "src")
-binpath = op.join(spath, "bin")
-rspath = op.join(spath, "rslts")
+onepath = op.join(spath, "oneD")
+twopath = op.join(spath, "twoD")
+obinpath = op.join(onepath, "bin")
+tbinpath = op.join(twopath, "bin")
+orspath = op.join(onepath, "rslts")
+trspath = op.join(twopath, "rslts")
 resultpath = op.join(toppath, "results")
-testpath = op.join(spath, "tests")
+otestpath = op.join(onepath, "tests")
+ttestpath = op.join(twopath, "tests")
 
 schemes = {"C": "Classic", "S": "Swept"}
 
@@ -212,8 +217,8 @@ def longTerm(dfs, titles, fhdf, overwrite=False):
     return dfcat
 
 if __name__ == "__main__":
-
-    getpath = rspath
+    #1D
+    getpath = orspath
 
     if len(sys.argv) > 2:
         if not op.exists(op.abspath(sys.argv[1])):

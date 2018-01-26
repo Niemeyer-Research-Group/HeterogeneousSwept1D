@@ -12,7 +12,8 @@ import shlex
 
 thispath = op.abspath(op.dirname(__file__))
 os.chdir(thispath)
-toppath = op.dirname(thispath)
+spath = op.dirname(thispath)
+toppath = op.dirname(spath)
 pypath = op.join(toppath, "runtools")
 
 sys.path.append(pypath)
@@ -23,13 +24,13 @@ import timing_help as th
 
 ext = ".json"
 
-eq = ["heat", "euler"];
+eq = ["heat", "euler"]
 
 
 #%%
 nproc = 8
 mpiarg = "" #"--bind-to socket
-tstrng = os.listdir(testpath)
+tstrng = os.listdir(otestpath)
 schemes = ["S", "C"]
 schD = {schemes[0]: "Classic", schemes[1]: "Swept"}
 
@@ -42,10 +43,10 @@ ac = 1
 
 #%%
 for p in eq:
-    prog = op.join(binpath, p)
+    prog = op.join(obinpath, p)
     prog += " "
     eqs = [k for k in tstrng if p.upper() in k.upper()]
-    eqspec = op.join(testpath, eqs[0])
+    eqspec = op.join(otestpath, eqs[0])
     eqspec += " "
     for sc in schemes:
         timeTitle = "t"+p.title()+sc+ext
@@ -64,8 +65,8 @@ for p in eq:
                 xl = int(n/10000) + 1
                 for g in gpus:
                     exargs =  " freq 200 gpuA {:.4f} nX {:d} tpb {:d} lx {:d}".format(g, n, t, xl)
-                    runMPICUDA(prog, nproc, sc, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=rspath)
+                    runMPICUDA(prog, nproc, sc, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=orspath)
 
-        tfile = op.join(rspath, timeTitle)
+        tfile = op.join(orspath, timeTitle)
         res = th.Perform(tfile)
         res.plotdict(eqn, plotpath=resultpath)

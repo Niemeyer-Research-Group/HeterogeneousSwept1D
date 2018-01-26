@@ -207,13 +207,15 @@ if __name__ == "__main__":
     ext = ".json"
     thispath = op.abspath(op.dirname(__file__))
     os.chdir(thispath)
-
-    f = "sEuler" + ext
+    prb = "Euler"
+    
+    f = "s" + prb + ext
     sp = (2, 2)
 
-    fi = op.join(rspath, f)
+    #ONED
+    fdict,m_ = jmerge(orspath, prb)
 
-    jdf = rh.Solved(fi)
+    jdf = Solved(fdict)
     meta = jdf.meta
     mydf = jdf.ddf
     fg, axi = plt.subplots(sp[0], sp[1])

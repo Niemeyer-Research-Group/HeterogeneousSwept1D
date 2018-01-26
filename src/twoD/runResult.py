@@ -13,7 +13,8 @@ import shlex
 
 thispath = op.abspath(op.dirname(__file__))
 os.chdir(thispath)
-toppath = op.dirname(thispath)
+spath = op.dirname(thispath)
+toppath = op.dirname(spath)
 pypath = op.join(toppath, "runtools")
 
 sys.path.append(pypath)
@@ -24,11 +25,10 @@ prob=["Euler", "Heat", "Const"]
 
 def justPlot(eq, shw=True, save=False):
     kj = prob[eq]
-    dm, lemmesee = rh.jmerge(rspath, kj)
+    dm, met = rh.jmerge(trspath, kj)
 
     meta = {}
     if "meta" in dm.keys():
-        print(dm["meta"])
         meta[kj] = dm.pop("meta")
     
     if not eq:
@@ -67,10 +67,10 @@ if __name__ == "__main__":
     kj = prob[pch]
 
     if rn:
-        ex = op.join(binpath, kj.lower())
-        km = [k for k in os.listdir(testpath) if kj.lower() in k]
-        eqf = op.join(testpath, km[0])
-        cout = runMPICUDA(ex, 8, sch, eqf + " ", outdir=rspath, eqopt=extra)
+        ex = op.join(tbinpath, kj.lower())
+        km = [k for k in os.listdir(ttestpath) if kj.lower() in k]
+        eqf = op.join(ttestpath, km[0])
+        cout = runMPICUDA(ex, 8, sch, eqf + " ", outdir=trspath, eqopt=extra)
 
     print(cout)
     dfp = justPlot(pch)

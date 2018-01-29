@@ -43,17 +43,15 @@ ac = 1
 
 #%%
 for p in eq:
-    prog = op.join(obinpath, p)
+    prog = op.join(binpath, p)
     prog += " "
     eqs = [k for k in tstrng if p.upper() in k.upper()]
     eqspec = op.join(otestpath, eqs[0])
     eqspec += " "
     for sc in schemes:
-        timeTitle = "t"+p.title()+sc+ext
-        print(timeTitle)
-
+        timeTitle = "t"+p.title()+sc+".csv"
         eqn = p + " " + schD[sc]
-        print(eqn)
+        print(timeTitle + eqn)
         if not ac:
             ac += 1
             break
@@ -68,5 +66,5 @@ for p in eq:
                     runMPICUDA(prog, nproc, sc, eqspec, mpiopt=mpiarg, eqopt=exargs, outdir=orspath)
 
         tfile = op.join(orspath, timeTitle)
-        res = th.Perform(tfile)
+        res = th.Perform(tfile) #Not exactly right.
         res.plotdict(eqn, plotpath=resultpath)

@@ -1,5 +1,3 @@
-
-
 # hSweep
 
 [The swept rule](https://www.sciencedirect.com/science/article/pii/S0021999117309221?via%3Dihub) ([free](https://arxiv.org/abs/1705.03162)) is a communication avoiding algorithm for accelerating explicit solutions of time-dependent PDEs in parallel.
@@ -23,16 +21,17 @@ The equation solutions are written out to json files as dictionaries.  The file 
 The performance results are written to csv files and coded [t][equation name][S or C (for swept or classic)].
 
 ## Run
+**From the command line**:
 
 mpirun -np [NumProcs] [Executable] [Algorithm] [Config File] [Output Path] [Additional Args]
 
-Algorithm: S for Swept, C for Classic
+**Algorithm**: S for Swept, C for Classic
 
-ConfigFile: [equation name][Description].json (example eulerTest.json found in src/\*D/tests
+**Config File**: [equation name][Description].json (example eulerTest.json found in src/\*D/tests
 
-Output Path: Path should point to .dat folder in Results file. Name should include problem and precision. Format: Line 1 is length of full spatial domain, number of spatial points and grid step, Other rows are results with format: variable, time, value at each spatial point
+**Output Path**: Name should include problem and precision. *Format*, Line 1 is length of full spatial domain, number of spatial points and grid step, Other rows are results with format: variable, time, value at each spatial point
 
-Additional Args: These are the several standard arguments that every run must include on the command line or in the json configuration file.
+**Additional Args**: These are the several standard arguments that every run must include on the command line or in the json configuration file.
 
 | Argument  |  Meaning |
 | --------- | -------- |
@@ -50,11 +49,24 @@ Python performance and accuracy analysis.
 
 Write your own equations and run them.
 
-1.) Copy the newEquation.htpl
+1.) 
+Copy the new equation template (newEquation.htpl) in src/utilities to the equations folder in the src subfolder of the dimension of your choice.
 
-2.) The header file is just a skeleton, you'll need to fill in the details of the scheme in the functions, variables, and #defines provided, and you'll likely need to define new functions.
+2.) 
+Rename the file with your equation name in lowercase with no spaces or special characters preferably in one word. 
 
-3.) Then run make and the executable.
+3.) 
+Fill in the details of the scheme in the functions, variables, and #defines provided.
+You'll likely need to define new functions to interface with the primary device function: _stepUpdate_.
+
+4.) Add a conditional directive to heads.h in the equations folder:
+``` C++
+#ifdef [UPPERCASE EQUATIONNAME]
+    #include "equationname.h"
+#endif
+```
+
+Then run make from the src folder and the executable will be in src/bin.
 
 ## Dependencies:
 
@@ -66,7 +78,9 @@ MPI 2 or greater
 ## Additional Details
 ### Important
 
-gpuDetect 
+_gpuDetector.h_ in src/utilities can be used as a general, standalone, header-only tool to assign GPUs to CPU processes in MPI+CUDA applications.
+It takes the process id and the number of processes as arguments, assigns a GPU to the process if appropriate and returns a boolean with type int (1 if the process has a GPU assigned to it, 0 if it does not).
+
 why doesn't it run the number of spatial pts I described?
 
 ### Extra
@@ -74,7 +88,6 @@ why doesn't it run the number of spatial pts I described?
 Maybe in the wiki.
 
 ## ToDo
-- Kill "REAL" just do double
 - Update conf and makefile.
 - Compart to Extend. protoype 
 - Complete this README, push and version.

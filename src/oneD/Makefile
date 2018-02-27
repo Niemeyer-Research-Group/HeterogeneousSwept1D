@@ -34,7 +34,7 @@ XL:=$(foreach lp, $(LPATH), -Xlinker=-rpath,$(lp))
 
 LPATHS:=$(foreach lp, $(LPATH), -L$(lp))
 
-default: $(OBJS) 
+default: $(OBJS)
 
 $(OBJS): $(BINPATH)%: $(EQPATH)%.h $(CPREQ) $(DH) $(UTILPATH)/gpuDetector.h Makefile
 	$(eval IFL:=$(shell echo $(@F) | tr '[:lower:]' '[:upper:]'))

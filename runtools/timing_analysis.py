@@ -223,7 +223,6 @@ if __name__ == "__main__":
             collBestIG[ke][ks] = dfBIG
             collBest[ke][ks] = dfBF
 
-            # NO.  YOU NEED TO DO THE BEST GPUA AT EACH TPB
             dfSpeed["NoGPU"][ke+ks] = dfBIG['time', 0.0]/dfBF['time']
             dfBF.plot(y=respvar, ax=axn, loglog=True, legend=False)
             iss.oFrame.plot(x='nX', y=respvar, ax=axn, c='gpuA', kind='scatter', legend=False, loglog=True)

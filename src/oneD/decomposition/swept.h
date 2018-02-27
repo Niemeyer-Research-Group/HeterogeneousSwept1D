@@ -14,7 +14,7 @@ states ssRight[3];
 
 __global__ void upTriangle(states *state, int tstep)
 {
-	extern __shared__ states temper[];
+	extern __shared__ states sharedstate[];
 
 	int gid = blockDim.x * blockIdx.x + threadIdx.x; //Global Thread ID
 	int tidx = threadIdx.x; //Block Thread ID
@@ -22,7 +22,7 @@ __global__ void upTriangle(states *state, int tstep)
 
     // Using tidx as tid is kind of confusing for reader but looks valid.
 
-	temper[tidx] = state[gid + 1];
+	sharedstate[tidx] = state[gid + 1];
 
     __syncthreads();
 
@@ -30,11 +30,11 @@ __global__ void upTriangle(states *state, int tstep)
 	{
 		if (tidx < (blockDim.x-k) && tidx >= k)
 		{
-            stepUpdate(temper, tidx, tstep + k);
+            stepUpdate(sharedstate, tidx, tstep + k);
 		}
 		__syncthreads();
 	}
-    state[gid + 1] = temper[tidx];
+    state[gid + 1] = sharedstate[tidx];
 }
 
 /**
@@ -49,7 +49,7 @@ __global__
 void
 downTriangle(states *state, const int tstep, const int offset)
 {
-	extern __shared__ states temper[];
+	extern __shared__ states sharedstate[];
 
     int tid = threadIdx.x; // Thread index
     int mid = blockDim.x >> 1; // Half of block size
@@ -59,21 +59,21 @@ downTriangle(states *state, const int tstep, const int offset)
 
     int tnow = tstep; // read tstep into register.
 
-    if (tid<2) temper[tid] = state[gid];
+    if (tid<2) sharedstate[tid] = state[gid];
     __syncthreads();
-    temper[tid+2] = state[gid+2];
+    sharedstate[tid+2] = state[gid+2];
     __syncthreads();
 
 	for (int k=mid; k>0; k--)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-	    	stepUpdate(temper, tidx, tnow);
+	    	stepUpdate(sharedstate, tidx, tnow);
 		}
 		tnow++;
 		__syncthreads();
 	}
-    state[gid] = temper[tidx];
+    state[gid] = sharedstate[tidx];
 }
 
 // __global__
@@ -96,7 +96,7 @@ __global__
 void
 wholeDiamond(states *state, const int tstep, const int offset)
 {
-	extern __shared__ states temper[];
+	extern __shared__ states sharedstate[];
 
     int tidx = threadIdx.x + 1; // Thread index
     int mid = (blockDim.x >> 1); // Half of block size
@@ -105,9 +105,9 @@ wholeDiamond(states *state, const int tstep, const int offset)
 
     int tnow = tstep;
 	int k;
-    if (threadIdx.x<2) temper[threadIdx.x] = state[gid];
+    if (threadIdx.x<2) sharedstate[threadIdx.x] = state[gid];
     __syncthreads();
-    temper[tidx+1] = state[gid + 2];
+    sharedstate[tidx+1] = state[gid + 2];
 
     __syncthreads();
 
@@ -115,7 +115,7 @@ wholeDiamond(states *state, const int tstep, const int offset)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-        	stepUpdate(temper, tidx, tnow);
+        	stepUpdate(sharedstate, tidx, tnow);
 		}
 		tnow++;
 		__syncthreads();
@@ -126,13 +126,13 @@ wholeDiamond(states *state, const int tstep, const int offset)
 	{
 		if (tidx < (base-k) && tidx >= k)
 		{
-            stepUpdate(temper, tidx, tnow);
+            stepUpdate(sharedstate, tidx, tnow);
 		}
 		tnow++;
 		__syncthreads();
     }
 
-    state[gid + 1] = temper[tidx];
+    state[gid + 1] = sharedstate[tidx];
 }
 
 /*

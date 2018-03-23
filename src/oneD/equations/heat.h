@@ -1,9 +1,5 @@
 /**
-    The equation specific functions.
-*/
-
-/**
-	The equations specific global variables and function prototypes.
+	The equations specific global variables.
 */
 
 #include <cuda.h>

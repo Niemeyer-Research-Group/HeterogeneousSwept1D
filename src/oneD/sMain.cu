@@ -17,7 +17,6 @@ void cudaRunCheck()
     printf("CUDA Driver Version / Runtime Version  --- %d.%d / %d.%d\n", dv/1000, (dv%100)/10, rv/1000, (rv%100)/10);
 }
 
-
 /**
 ----------------------
     MAIN PART

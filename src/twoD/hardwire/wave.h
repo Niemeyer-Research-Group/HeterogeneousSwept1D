@@ -44,12 +44,6 @@
 
 #define DIVMOD(x)           (MODULA(x)) >> 1
 
-/*
-	============================================================
-	DATA STRUCTURE PROTOTYPE
-	============================================================
-*/
-
 //---------------//
 struct states{
     REAL u[2];
@@ -72,8 +66,31 @@ std::string outVars[NVARS] = {"Velocity"}; //---------------//
 	============================================================
 */
 
-#ifdef __CUDA_ARCH__
-    #define DIMS    deqConsts
-#else
-    #define DIMS    heqConsts
-#endif
+__host__ 
+void mpi_type(MPI_Datatype *dtype)
+{
+    MPI_Type_contiguous(2, MPI_R, dtype);
+    MPI_Type_commit(dtype);
+}
+
+// This struct is going in constant memory.
+struct Wave
+{
+	//For now harwire necessary variables.
+	// Wave(){}
+
+	__host__ __device__
+	REAL printout(states *state, int i)
+	{
+    	return state->u[0];
+	}
+
+	__host__ __device__
+	void stepUpdate(states **uv, int idx, int idy, int tstep)
+	{
+		int otx = tstep % NSTEPS; //Modula is output place
+    	int itx = (otx^1); //Opposite in input place.
+
+		// Get Wave Scheme and write equation Put constants in private mem
+	}
+}

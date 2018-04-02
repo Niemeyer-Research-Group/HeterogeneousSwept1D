@@ -44,6 +44,7 @@
 
 #define DIVMOD(x)           (MODULA(x)) >> 1
 
+
 //---------------//
 struct states{
     REAL u[2];
@@ -66,7 +67,10 @@ std::string outVars[NVARS] = {"Velocity"}; //---------------//
 	============================================================
 */
 
-__host__ 
+struct gridsteps{
+	double x, y, t;
+}
+
 void mpi_type(MPI_Datatype *dtype)
 {
     MPI_Type_contiguous(2, MPI_R, dtype);
@@ -74,23 +78,51 @@ void mpi_type(MPI_Datatype *dtype)
 }
 
 // This struct is going in constant memory.
-struct Wave
+struct constWave
 {
-	//For now harwire necessary variables.
-	// Wave(){}
+	gridstep gs;
+	uint nx, ny;
+	double cx, cy, homecoeff;
 
-	__host__ __device__
-	REAL printout(states *state, int i)
+	void init(gridstep g, uint nx, uint ny, double c)
+	{
+		gs = g;
+		ny = ny;
+		nx = nx;
+		cx = c*gs.t/gs.x;
+		cx *= cx;
+		cy = c*gs.t/gs.y;
+		cy *= cy;
+
+		homecoeff = 2.0-2.0*(cx+cy);
+	}
+
+	int getix(int xi, int yi)
+	{
+		return yi * nx + xi;
+	}
+
+
+	REAL printout(states *state, int yi, int xi)
 	{
     	return state->u[0];
 	}
+}
 
-	__host__ __device__
-	void stepUpdate(states **uv, int idx, int idy, int tstep)
-	{
-		int otx = tstep % NSTEPS; //Modula is output place
-    	int itx = (otx^1); //Opposite in input place.
+constWave CI;
 
-		// Get Wave Scheme and write equation Put constants in private mem
-	}
+void initState(states *state, int n)
+{
+	for (int k=0; k<2; k++) state[n].u[k] = cos(dt * w * pi * k) * sin(dx * w * pi * n);
+}
+
+// This method works for pre-replacement, but is that the most efficient.  Well it works best with periodic boundaries.
+void stepUpdate(states *state, int idx, int idy, int tstep)
+{
+	int ix = getix(idx, idy);
+	int otx = tstep % NSTEPS; //Modula is output place
+	int itx = (otx^1); //Opposite in input place.
+
+	state[ix].u[itx] =  CI.homecoeff * state[ix].u[otx] + CI.cx * (state[ix+1].u[otx] + state[ix-1].u[otx]) 
+		+ CI.cy * (state[ix+CI.nx].u[otx] + state[ix-CI.nx].u[otx]);
 }

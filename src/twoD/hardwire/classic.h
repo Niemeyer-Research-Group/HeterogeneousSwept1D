@@ -2,6 +2,10 @@
 #include "wave.h"
 
 // Each process gets its own passing structure.  Should contain buffers to send and receive and 
+struct Classic{
+
+    Classic(){};
+}
 
 struct Passer{
     double *north, *south, *east, *west; // Buffers for pass

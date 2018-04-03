@@ -43,6 +43,7 @@
 // #define MODULA(x)           x % NSTEPS
 
 #define DIVMOD(x)           (MODULA(x)) >> 1
+#define INDEXER(x, y, nx)	y*nx + x
 
 
 //---------------//
@@ -93,36 +94,35 @@ struct constWave
 		cx *= cx;
 		cy = c*gs.t/gs.y;
 		cy *= cy;
-
 		homecoeff = 2.0-2.0*(cx+cy);
 	}
-
-	int getix(int xi, int yi)
-	{
-		return yi * nx + xi;
-	}
-
-
-	REAL printout(states *state, int yi, int xi)
-	{
-    	return state->u[0];
-	}
 }
 
-constWave CI;
+constWave HCONST;
+__constant__ constWave DCONST;
 
-void initState(states *state, int n)
+void initState(states *state)
 {
-	for (int k=0; k<2; k++) state[n].u[k] = cos(dt * w * pi * k) * sin(dx * w * pi * n);
+	for (int k=0; k<2; k++) state->u[k] = cos(dt * w * pi * k) * sin(dx * w * pi * n);
 }
 
-// This method works for pre-replacement, but is that the most efficient.  Well it works best with periodic boundaries.
-void stepUpdate(states *state, int idx, int idy, int tstep)
+REAL printout(states *state)
 {
-	int ix = getix(idx, idy);
-	int otx = tstep % NSTEPS; //Modula is output place
-	int itx = (otx^1); //Opposite in input place.
+	return state->u[0];
+}
 
-	state[ix].u[itx] =  CI.homecoeff * state[ix].u[otx] + CI.cx * (state[ix+1].u[otx] + state[ix-1].u[otx]) 
-		+ CI.cy * (state[ix+CI.nx].u[otx] + state[ix-CI.nx].u[otx]);
+#ifdef __CUDA_ARCH__
+    #define A			DCONST
+#else
+    #define A    		HCONST
+#endif
+
+__host__ __device__
+void stepUpdate(states *state, const int idx,  const int idy, const int tstep)
+{
+	const int ix = INDEXER(idx, idy, A.nx);
+	const int itx = tstep % NSTEPS; //Modula is output place
+	const int itx = (itx^1); //Opposite in input place.
+
+	state[ix].u[otx] =  A.homecoeff * state[ix].u[itx] - state[ix].u[otx] + A.cx * (state[ix+1].u[itx] + state[ix-1].u[itx]) + A.cy * (state[ix+A.nx].u[itx] + state[ix-A.nx].u[itx]);
 }

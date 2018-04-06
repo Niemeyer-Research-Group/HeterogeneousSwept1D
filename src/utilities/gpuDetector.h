@@ -49,7 +49,7 @@ int getHost(hvec &ids, hname *newHost)
 }
 
 // Test device sight.
-int detector(const int ranko, const int sz)
+int detector(int ranko, const int sz)
 {
     hvec ledger;
     int machineID;
@@ -104,14 +104,11 @@ int detector(const int ranko, const int sz)
         for (int k = 0; k < nGo; k++)
         {
             cudaGetDeviceProperties(&props, k);
-            cout << "----------------------" << endl;
-			cout << "Rank " << ranko << " device - " << k << " ";
-            cout << props.name << " " << props.pciBusID << endl;
-            cout << std::hex << props.pciDomainID << ":" <<  props.pciBusID << ":" << props.pciDeviceID << endl;
-            cout << "DISPLAY " << props.tccDriver << std::dec << endl;
-
-            // cudaDriverGetVersion(&driverVersion);
-            // cudaRuntimeGetVersion(&runtimeVersion);
+            // cout << "----------------------" << endl;
+			// cout << "Rank " << ranko << " device - " << k << " ";
+            // cout << props.name << " " << props.pciBusID << endl;
+            // cout << std::hex << props.pciDomainID << ":" <<  props.pciBusID << ":" << props.pciDeviceID << endl;
+            // cout << "DISPLAY " << props.tccDriver << std::dec << endl;
 
 			pcivec[3*k] = props.pciDomainID;
 			pcivec[3*k+1] = props.pciBusID;
@@ -140,9 +137,9 @@ int detector(const int ranko, const int sz)
             cudaDeviceGetByPCIBusId(&dev, bufs.str().c_str());
             cudaGetDeviceProperties(&props, dev);
 
-            cout << "Global Rank: " << ranko << " Machine Rank: " << machineRank << std::endl;
-            cout << "on machine " << ledger[machineID].hostname << std::endl;
-            cout << i << " " << bufs.str() << " " << props.name << endl;
+            // cout << "Global Rank: " << ranko << " Machine Rank: " << machineRank << std::endl;
+            // cout << "on machine " << ledger[machineID].hostname << std::endl;
+            // cout << i << " " << bufs.str() << " " << props.name << endl;
             //props.kernelExecTimeoutEnabled tccDriver?
             if (props.kernelExecTimeoutEnabled)
             {

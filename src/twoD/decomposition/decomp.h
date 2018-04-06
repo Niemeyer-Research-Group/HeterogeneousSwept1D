@@ -1,7 +1,5 @@
-/*
----------------------------
-    DECOMP CORE
----------------------------
+/**
+    DECOMP CORE And other things.
 */
 
 #include <numeric>
@@ -79,7 +77,6 @@ void initArgs()
 	cGlob.gpuA = inJ["gpuA"].asDouble();
 	int ranker = ranks[1];
 	int sz = nprocs;
-	if(!ranks[1]) t0 = MPI_Wtime();
 	if (!cGlob.gpuA)
     {
         cGlob.hasGpu = 0;
@@ -90,11 +87,6 @@ void initArgs()
         cGlob.hasGpu = detector(ranker, sz);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     }
-	if(!ranks[1])
-	{
-		tSelect = MPI_Wtime()-t0;
-		cout << "GPU section time (s): " << tSelect << endl;
-	}
 
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);
@@ -162,7 +154,7 @@ void initArgs()
     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.
-    if (!ranks[1])  cout << "Initialized Arguments" << endl;
+    if (!ranks[1])  cout << ranks[1] <<  " - Initialized Arguments" << endl;
 
 }
 
@@ -229,7 +221,8 @@ struct cudaTime
         cudaEventRecord(stop, 0);
 	    cudaEventSynchronize(stop);
 	    cudaEventElapsedTime( &ti, start, stop);
-        times.push_back(ti); }
+        times.push_back(ti); 
+        }
 
     int avgt() { 
         return std::accumulate(times.begin(), times.end(), 0)/ times.size();

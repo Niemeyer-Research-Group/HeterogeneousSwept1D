@@ -80,7 +80,6 @@ std::string outVars[NVARS] = {"Temperature"}; //---------------//
 __constant__ eqConsts deqConsts;  //---------------//
 eqConsts heqConsts; //---------------//
 states bound[2];
-int stPass, numPass; // Number of Passing states, total numbers in passing states.
 
 /*
 	============================================================
@@ -104,29 +103,6 @@ __host__ REAL printout(states *state, int i)
     return state->T[0];
 }
 
-// Make the struct an array.
-__host__ inline void unstructify(states *putSt, REAL *putReal)
-{
-    int gap;
-    for (int k=0; k<stPass; k++)
-    {
-        gap = k*NSTATES;
-        putReal[gap] = putSt[k].T[0];
-        putReal[gap+1] = putSt[k].T[1];
-    }
-}
-
-// Make the struct an array a struct.
-__host__ inline void restructify(states *getSt, REAL *getReal)
-{
-    int gap;
-    for (int k=0; k<stPass; k++)
-    {
-        gap = k*NSTATES;
-        getSt[k].T[0] = getReal[gap];
-        getSt[k].T[1]= getReal[gap+1];
-    }
-}
 // 12.0*rsqrt(xs+0.1) - xs*xs;
 // 6.0 * sin(5.0 * M_PI * xs)
 __host__ states icond(double xs)

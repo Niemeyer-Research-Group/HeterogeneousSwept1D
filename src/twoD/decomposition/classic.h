@@ -49,11 +49,21 @@ void classicPass(states *putSt, states *getSt, int tstep)
     int rnk;
 
     MPI_Isend(putSt, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
-
     MPI_Isend(putSt + 1, 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
-
     MPI_Recv(getSt + 1, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &stat[0]);
+    MPI_Recv(getSt, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
 
+    MPI_Wait(&req[0], &stat[0]);
+    MPI_Wait(&req[1], &stat[1]);
+
+}
+
+    int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
+    int rnk;
+
+    MPI_Isend(putSt, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
+    MPI_Isend(putSt + 1, 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
+    MPI_Recv(getSt + 1, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &stat[0]);
     MPI_Recv(getSt, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
 
     MPI_Wait(&req[0], &stat[0]);
@@ -68,12 +78,9 @@ double classicWrapper(states **state, int *tstep)
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    // Must be declared global in equation specific header.
-    stPass = 2;
-    numPass = NSTATES * stPass;
 
-    states putSt[stPass];
-    states getSt[stPass];
+    states putSt[2];
+    states getSt[2];
 
     int t0, t1;
 
@@ -84,7 +91,7 @@ double classicWrapper(states **state, int *tstep)
         const int xc = cGlob.xcpu/2;
         int xcp = xc+1;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
-        const int gpusize =  cGlob.szState * xgpp;
+        const int gpusize = cGlob.szState * xgpp;
 
         states *dState;
 

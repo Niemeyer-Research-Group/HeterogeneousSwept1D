@@ -25,6 +25,7 @@ void cudaRunCheck()
 
 int main(int argc, char *argv[])
 {
+    
     makeMPI(argc, argv);
 
     if (!ranks[1]) cudaRunCheck();

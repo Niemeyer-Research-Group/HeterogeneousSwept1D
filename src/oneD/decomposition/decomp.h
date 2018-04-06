@@ -54,6 +54,7 @@ void makeMPI(int argc, char** argv)
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
 	cGlob.tpb = 128;
+    std::cout << ranks[1] << std::endl;
     ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
 }
@@ -67,6 +68,7 @@ void parseArgs(int argc, char *argv[])
         for (int k=4; k<argc; k+=2)
         {
             inarg = argv[k];
+            std::cout << " " << inarg << " " << atof(argv[k+1]) << std::endl;
 			inJ[inarg] = atof(argv[k+1]);
         }
     }
@@ -90,7 +92,6 @@ void initArgs()
         cGlob.hasGpu = detector(ranker, sz);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     }
-
 
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);
@@ -158,7 +159,7 @@ void initArgs()
     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.
-    if (!ranks[1])  cout << "Initialized Arguments" << endl;
+    if (!ranks[1])  cout << ranks[1] << " Initialized Arguments" << endl;
 
 }
 

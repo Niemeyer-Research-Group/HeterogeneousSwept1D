@@ -28,7 +28,6 @@
 using namespace std;
 
 
-
 __global__ void classicStep(states *state, const int ts)
 {
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
@@ -68,13 +67,9 @@ double classicWrapper(states **state, int *tstep)
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    // Must be declared global in equation specific header.
-    stPass = 2;
-    numPass = NSTATES * stPass;
 
-    states putSt[stPass];
-    states getSt[stPass];
-
+    states putSt[2];
+    states getSt[2];
     int t0, t1;
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.

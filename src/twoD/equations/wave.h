@@ -70,7 +70,7 @@ std::string outVars[NVARS] = {"Velocity"}; //---------------//
 
 struct gridsteps{
 	double x, y, t;
-}
+};
 
 void mpi_type(MPI_Datatype *dtype)
 {
@@ -81,11 +81,11 @@ void mpi_type(MPI_Datatype *dtype)
 // This struct is going in constant memory.
 struct constWave
 {
-	gridstep gs;
+	gridsteps gs;
 	uint nx, ny;
 	double cx, cy, homecoeff;
 
-	void init(gridstep g, uint nx, uint ny, double c)
+	void init(gridsteps g, uint nx, uint ny, double c)
 	{
 		gs = g;
 		ny = ny;
@@ -96,14 +96,18 @@ struct constWave
 		cy *= cy;
 		homecoeff = 2.0-2.0*(cx+cy);
 	}
-}
+};
 
 constWave HCONST;
 __constant__ constWave DCONST;
 
-void initState(states *state)
+void initState(states *state, const int x, const int y)
 {
-	for (int k=0; k<2; k++) state->u[k] = cos(dt * w * pi * k) * sin(dx * w * pi * n);
+	static int nx = HCONST.nx;
+	static int ny = HCONST.ny;
+	for (int k=0; k<2; k++) state->u[k] = std::exp(-50.0 * 
+			std::sqrt((x-nx*0.5) * (x-nx*0.5) + 
+			(y-ny*0.5) * (y-ny*0.5)));
 }
 
 REAL printout(states *state)
@@ -122,7 +126,7 @@ void stepUpdate(states *state, const int idx,  const int idy, const int tstep)
 {
 	const int ix = INDEXER(idx, idy, A.nx);
 	const int itx = tstep % NSTEPS; //Modula is output place
-	const int itx = (itx^1); //Opposite in input place.
+	const int otx = (itx^1); //Opposite in input place.
 
 	state[ix].u[otx] =  A.homecoeff * state[ix].u[itx] - state[ix].u[otx] + A.cx * (state[ix+1].u[itx] + state[ix-1].u[itx]) + A.cy * (state[ix+A.nx].u[itx] + state[ix-A.nx].u[itx]);
 }

@@ -51,7 +51,7 @@ struct states{
     REAL u[2];
     //size_t tstep; // Consider as padding.
 };
-
+typedef Json::Value jsons;
 std::string fspec = "Wave";
 std::string outVars[NVARS] = {"Velocity"}; //---------------//
 

@@ -1,41 +1,39 @@
 
+include config.mk
 
-CODE_DIR:= oneD # twoD
-BIN_DIR:= bin
-UTIL_DIR:= utilities
+CODE_DIR:= $(SOURCEPATH)/oneD # twoD
+BIN_DIR:= $(SOURCEPATH)/bin
+UTIL_DIR:= $(SOURCEPATH)/utilities
 UTIL_BIN:= $(BIN_DIR)/util
+EQ_BIN:= $(BIN_DIR)/eqobj
+BINS:= $(UTIL_BIN) $(EQ_BIN)
+IFLAGS:=$(addprefix -I, $(IPATH))
+IFLAGS+= -I$(CC_ICUDAPATH) -I$(CC_IMPIPATH)
+
+DEF=
 
 UTILC:= $(wildcard $(UTIL_DIR)/*.c*)
-TARG= $(notdir $(UTILC))
-TNAME = $(basename $(TARG))
+TARG:= $(notdir $(UTILC))
+COBJ:= $(addsuffix .o, $(basename $(TARG)))) 
 
-all: pri $(TNAME) swepts $(APPO)
+# $(LIBCUDA) $(LIBMPI) 
 
-pri:
-	@echo $(TNAME) $(TARG)
+.PHONY: swepts
 
-%: $(UTIL_DIR)/%.cpp Makefile
-	g++ -c $< -o $(UTIL_BIN)/$@.o -O3 -lcudart -lcuda
+.EXPORT_ALL_VARIABLES:
+
+default: $(BINS) $(addprefix $(UTIL_BIN)/, $(COBJ)) swepts 
+
+$(BINS):
+	mkdir -p $(BINS)
+
+$(UTIL_BIN)/%.o: $(UTIL_DIR)/%.cpp
+	g++ -c $< -o $@ $(IFLAGS) $(CFLAGS) 
 
 swepts:
 	$(MAKE) -C $(CODE_DIR)
 
-$(APPO)
-
 clean:
-	rm $(BIN_DIR)/*.o 
+	rm -rf $(BIN_DIR)/*
 
-# JSONLIB:=$(BIN_DIR)/jsoncpp.o 
-# GPULIB:=$(BIN_DIR)/gpuDetector.o
-# utilities/gpuDetector.cu utilities/jsoncpp.cpp
-
-# .PHONY: swepts
-
-# default: $(JSONLIB) $(GPULIB)
-
-# $(JSONLIB): $(UTIL_DIR)/jsoncpp.cpp 
-# 	g++ -c $< -o $@ -O3
-
-# $(GPULIB): $(UTIL_DIR)/gpuDetector.cu 
-# 	nvcc -c $< -o $@ -std=c++11 -lmpi -O3
 

@@ -27,7 +27,6 @@
 
 using namespace std;
 
-
 __global__ void classicStep(states *state, const int ts)
 {
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)

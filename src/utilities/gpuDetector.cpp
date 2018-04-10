@@ -4,8 +4,8 @@
 
 #include "gpuDetector.h"
 
+#include <cstring>
 #include <iostream>  
-#include <vector>
 #include <sstream>
 #include <string>
 
@@ -13,7 +13,6 @@
 #include <cuda_runtime.h>
 #include <mpi.h>
 
-// NEED TO ADD INPUT THAT INSTRUCTS HOW TO ASSIGN GPU
 
 int getHost(hvec &ids, hname *newHost)
 {
@@ -24,18 +23,18 @@ int getHost(hvec &ids, hname *newHost)
     MPI_Get_processor_name(&machineName[0],  &rb);
     for (int i=0; i<ids.size(); i++)
     {
-        if (!strcmp(ids[i].hostname, machineName))
+        if (!std::strcmp(ids[i].hostname, machineName))
         {
             return i;
         }
     }
 
-    strcpy(newHost->hostname, machineName);
+    std::strcpy(newHost->hostname, machineName);
     newHost->ng = nGo;
     return ids.size();
 }
 
-int detector(const int ranko, const int sz, const int startpos=1)
+int detector(const int ranko, const int sz, const int startpos)
 {
     hvec ledger;
     int machineID;
@@ -102,8 +101,8 @@ int detector(const int ranko, const int sz, const int startpos=1)
 
 	int nset = 0;
     int dev;
-	string pcistr;
-	stringstream bufs;
+	std::string pcistr;
+	std::stringstream bufs;
 
     for (int i = startpos; i<machineSize; i++)
     {
@@ -111,20 +110,18 @@ int detector(const int ranko, const int sz, const int startpos=1)
         
         if (i == machineRank)
         {
+            bufs << std::hex << pcivec[3*nset] << ":" <<  pcivec[3*nset+1] << ":" <<  pcivec[3*nset+2];
+            
             cudaDeviceGetByPCIBusId(&dev, bufs.str().c_str());
             cudaGetDeviceProperties(&props, dev);
 
-            if (props.kernelExecTimeoutEnabled)
-            {
-                cout << "DEVICE IS DISPLAY, NOT ASSIGNED" << endl;
-            }
-            else
+            if (!props.kernelExecTimeoutEnabled)
             {
                 cudaSetDevice(dev);
-                cout << "Acquired GPU: " << props.name << " with pciID: " << bufs.str() << endl;
                 hasG = 1;
+                std::cout << "Process " << ranko << " Has GPU -- " << dev << ": " << props.name << std::endl;
             }
-            cout << "----------------------" << endl;
+            
             nset++;
         }
         MPI_Bcast(&nset, 1, MPI_INT, i, machineComm);
@@ -134,5 +131,6 @@ int detector(const int ranko, const int sz, const int startpos=1)
     MPI_Type_free(&atype);
     MPI_Comm_free(&machineComm);
     MPI_Barrier(MPI_COMM_WORLD);
+    if(!ranko) std::cout << "GPUS HAVE BEEN CHOSEN ---------------------- " << std::endl;
     return hasG;
 }

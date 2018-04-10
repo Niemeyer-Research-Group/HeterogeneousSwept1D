@@ -6,9 +6,6 @@ DEF=
 include ../conf
 
 MAKEPATH := $(shell pwd)
-# MAKEPATH:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
-
-# LPATH+=
 
 BINPATH:=$(MAKEPATH)/bin
 EQPATH:=$(MAKEPATH)/equations

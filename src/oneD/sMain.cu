@@ -3,19 +3,11 @@
 */
 #include <fstream>
 
-
+#include "cudaUtils.h"
 #include "heads.h"
 #include "decomp.h"
 #include "classic.h"
 #include "swept.h"
-
-void cudaRunCheck()
-{
-    int rv, dv;
-    cudaDriverGetVersion(&dv);
-    cudaRuntimeGetVersion(&rv);
-    printf("CUDA Driver Version / Runtime Version  --- %d.%d / %d.%d\n", dv/1000, (dv%100)/10, rv/1000, (rv%100)/10);
-}
 
 /**
 ----------------------
@@ -25,7 +17,6 @@ void cudaRunCheck()
 
 int main(int argc, char *argv[])
 {
-    
     makeMPI(argc, argv);
 
     if (!ranks[1]) cudaRunCheck();
@@ -128,6 +119,7 @@ int main(int argc, char *argv[])
 
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = (MPI_Wtime() - timed);
+
         if (cGlob.hasGpu)  
 		{
 			cudaError_t error = cudaGetLastError();

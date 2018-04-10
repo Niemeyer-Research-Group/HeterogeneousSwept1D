@@ -3,17 +3,17 @@
 
 #define RLEN 80
 
-using namespace std;
+#include <vector>
 
 struct hname{
     int ng;
     char hostname[RLEN];
 };
 
-typedef vector<hname> hvec;
+typedef std::vector<hname> hvec;
 
 int getHost(hvec &ids, hname *newHost);
 
-int detector(int ranko, const int sz);
+int detector(const int ranko, const int sz, const int startpos);
 
 #endif

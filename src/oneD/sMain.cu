@@ -1,6 +1,7 @@
 /*
     Entry point for hsweep.
 */
+
 #include <fstream>
 
 #include "cudaUtils.h"

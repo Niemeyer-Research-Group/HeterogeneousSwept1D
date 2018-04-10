@@ -5,9 +5,13 @@
 */
 
 #include <numeric>
+#include <mpi.h>
 #include "gpuDetector.h"
+#include "json/json.h"
 
 #define TAGS(x) x & 32767
+
+// 
 
 /*
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
@@ -19,7 +23,7 @@ MPI_Request req[2];
 MPI_Status stat[2];
 int lastproc, nprocs, ranks[3];
 
-struct globalism {
+struct Globalism {
 // Topology
     int nGpu, nX;
     int xg, xcpu;
@@ -41,11 +45,11 @@ struct globalism {
 
 std::string fname = "GranularTime.csv";
 
-globalism cGlob;
+Globalism cGlob;
 jsons inJ;
 jsons solution;
 
-//Always prepared for periodic boundary conditions.
+// Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char** argv)
 {
     MPI_Init(&argc, &argv);
@@ -53,8 +57,6 @@ void makeMPI(int argc, char** argv)
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
-	cGlob.tpb = 128;
-    std::cout << ranks[1] << std::endl;
     ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
 }
@@ -68,7 +70,6 @@ void parseArgs(int argc, char *argv[])
         for (int k=4; k<argc; k+=2)
         {
             inarg = argv[k];
-            std::cout << " " << inarg << " " << atof(argv[k+1]) << std::endl;
 			inJ[inarg] = atof(argv[k+1]);
         }
     }
@@ -89,7 +90,7 @@ void initArgs()
     }
     else
     {
-        cGlob.hasGpu = detector(ranker, sz);
+        cGlob.hasGpu = detector(ranker, sz, 1);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     }
 
@@ -121,7 +122,7 @@ void initArgs()
     else
     {
         cGlob.nX = inJ["nX"].asInt();
-        cGlob.cBks = round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
+        cGlob.cBks = std::round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
         if (cGlob.cBks & 1) cGlob.cBks++;
         cGlob.gBks = cGlob.gpuA*cGlob.cBks;
     }
@@ -159,7 +160,7 @@ void initArgs()
     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.
-    if (!ranks[1])  cout << ranks[1] << " Initialized Arguments" << endl;
+    if (!ranks[1])  std::cout << "Initialized Arguments" << std::endl << "-------------" << std::endl;
 
 }
 
@@ -204,7 +205,7 @@ void writeOut(states **outState, double tstamp)
 
 void endMPI()
 {
-	MPI_Barrier(MPI_COMM_WORLD);
     MPI_Type_free(&struct_type);
+	MPI_Barrier(MPI_COMM_WORLD);
 	MPI_Finalize();
 }

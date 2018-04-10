@@ -2,11 +2,12 @@
     UTILITIES FOR HSWEEP.  TIMER and DRIVER AGREEMENT CHECKER.
 */
 
-
-#ifdef SWEEPUTIL_H
+#ifndef SWEEPUTIL_H
 #define  SWEEPUTIL_H
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <mpi.h>
+#include <cmath>
 #include <vector>
 
 void cudaRunCheck()
@@ -22,7 +23,7 @@ int factor(int n)
     int sq = std::sqrt(n);
     if ((sq * sq) == n) return sq;
 
-    outf = 0;
+    int outf = 0;
     for(int k=2; k<sq; k++)
     {
         if (!(n%k)) outf = k;
@@ -32,9 +33,9 @@ int factor(int n)
 
 struct cudaTime
 {
-    std::vector<double> times;
+    std::vector<float> times;
     cudaEvent_t start, stop;
-	double ti;
+	float ti;
     std::string typ = "GPU";
 
     cudaTime() {
@@ -57,12 +58,12 @@ struct cudaTime
         times.push_back(ti); 
     };
 
-    void getLastTime()
+    float getLastTime()
     {
         return ti;
     };
 
-    int avgt() { 
+    float avgt() { 
         double sumt = 0.0;
         for (auto itime: times) sumt += itime;
         return sumt/(double)times.size();
@@ -73,6 +74,7 @@ struct mpiTime
 {
     std::vector<double> times;
     double ti;
+        
     std::string typ = "CPU";
 
     void tinit(){ ti = MPI_Wtime(); }
@@ -86,25 +88,25 @@ struct mpiTime
     };
 };
 
-void atomicWrite(std::string st, std::vector<double> t)
-{
-    FILE *tTemp;
-    MPI_Barrier(MPI_COMM_WORLD);
+// void atomicWrite(std::string st, std::vector<double> t)
+// {
+//     FILE *tTemp;
+//     MPI_Barrier(MPI_COMM_WORLD);
 
-    for (int k=0; k<nprocs; k++)
-    {
-        if (ranks[1] == k)
-        {
-            tTemp = fopen(fname.c_str(), "a+");
-            fseek(tTemp, 0, SEEK_END);
-            fprintf(tTemp, "\n%d,%s", ranks[1], st.c_str());
-            for (auto i = t.begin(); i != t.end(); ++i)
-            {
-                fprintf(tTemp, ",%4f", *i);
-            }
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
-}
+//     for (int k=0; k<nprocs; k++)
+//     {
+//         if (ranks[1] == k)
+//         {
+//             tTemp = fopen(fname.c_str(), "a+");
+//             fseek(tTemp, 0, SEEK_END);
+//             fprintf(tTemp, "\n%d,%s", ranks[1], st.c_str());
+//             for (auto i = t.begin(); i != t.end(); ++i)
+//             {
+//                 fprintf(tTemp, ",%4f", *i);
+//             }
+//         }
+//         MPI_Barrier(MPI_COMM_WORLD);
+//     }
+// }
 
 #endif

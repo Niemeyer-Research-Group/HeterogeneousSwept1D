@@ -1,23 +1,22 @@
 # DEF adds extra defines. Specificially -DNOS. This prevents the program from writing the solution out so it can be 
 # performance tested more efficiently.
 # run make DEF="-DNOS"
-DEF=
 
-include ../conf
 
-MAKEPATH := $(shell pwd)
+ODIR:= $(SOURCEPATH)/oneD
 
-BINPATH:=$(MAKEPATH)/bin
-EQPATH:=$(MAKEPATH)/equations
-DECOMPPATH:=$(MAKEPATH)/decomposition
-SRCPATH:=$(dir $(MAKEPATH))
-UTILPATH:=$(SRCPATH)utilities
+EQPATH:=$(ODIR)/equations
+DECOMPPATH:=$(ODIR)/decomposition
 
-IPATH+=-I$(EQPATH) -I$(DECOMPPATH) -I$(UTILPATH)
+IFLAGS+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
 
-DH := $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
+XL:=$(addprefix -Xlinker=-rpath, $(LPATH))
 
-CPREQ := $(MAKEPATH)/sMain.cu $(UTILPATH)/jsoncpp.cpp
+LPATHS:=$(addprefix -L, $(LPATH))
+
+DH:= $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
+
+CPREQ:=$(ODIR)/sMain.cu 
 
 EQINIT:=$(wildcard $(EQPATH)/*.h)
 
@@ -25,15 +24,14 @@ EQS:=$(filter-out $(DH), $(EQINIT))
 
 EQI:=$(foreach eq, $(EQS), $(basename $(notdir $(eq))))
 
-OBJS:=$(foreach eq, $(EQI), $(BINPATH)/$(eq))
+EQOBJ:=$(addsuffix .o, $(EQI))
 
-XL:=$(foreach lp, $(LPATH), -Xlinker=-rpath,$(lp))
+default: $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
 
-LPATHS:=$(foreach lp, $(LPATH), -L$(lp))
+$(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*o 
+	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI) $(XL)
 
-default: $(OBJS)
-
-$(OBJS): $(BINPATH)%: $(EQPATH)%.h $(CPREQ) $(DH) $(UTILPATH)/gpuDetector.h Makefile
-	$(eval IFL:=$(shell echo $(@F) | tr '[:lower:]' '[:upper:]'))
-	$(NVCC) $(CPREQ) -o $@ $(IPATH) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS) $(XL) $(LPATHS) $(LIBS) 
+$(EQ_BIN)/%.o: $(EQPATH)/%.h $(CPREQ) $(DH)
+	$(eval IFL:=$(shell echo $(basename $(@F)) | tr '[:lower:]' '[:upper:]'))
+	$(NVCC) -c $(CPREQ) -o $@ $(IFLAGS) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS) 
 

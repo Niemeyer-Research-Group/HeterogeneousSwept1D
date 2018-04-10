@@ -4,6 +4,9 @@
 
 #include <numeric>
 #include "gpuDetector.h"
+#include "json/jsons.h"
+
+typedef Json::Value jsons;
 
 #define TAGS(x) x & 32767
 
@@ -17,7 +20,7 @@ MPI_Request req[2];
 MPI_Status stat[2];
 int lastproc, nprocs, ranks[3];
 
-struct lobalism {
+struct Globalism {
 // Topology
     int nGpu, nX;
     int xg, xcpu;
@@ -39,7 +42,7 @@ struct lobalism {
 
 std::string fname = "GranularTime.csv";
 
-globalism cGlob;
+Globalism cGlob;
 jsons inJ;
 jsons solution;
 
@@ -228,10 +231,10 @@ struct cudaTime
 
     void tinit(){ cudaEventRecord( start, 0); }
 
-    void tfinal() { 
+    void tfinal(){ 
         cudaEventRecord(stop, 0);
 	    cudaEventSynchronize(stop);
-	    cudaEventElapsedTime( &ti, start, stop);
+	    cudaEventElapsedTime(&ti, start, stop);
         times.push_back(ti); 
         }
 

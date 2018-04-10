@@ -17,7 +17,7 @@ MPI_Request req[2];
 MPI_Status stat[2];
 int lastproc, nprocs, ranks[3];
 
-struct globalism {
+struct lobalism {
 // Topology
     int nGpu, nX;
     int xg, xcpu;
@@ -34,7 +34,7 @@ struct globalism {
 
 // Iterator
     double tf, freq, dt, dx, lx;
-    bool bCond[2] = {true, true};
+    bool bCond[2] = {false, false};
 };
 
 std::string fname = "GranularTime.csv";
@@ -51,7 +51,6 @@ void makeMPI(int argc, char** argv)
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
-	cGlob.tpb = 128;
     ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
 }
@@ -72,6 +71,7 @@ void parseArgs(int argc, char *argv[])
 
 // gpuA = gBks/cBks
 
+
 void initArgs()
 {
 	cGlob.gpuA = inJ["gpuA"].asDouble();
@@ -84,17 +84,28 @@ void initArgs()
     }
     else
     {
-        cGlob.hasGpu = detector(ranker, sz);
+        cGlob.hasGpu = detector(ranker, sz, 0);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     }
 
+    // Wanted to standardize default values for these, but I realize that's not the point. Defaults are what the json is for.
     cGlob.lx = inJ["lx"].asDouble();
+    cGlob.ly = inJ["ly"].asDouble();
     cGlob.szState = sizeof(states);
-    cGlob.tpb = inJ["tpb"].asInt();
+    int tpbReq = inJ["tpb"].asInt();
+    cGlob.blockSide = std::sqrt(tpbReq);
+    cGlob.tpb = cGlob.blockSide * cGlob.blockSide;
 
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
+    cGlob.nNodes = sz * (cGlob.nGpu * cGlob.gpuA);
+    int xNodes = factor(cGlob.nNodes);
+    int yNodes = cGlob.nNodes/xLen;
+    cGlob.cBlocks = inJ["nX"].asInt()
+    int yBlocks = factor(cGlob.cBlocks);
+
+
 
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 

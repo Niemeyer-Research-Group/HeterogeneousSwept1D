@@ -5,6 +5,7 @@
 #include <numeric>
 #include "gpuDetector.h"
 #include "json/jsons.h"
+#include "mpi.h"
 
 typedef Json::Value jsons;
 
@@ -18,11 +19,23 @@ typedef Json::Value jsons;
 MPI_Datatype struct_type;
 MPI_Request req[2];
 MPI_Status stat[2];
-int lastproc, nprocs, ranks[3];
+int lastproc, nprocs, rank;
+
+struct Location{
+    int x, y;
+    Point(int x, int y): x(x), y(y) {}
+};
+
+struct Node : public Location
+{
+    Point dim;
+    int n, s, e, w;
+    Node(int x, int y) : Location(x, y) {}
+};
 
 struct Globalism {
 // Topology
-    int nGpu, nX;
+    int nGpu, nPts;
     int xg, xcpu;
     int xStart;
     int nWrite;
@@ -34,15 +47,15 @@ struct Globalism {
     int tpb, tpbp, base;
     int cBks, gBks;
     int ht, htm, htp;
+    int *dimNode, *dimBlocks;
 
 // Iterator
     double tf, freq, dt, dx, lx;
     bool bCond[2] = {false, false};
-};
+} cGlob;
 
 std::string fname = "GranularTime.csv";
 
-Globalism cGlob;
 jsons inJ;
 jsons solution;
 
@@ -51,11 +64,9 @@ void makeMPI(int argc, char** argv)
 {
     MPI_Init(&argc, &argv);
     mpi_type(&struct_type);
-	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
-    ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
-    ranks[2] = (ranks[1]+1) % nprocs;
 }
 
 // I think this needs a try except for string inputs.
@@ -72,13 +83,10 @@ void parseArgs(int argc, char *argv[])
     }
 }
 
-// gpuA = gBks/cBks
-
-
 void initArgs()
 {
 	cGlob.gpuA = inJ["gpuA"].asDouble();
-	int ranker = ranks[1];
+	int ranker = rank;
 	int sz = nprocs;
 	if (!cGlob.gpuA)
     {
@@ -89,7 +97,19 @@ void initArgs()
     {
         cGlob.hasGpu = detector(ranker, sz, 0);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+        sz--;
     }
+    int *tFactor;
+    tFactor = factor(cGlob.gpuA);
+    if (cGlob.gpuA > 2)
+    {
+        while (tFactor[0] == 1) // Means it's prime so it can't make a rectangle.
+        {
+            cGlob.gpuA++;
+            tFactor = factor(cGlob.gpuA);
+        }
+    }
+
 
     // Wanted to standardize default values for these, but I realize that's not the point. Defaults are what the json is for.
     cGlob.lx = inJ["lx"].asDouble();
@@ -102,12 +122,30 @@ void initArgs()
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
-    cGlob.nNodes = sz * (cGlob.nGpu * cGlob.gpuA);
-    int xNodes = factor(cGlob.nNodes);
-    int yNodes = cGlob.nNodes/xLen;
-    cGlob.cBlocks = inJ["nX"].asInt()
-    int yBlocks = factor(cGlob.cBlocks);
+    cGlob.nNodes = sz + (cGlob.nGpu * cGlob.gpuA);
+    cGlob.dimNode = factor(cGlob.nNodes);
+    
+    while (cGlob.dimNode[0] != 1)
+    {
+        if (!nGpu)
+        {
+            std::cout << "You provided a prime number of processes and no GPU capability. That's just silly and you absolutely cannot do it.  Retry!" << std::endl;
+        }
+        cGlob.gpuA++;
+        tFactor = factor(cGlob.gpuA);
+        while (tFactor[0] == 1) // Means it's prime so it can't make a rectangle.
+        {
+            cGlob.gpuA++;
+            tFactor = factor(cGlob.gpuA);
+        }
+        cGlob.nNodes = sz + (cGlob.nGpu * cGlob.gpuA);
+        cGlob.dimNode = factor(cGlob.nNodes);
+    }
 
+    cGlob.nPts = inJ["nPts"].asInt();
+    cGlob.dimBlocks = factor(cGlob.cBlocks);
+
+    // -- Here ish
 
 
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
@@ -164,11 +202,11 @@ void initArgs()
     // Swept Always Passes!
 
     // If BCTYPE == "Dirichlet"
-    if (ranks[1] == 0) cGlob.bCond[0] = false;
-    if (ranks[1] == lastproc) cGlob.bCond[1] = false;
+    if (rank == 0) cGlob.bCond[0] = false;
+    if (rank == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.
-    if (!ranks[1])  cout << ranks[1] <<  " - Initialized Arguments" << endl;
+    if (!rank)  cout << rank <<  " - Initialized Arguments" << endl;
 
 }
 
@@ -265,11 +303,11 @@ void atomicWrite(std::string st, std::vector<double> t)
 
     for (int k=0; k<nprocs; k++)
     {
-        if (ranks[1] == k)
+        if (rank == k)
         {
             tTemp = fopen(fname.c_str(), "a+");
             fseek(tTemp, 0, SEEK_END);
-            fprintf(tTemp, "\n%d,%s", ranks[1], st.c_str());
+            fprintf(tTemp, "\n%d,%s", rank, st.c_str());
             for (auto i = t.begin(); i != t.end(); ++i)
             {
                 fprintf(tTemp, ",%4f", *i);

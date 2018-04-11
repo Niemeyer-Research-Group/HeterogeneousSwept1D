@@ -11,8 +11,6 @@
 
 #define TAGS(x) x & 32767
 
-// 
-
 /*
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
 */

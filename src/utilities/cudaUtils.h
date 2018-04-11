@@ -9,6 +9,7 @@
 #include <mpi.h>
 #include <cmath>
 #include <vector>
+#include "myVectorTypes.h"
 
 void cudaRunCheck()
 {
@@ -18,17 +19,17 @@ void cudaRunCheck()
     printf("CUDA Driver Version / Runtime Version  --- %d.%d / %d.%d\n", dv/1000, (dv%100)/10, rv/1000, (rv%100)/10);
 }
 
-int factor(int n)
+int* factor(int n)
 {
     int sq = std::sqrt(n);
-    if ((sq * sq) == n) return sq;
-
-    int outf = 0;
-    for(int k=2; k<sq; k++)
+    int outf = n/sq;
+    while (outf * sq != n)
     {
-        if (!(n%k)) outf = k;
+        sq--;
+        outf=n/sq;
     }
-    return outf;
+    static int factors[2] = {sq, outf};
+    return factors;
 }
 
 struct cudaTime

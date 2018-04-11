@@ -59,6 +59,7 @@ int main(int argc, char *argv[])
 
     std::string pth = string(argv[3]);
 
+
     if (cGlob.hasGpu)
     {
         state = new states* [3];

@@ -28,8 +28,8 @@ EQOBJ:=$(addsuffix .o, $(EQI))
 
 default: $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
 
-$(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*o 
-	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI) $(XL)
+$(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*.o 
+	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI)
 
 $(EQ_BIN)/%.o: $(EQPATH)/%.h $(CPREQ) $(DH)
 	$(eval IFL:=$(shell echo $(basename $(@F)) | tr '[:lower:]' '[:upper:]'))

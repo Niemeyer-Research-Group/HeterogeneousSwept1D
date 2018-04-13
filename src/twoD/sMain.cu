@@ -3,12 +3,10 @@
 */
 #include <fstream>
 
-
 #include "heads.h"
 #include "decomp.h"
 #include "classic.h"
 #include "swept.h"
-
 
 /**
 ----------------------
@@ -39,6 +37,26 @@ int main(int argc, char *argv[])
     parseArgs(argc, argv);
     initArgs();
 
+    //OH LORD
+
+    int exSpace = (!scheme.compare("S") ? cGlob.ht : 2);
+    states *state;
+
+    int nodeAlloc = (cGlob.nodeSidex * cGlob.blockSide + exSpace) *  (cGlob.nodeSidey * cGlob.blockSide + exSpace);
+    int gpuAlloc = cGlob.nodeSidex * cGlob.blockSide * cGlob.gpux + exSpace) *  (cGlob.nodeSidey * cGlob.blockSide * cGlob.gpuy + exSpace);
+
+    if (cGlob.hasGpu)
+    {
+        cudaHostAlloc((void **) &state, gpuAlloc * cGlob.szState, cudaHostAllocDefault);
+    }
+    else
+    {
+        state = (states*) malloc(nodeAlloc * cGlob.szState);
+    }
+
+    // NOW WE MUST ASSIGN PARTICULAR AREAS FOR EACH NODE, INITIALIZE THE ARRAY AND THE TWO ARRAYS OF POINTERS TO PARTS OF THE ARRAY.
+
+
     int prevGpu=0; //Get the number of GPUs in front of the current process.
     int gpuPlaces[nprocs]; //Array of 1 or 0 for number of GPUs assigned to process
 
@@ -52,40 +70,7 @@ int main(int argc, char *argv[])
     cGlob.xStart = cGlob.xcpu * ranks[1] + cGlob.xg * prevGpu;
     states **state;
 
-    int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
-    int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
-    int nrows = (cGlob.hasGpu) ? 3 : 1;
-    int xalloc = xc + exSpace;
-
     std::string pth = string(argv[3]);
-
-    if (cGlob.hasGpu)
-    {
-        state = new states* [3];
-        cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
-        cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
-        cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
-
-        cout << "Rank: " << ranks[1] << " has a GPU" << endl;
-        int ii[3] = {xc, cGlob.xg, xc};
-        int xi;
-        for (int i=0; i<3; i++)
-        {
-            xi = cGlob.xStart-1;
-            for (int n=0; n<i; n++) xi += ii[n];
-            for (int k=0; k<(ii[i]+2); k++)  initialState(inJ, state[i], k, xi);
-        }
-
-        cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
-
-//        cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
-    }
-    else
-    {
-        state = new states*[1];
-        state[0] = new states[xalloc * cGlob.szState];
-        for (int k=0; k<(xc+2); k++)  initialState(inJ, state[0], k, cGlob.xStart-1);
-    }
 
     writeOut(state, 0.0);
 
@@ -168,25 +153,16 @@ int main(int argc, char *argv[])
 
     if (cGlob.hasGpu)
     {
-        for (int k=0; k<3; k++) cudaFreeHost(state[k]);
+        cudaFreeHost(state);
         cudaDeviceSynchronize();
         cudaDeviceReset();
     }
     else
     {
-        delete[] state[0];
+        free(state);
     }
-    delete[] state;
 
     endMPI();
     return 0;
 }
 
-//inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false)
-//{
-//   if (code != cudaSuccess)
-//   {
-//      fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
-//      if (abort) exit(code);
-//   }
-//}

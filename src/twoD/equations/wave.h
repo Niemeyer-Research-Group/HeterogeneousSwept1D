@@ -4,12 +4,10 @@
 
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include <cuda_runtime_api.h>
 #include <device_functions.h>
 #include <mpi.h>
 
 #include <iostream>
-#include <fstream>
 #include <ostream>
 #include <istream>
 
@@ -18,7 +16,6 @@
 #include <cmath>
 #include <string>
 #include <vector>
-#include <algorithm>
 
 // We're just going to assume doubles
 #define REAL            double
@@ -68,10 +65,6 @@ std::string outVars[NVARS] = {"Velocity"}; //---------------//
 	============================================================
 */
 
-struct gridsteps{
-	double x, y, t;
-};
-
 void mpi_type(MPI_Datatype *dtype)
 {
     MPI_Type_contiguous(2, MPI_R, dtype);
@@ -81,39 +74,44 @@ void mpi_type(MPI_Datatype *dtype)
 // This struct is going in constant memory.
 struct constWave
 {
-	gridsteps gs;
-	uint nx, ny;
+	int nx, ny;
+	int blockSide, base;
 	double cx, cy, homecoeff;
 
-	void init(gridsteps g, uint nx, uint ny, double c)
+	void init(jsons inJ)
 	{
-		gs = g;
-		ny = ny;
-		nx = nx;
-		cx = c*gs.t/gs.x;
+		int dx = inJ["dx"];
+		int dy = inJ["dy"];
+		int dt = inJ["dt"];
+		int cfl = inJ["cfl"]; //Some way to give c and get cfl
+		ny = inJ["nY"];
+		nx = inJ["nX"];
+		blockSide = inJ['blockSide'];
+		blockBase = blockSide+2; 
+
+		// CFL given should be max cfl for all dimensions.
+		c = cfl * std::min(dx,dy)/dt;
+
+		cx = c*dt/dx;
 		cx *= cx;
-		cy = c*gs.t/gs.y;
+		cy = c*dt/dy;
 		cy *= cy;
 		homecoeff = 2.0-2.0*(cx+cy);
 	}
+
+	void initState(states *state, const int x, const int y)	
+	{
+		for (int k=0; k<2; k++) 
+			state->u[k] = std::exp(-50.0 * 
+			std::sqrt((x-nx*0.5) * (x-nx*0.5) +
+			(y-ny*0.5) * (y-ny*0.5)));
+	}
+
+	double printout(states *state) return state->u[0];
 };
 
 constWave HCONST;
 __constant__ constWave DCONST;
-
-void initState(states *state, const int x, const int y)
-{
-	static int nx = HCONST.nx;
-	static int ny = HCONST.ny;
-	for (int k=0; k<2; k++) state->u[k] = std::exp(-50.0 * 
-			std::sqrt((x-nx*0.5) * (x-nx*0.5) + 
-			(y-ny*0.5) * (y-ny*0.5)));
-}
-
-REAL printout(states *state)
-{
-	return state->u[0];
-}
 
 #ifdef __CUDA_ARCH__
     #define A			DCONST
@@ -124,7 +122,7 @@ REAL printout(states *state)
 __host__ __device__
 void stepUpdate(states *state, const int idx,  const int idy, const int tstep)
 {
-	const int ix = INDEXER(idx, idy, A.nx);
+	const int ix = INDEXER(idx, idy, A.blockBase);
 	const int itx = tstep % NSTEPS; //Modula is output place
 	const int otx = (itx^1); //Opposite in input place.
 

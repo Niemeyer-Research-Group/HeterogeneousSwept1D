@@ -1,11 +1,11 @@
 #ESSENTIAL PATHS.  Sure most are probably on your system, but let's make it official
 
-PREFIX          =$(HOME)/Documents/1_SweptRuleResearch/hSweep
+PREFIX          =$(dir $(shell pwd))
 NVCC            =$(shell which nvcc)
-MPICXX          =$(shell which mpicxx)
-SOURCEPATH      =$(PREFIX)/src
-CC_ICUDAPATH    =/usr/local/cuda/include
-CC_IMPIPATH     =/usr/local/openmpi/include
+MPICXX          =$(shell which mpiexec)
+SOURCEPATH      =$(PREFIX)src
+CC_ICUDAPATH    =
+CC_IMPIPATH     =
 CC_LMPIPATH     =
 CC_LCUDAPATH    =
 CUDAFLAGS       =-gencode arch=compute_35,code=sm_35 -restrict  --ptxas-options=-v

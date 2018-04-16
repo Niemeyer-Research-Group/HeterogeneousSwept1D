@@ -18,6 +18,6 @@ temp*
 src/*/trslt/*.json
 src/*/rslts/*.json
 src/*/utilities/js*
-*/conf
+*/config.mk
 nohup*
 *~*

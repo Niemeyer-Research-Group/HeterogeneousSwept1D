@@ -22,15 +22,38 @@ MPI_Status stat[2];
 int lastproc, nprocs, rank;
 
 struct Location{
-    int x, y;
-    Point(int x, int y): x(x), y(y) {}
+    const int x, y;
+    Location(int xy, int xgrid, int ygrid): x(xy % xgrid), y(xy/ygrid)) {};
+    Location(int x, int y): x(x), y(y) {};
 };
 
-struct Node : public Location
+struct Neighbor: public Location
 {
-    Point dim;
-    int n, s, e, w;
-    Node(int x, int y) : Location(x, y) {}
+    int owner;
+    states *sender, *receiver;
+
+
+}
+
+// DO WE REALLY WANNA LOAD THIS UP AND THEN PASS IT TO THE KERNEL?
+struct Region: public Location
+{
+    int owner;
+    bool gpu;
+    Location coordinate;
+    jsons solution; 
+    Neighbors n, s, e, w;
+    states *state[]; // pts in region
+    states **stateRows[]; // rows in region
+    
+    Region() {};
+    Region(int x, int y, bool gpu) : gpu(gpu) Location(x, y) 
+    {
+        if (gpu){cudaHostAlloc();}
+        else {malloc};
+    };
+    ~Region()
+    void solutionOutput();
 };
 
 struct Globalism {
@@ -40,8 +63,8 @@ struct Globalism {
 
 // Geometry
 	int szState;
-    int blockPts, blockSide, blockBase;
-    int nodeBlocks, nodeSidex, nodeSidey;
+    int blockPts, xBlock, blockBase;
+    int nRegion, xRegion, yRegion;
     int gridNodes, gridSidex, gridSidey;
     int blocksx, blocksy;
     int gpux, gpuy;
@@ -56,9 +79,8 @@ struct Globalism {
 std::string fname = "GranularTime.csv";
 
 jsons inJ;
-jsons solution;
 
-//Always prepared for periodic boundary conditions.
+
 void makeMPI(int argc, char** argv)
 {
     MPI_Init(&argc, &argv);
@@ -82,11 +104,64 @@ void parseArgs(int argc, char *argv[])
     }
 }
 
+void setRegion(int affinity, int hasGpu, int xreg, int yreg, Region **regionals)
+{
+    int nRegions = 1 + hasGpu*(affinity - 1);
+    regionals = malloc(nRegions * sizeof(Region)); 
+    int regionMap[nProcs];
+    int MPI_Allgather(&nRegions, 1, MPI_INT, &regionMap[0], 1, MPI_INT, MPI_COMM_WORLD);
+    int tregion = 0;
+    int gridlook[yreg][xreg];
+    int k, i;
+
+    for (k = 0; k<nProcs; k++)
+    {
+        for (i = 0; i<regionMap[k]; i++)
+        {
+            Location loca(treq, xreg, yreg); // Muy loco
+            gridlook[loca.y][loca.x] = k;
+            tregion++;
+        }
+    }
+
+    int cnt = 0;
+    for (k = 0; k<yreg; k++)
+    {
+        for (i = 0; i<xreg; i++)
+        {
+            if (gridlook[k][i] == rank)
+            {
+                regionals[cnt] = new *Region(k, i, OTHERSHIT);
+            }
+        }
+    }
+}
+
 void initArgs()
 {
     int *dimFinder;
 
-	cGlob.gpuA = inJ["gpuA"].asDouble();
+    //VALUES THAT NEED NO INTROSPECTION
+
+    cGlob.dt = inJ["dt"].asDouble();
+    cGlob.tf = inJ["tf"].asDouble();
+    cGlob.freq = inJ["freq"].asDouble();
+    cGlob.lx = inJ["lx"].asDouble();
+    cGlob.ly = inJ["ly"].asDouble();
+    cGlob.szState = sizeof(states);
+    if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
+
+    // IF TPB IS NOT SQUARE AND DIVISIBLE BY 32 PICK CLOSEST VALUE THAT IS.
+    int tpbReq = inJ["tpb"].asInt();
+    cGlob.blockSide = std::sqrt(tpbReq);
+    if (cGlob.blockSide % 8) cGlob.blockSide = 8 * (1 + (cGlob.blockSide/8)); 
+    cGlob.blockPts = cGlob.blockSide * cGlob.blockSide;
+    inJ["blockSide"] = cGlob.blockSide;
+    cGlob.blockBase = cGlob.blockSide+2;
+    inJ["blockBase"] = cGlob.blockBase;
+
+    // FIND NUMBER OF GPUS AVAILABLE.
+	cGlob.gpuA = inJ["gpuA"].asDouble(); // AFFINITY
 	int ranker = rank;
 	int sz = nprocs;
 
@@ -99,79 +174,45 @@ void initArgs()
     {
         cGlob.hasGpu = detector(ranker, sz, 0);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-        sz--;
+        sz -= cGlob.nGpu;
     }
-
-    int *tFactor;
-    tFactor = factor(cGlob.gpuA);
-    if (cGlob.gpuA > 2)
-    {
-        while (tFactor[0] == 1) // Means it's prime so it can't make a rectangle.
-        {
-            cGlob.gpuA++;
-            tFactor = factor(cGlob.gpuA);
-        }
-    }
-    cGlob.gpux = tFactor[0];
-    cGlob.gpuy = tFactor[1];    
-    // Wanted to standardize default values for these, but I realize that's not the point. Defaults are what the json is for.
-    cGlob.lx = inJ["lx"].asDouble();
-    cGlob.ly = inJ["ly"].asDouble();
-    cGlob.szState = sizeof(states);
-    int tpbReq = inJ["tpb"].asInt();
-    cGlob.blockSide = std::sqrt(tpbReq);
-    cGlob.blockPts = cGlob.blockSide * cGlob.blockSide;
-    inJ["blockSide"] = cGlob.blockSide;
-    cGlob.blockBase = cGlob.blockSide+2;
-    inJ["blockBase"] = cGlob.blockBase;
-
-    cGlob.dt = inJ["dt"].asDouble();
-    cGlob.tf = inJ["tf"].asDouble();
-    cGlob.freq = inJ["freq"].asDouble();
-    if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
     cGlob.gridNodes = sz + (cGlob.nGpu * cGlob.gpuA);
     dimFinder = factor(cGlob.gridNodes);
     
-    while (dimFinder[0] != 1)
+    // WE JUST WANT THE DIMENSIONS TO BE RELATIVELY SIMILAR.
+    while (dimFinder[1]/dimFinder[0] > 2)
     {
         if (!cGlob.nGpu)
         {
-            std::cout << "You provided a prime number of processes and no GPU capability. That's just silly and you absolutely cannot do it.  Retry!" << std::endl;
+            std::cout << "You provided a prime number of processes and no GPU capability. That's just silly and you absolutely cannot do it because we must be able to form a rectangle from the number of processes on each device.  Retry!" << std::endl;
+            exit();
         }
         cGlob.gpuA++;
-        tFactor = factor(cGlob.gpuA);
-        while (tFactor[0] == 1) // Means it's prime so it can't make a rectangle.
-        {
-            cGlob.gpuA++;
-            tFactor = factor(cGlob.gpuA);
-        }
         cGlob.gridNodes = sz + (cGlob.nGpu * cGlob.gpuA);
         dimFinder = factor(cGlob.gridNodes);
     }
-
-    cGlob.gridSidex = dimFinder[0];
+    cGlob.gridSidex = dimFinder[0]; 
     cGlob.gridSidey = dimFinder[1];
 
-    // Something that makes this work if you give it nodeBlocks rather than nPts.
+    // Something that makes this work if you give it nRegion rather than nPts.
     cGlob.nPts = inJ["nPts"].asInt();
-    cGlob.nodeBlocks = cGlob.nPts/(cGlob.blockPts * cGlob.gridNodes);
-    dimFinder = factor(cGlob.nodeBlocks);
+    cGlob.nRegion = cGlob.nPts/(cGlob.blockPts * cGlob.gridNodes);
+    dimFinder = factor(cGlob.nRegion);
 
-    while (cGlob.dimFinder[0] != 1)
+    while (dimFinder[1]/dimFinder[0] > 2)
     {
-        cGlob.nodeBlocks++;
-        dimFinder = factor(cGlob.nodeBlocks);
+        cGlob.nRegion++;
+        dimFinder = factor(cGlob.nRegion);
     }
-    cGlob.nPts = cGlob.blockPts * cGlob.nodeBlocks * cGlob.gridNodes;
-    cGlob.nodeSidex = dimFinder[1];
-    cGlob.nodeSidey = dimFinder[0];
-    cGlob.blocksx = cGlob.nodeSidex * cGlob.gridSidex;
-    cGlob.blocksy = cGlob.nodeSidey * cGlob.gridSidey;
+
+    cGlob.nPts = cGlob.blockPts * cGlob.nRegion * cGlob.gridNodes;
+    cGlob.xRegion = dimFinder[1];
+    cGlob.yRegion = dimFinder[0];
+    cGlob.blocksx = cGlob.xRegion * cGlob.gridSidex;
+    cGlob.blocksy = cGlob.yRegion * cGlob.gridSidey;
     cGlob.nx = cGlob.blocksx * cGlob.blockSide;
     cGlob.ny = cGlob.blocksy * cGlob.blockSide;
-
-    // -- Here ish
 
     cGlob.ht = cGlob.blockSide/2;
     cGlob.htm = cGlob.ht-1;
@@ -191,7 +232,7 @@ void initArgs()
 }
 
 // I THINK THIS SHOULD BE IN THE NODE STRUCT
-void solutionOutput(states *outState, double tstamp, const int idx, const int idxy)
+void solutionOutput(states *outState, double tstamp, const int idx, const int idy)
 {
     #ifdef NOS
         return; // Prevents write out in performance experiments so they don't take all day.

@@ -37,6 +37,9 @@ int main(int argc, char *argv[])
     parseArgs(argc, argv);
     initArgs();
 
+    Region **regions;
+    setRegion(cGlob.gpuA; );
+
     //OH LORD
 
     int exSpace = (!scheme.compare("S") ? cGlob.ht : 2);
@@ -55,17 +58,6 @@ int main(int argc, char *argv[])
     }
 
     // NOW WE MUST ASSIGN PARTICULAR AREAS FOR EACH NODE, INITIALIZE THE ARRAY AND THE TWO ARRAYS OF POINTERS TO PARTS OF THE ARRAY.
-
-
-    int prevGpu=0; //Get the number of GPUs in front of the current process.
-    int gpuPlaces[nprocs]; //Array of 1 or 0 for number of GPUs assigned to process
-
-    //If there are no GPUs or if the GPU Affinity is 0, this block is unnecessary.
-    if (cGlob.nGpu > 0)
-    {
-        MPI_Allgather(&cGlob.hasGpu, 1, MPI_INT, &gpuPlaces[0], 1, MPI_INT, MPI_COMM_WORLD);
-        for (int k=0; k<ranks[1]; k++) prevGpu+=gpuPlaces[k];
-    }
 
     cGlob.xStart = cGlob.xcpu * ranks[1] + cGlob.xg * prevGpu;
     states **state;

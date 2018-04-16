@@ -75,7 +75,7 @@ void mpi_type(MPI_Datatype *dtype)
 struct constWave
 {
 	int nx, ny;
-	int blockSide, base;
+	int blockSide, BlockBase;
 	double cx, cy, homecoeff;
 
 	void init(jsons inJ)
@@ -97,15 +97,14 @@ struct constWave
 		cy = c*dt/dy;
 		cy *= cy;
 		homecoeff = 2.0-2.0*(cx+cy);
-	}
+	};
 
 	void initState(states *state, const int x, const int y)	
 	{
-		for (int k=0; k<2; k++) 
-			state->u[k] = std::exp(-50.0 * 
-			std::sqrt((x-nx*0.5) * (x-nx*0.5) +
-			(y-ny*0.5) * (y-ny*0.5)));
-	}
+		double fillVal = std::exp(-50.0 * std::sqrt((x-nx*0.5) * (x-nx*0.5) + (y-ny*0.5) * (y-ny*0.5)));
+
+		for (int k=0; k<2; k++) state->u[k] = fillVal;
+	};
 
 	double printout(states *state) return state->u[0];
 };
@@ -122,9 +121,8 @@ __constant__ constWave DCONST;
 __host__ __device__
 void stepUpdate(states *state, const int idx,  const int idy, const int tstep)
 {
-	const int ix = INDEXER(idx, idy, A.blockBase);
-	const int itx = tstep % NSTEPS; //Modula is output place
-	const int otx = (itx^1); //Opposite in input place.
+	const int otx = MODULA(tstep); //Modula is output place
+	const int itx = (otx^1); //Opposite in input place.
 
-	state[ix].u[otx] =  A.homecoeff * state[ix].u[itx] - state[ix].u[otx] + A.cx * (state[ix+1].u[itx] + state[ix-1].u[itx]) + A.cy * (state[ix+A.nx].u[itx] + state[ix-A.nx].u[itx]);
+	state[idy][idx].u[otx] =  A.homecoeff * state[idy][idx].u[itx] - state[idy][idx].u[otx] + A.cx * (state[idy][idx+1].u[itx] + state[idy][idx-1].u[itx]) + A.cy * (state[idy+1][idx].u[itx] + state[idy-1][idx].u[itx]);
 }

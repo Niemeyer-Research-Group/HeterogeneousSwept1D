@@ -4,9 +4,14 @@
 
 #ifndef SWEEPUTIL_H
 #define  SWEEPUTIL_H
+#include <stdio.h>
+#include <iostream>
+#include <string>
+
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <mpi.h>
+
 #include <cmath>
 #include <vector>
 #include "myVectorTypes.h"

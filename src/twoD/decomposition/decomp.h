@@ -21,33 +21,25 @@ MPI_Request req[2];
 MPI_Status stat[2];
 int lastproc, nprocs, rank;
 
-struct Location{
-    const int x, y;
-    Location(int xy, int xgrid, int ygrid): x(xy % xgrid), y(xy/ygrid)) {};
-    Location(int x, int y): x(x), y(y) {};
-};
 
-struct Neighbor: public Location
+struct Address
 {
-    int owner;
-    states *sender, *receiver;
-
-
+    const int owner, localIdx, globalx, globaly;
 }
 
 // DO WE REALLY WANNA LOAD THIS UP AND THEN PASS IT TO THE KERNEL?
-struct Region: public Location
+struct Region: 
 {
-    int owner;
-    bool gpu;
-    Location coordinate;
+    const Address self;
+    Address neighbors[4];
+    const bool gpu;
     jsons solution; 
-    Neighbors n, s, e, w;
+
     states *state[]; // pts in region
     states **stateRows[]; // rows in region
     
     Region() {};
-    Region(int x, int y, bool gpu) : gpu(gpu) Location(x, y) 
+    Region(Address stencil[5], bool hasGpu) : self(stencil[0])), gpu(hasGpu)
     {
         if (gpu){cudaHostAlloc();}
         else {malloc};
@@ -61,15 +53,18 @@ struct Globalism {
     int nGpu, nPts, nWrite, hasGpu;
     double gpuA;
 
-// Geometry
-	int szState;
-    int blockPts, xBlock, blockBase;
-    int nRegion, xRegion, yRegion;
-    int gridNodes, gridSidex, gridSidey;
-    int blocksx, blocksy;
-    int gpux, gpuy;
-    int nx, ny;
+// Geometry-No second word is in overall grid.
+    //How Many Regions Per
+    int nRegions, xRegions, yRegions;
+    //How many Blocks Per
+    int nBlocks, xBlocks, yBlocks;
+    int nBlocksRegion, xBlocksRegion, yBlocksRegion; 
+    // How many points per
+    int nPoints, xPoints, yPoints;
+    int nPointsRegion, xPointsRegion, yPointsRegion;
+    int nPointsBlock, xPointsBlock;
     int ht, htm, htp;
+    int szState;
 
 // Iterator
     double tf, freq, dt, dx, dy, lx, ly;
@@ -79,7 +74,6 @@ struct Globalism {
 std::string fname = "GranularTime.csv";
 
 jsons inJ;
-
 
 void makeMPI(int argc, char** argv)
 {
@@ -104,34 +98,44 @@ void parseArgs(int argc, char *argv[])
     }
 }
 
-void setRegion(int affinity, int hasGpu, int xreg, int yreg, Region **regionals)
+void setRegion(Region **regionals)
 {
-    int nRegions = 1 + hasGpu*(affinity - 1);
-    regionals = malloc(nRegions * sizeof(Region)); 
+    int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
+    regionals = new Region* [localRegions];
     int regionMap[nProcs];
-    int MPI_Allgather(&nRegions, 1, MPI_INT, &regionMap[0], 1, MPI_INT, MPI_COMM_WORLD);
+    MPI_Allgather(&localRegions, 1, MPI_INT, &regionMap[0], 1, MPI_INT, MPI_COMM_WORLD);
     int tregion = 0;
-    int gridlook[yreg][xreg];
+    Address gridLook[cGlob.yRegions][cGlob.xRegions];
     int k, i;
+    int xLoc, yLoc;
 
     for (k = 0; k<nProcs; k++)
     {
         for (i = 0; i<regionMap[k]; i++)
         {
-            Location loca(treq, xreg, yreg); // Muy loco
-            gridlook[loca.y][loca.x] = k;
+            xLoc = tregion%cGlob.xRegions;
+            yLoc = tregion/cGlob.xRegions;
+
+            gridLook[yLoc][xLoc] = {k, tregion, xLoc, yLoc};
             tregion++;
         }
     }
 
-    int cnt = 0;
-    for (k = 0; k<yreg; k++)
+    Address addr[5];
+    for (k = 0; k<cGlob.yRegions; k++)
     {
-        for (i = 0; i<xreg; i++)
+        for (i = 0; i<cGlob.xRegions; i++)
         {
-            if (gridlook[k][i] == rank)
+            if (gridLook[k][i].owner == rank)
             {
-                regionals[cnt] = new *Region(k, i, OTHERSHIT);
+                addr = {gridLook[k][i],
+                        gridLook[(k-1)%cGlob.yRegions][i],
+                        gridLook[k][(i-1)%cGlob.xRegions],
+                        gridLook[(k+1)%cGlob.yRegions][i],
+                        gridLook[k][(i-1)%cGlob.xRegions]
+                }
+
+                regionals[cnt] = new *Region(addr, cGlob.hasGpu);
             }
         }
     }
@@ -153,12 +157,10 @@ void initArgs()
 
     // IF TPB IS NOT SQUARE AND DIVISIBLE BY 32 PICK CLOSEST VALUE THAT IS.
     int tpbReq = inJ["tpb"].asInt();
-    cGlob.blockSide = std::sqrt(tpbReq);
-    if (cGlob.blockSide % 8) cGlob.blockSide = 8 * (1 + (cGlob.blockSide/8)); 
-    cGlob.blockPts = cGlob.blockSide * cGlob.blockSide;
-    inJ["blockSide"] = cGlob.blockSide;
-    cGlob.blockBase = cGlob.blockSide+2;
-    inJ["blockBase"] = cGlob.blockBase;
+    cGlob.xPointsBlock = std::sqrt(tpbReq);
+    if (cGlob.xPointsBlock % 8) cGlob.xPointsBlock = 8 * (1 + (cGlob.xPointsBlock/8)); 
+    cGlob.nPointsBlock = cGlob.xPointsBlock * cGlob.xPointsBlock;
+    inJ["blockSide"] = cGlob.xPointsBlock;
 
     // FIND NUMBER OF GPUS AVAILABLE.
 	cGlob.gpuA = inJ["gpuA"].asDouble(); // AFFINITY
@@ -177,8 +179,8 @@ void initArgs()
         sz -= cGlob.nGpu;
     }
 
-    cGlob.gridNodes = sz + (cGlob.nGpu * cGlob.gpuA);
-    dimFinder = factor(cGlob.gridNodes);
+    cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
+    dimFinder = factor(cGlob.nRegions);
     
     // WE JUST WANT THE DIMENSIONS TO BE RELATIVELY SIMILAR.
     while (dimFinder[1]/dimFinder[0] > 2)
@@ -188,33 +190,34 @@ void initArgs()
             std::cout << "You provided a prime number of processes and no GPU capability. That's just silly and you absolutely cannot do it because we must be able to form a rectangle from the number of processes on each device.  Retry!" << std::endl;
             exit();
         }
-        cGlob.gpuA++;
-        cGlob.gridNodes = sz + (cGlob.nGpu * cGlob.gpuA);
-        dimFinder = factor(cGlob.gridNodes);
-    }
-    cGlob.gridSidex = dimFinder[0]; 
-    cGlob.gridSidey = dimFinder[1];
 
-    // Something that makes this work if you give it nRegion rather than nPts.
-    cGlob.nPts = inJ["nPts"].asInt();
-    cGlob.nRegion = cGlob.nPts/(cGlob.blockPts * cGlob.gridNodes);
-    dimFinder = factor(cGlob.nRegion);
+        cGlob.gpuA++;
+        cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
+        dimFinder = factor(cGlob.nRegions);
+    }
+    cGlob.xRegions = dimFinder[0]; 
+    cGlob.yRegions = dimFinder[1];
+
+    // Something that makes this work if you give it nRegions rather than nPts.
+    cGlob.nPoints = inJ["nPts"].asInt();
+    cGlob.nBlocksRegion = cGlob.nPoints/(cGlob.nPointsBlock * cGlob.nRegions);
+    dimFinder = factor(cGlob.nBlocksRegion);
 
     while (dimFinder[1]/dimFinder[0] > 2)
     {
-        cGlob.nRegion++;
-        dimFinder = factor(cGlob.nRegion);
+        cGlob.nBlocksRegion++;
+        dimFinder = factor(cGlob.nBlocksRegion);
     }
 
-    cGlob.nPts = cGlob.blockPts * cGlob.nRegion * cGlob.gridNodes;
-    cGlob.xRegion = dimFinder[1];
-    cGlob.yRegion = dimFinder[0];
-    cGlob.blocksx = cGlob.xRegion * cGlob.gridSidex;
-    cGlob.blocksy = cGlob.yRegion * cGlob.gridSidey;
-    cGlob.nx = cGlob.blocksx * cGlob.blockSide;
-    cGlob.ny = cGlob.blocksy * cGlob.blockSide;
+    cGlob.nPoints = cGlob.nPointsBlock * cGlob.nRegions * cGlob.nBlocksRegion;
+    cGlob.xBlocksRegion = dimFinder[1];
+    cGlob.yBlocksRegion = dimFinder[0];
+    cGlob.xPointsRegion = cGlob.xPointsBlock * cGlob.xBlocksRegion;
+    cGlob.yPointsRegion = cGlob.xPointsBlock * cGlob.yBlocksRegion;
+    cGlob.xPoints = cGlob.xPointsRegion * cGlob.xRegions;
+    cGlob.yPoints = cGlob.yPointsRegion * cGlob.yRegions;
 
-    cGlob.ht = cGlob.blockSide/2;
+    cGlob.ht = (cGlob.xPointsBlock-2)/2;
     cGlob.htm = cGlob.ht-1;
     cGlob.htp = cGlob.ht+1;
     // Derived quantities

@@ -27,19 +27,48 @@
 
 using namespace std;
 
+struct Classic{
 
-
-__global__ void classicStep(states *state, const int ts)
-{
-    int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
-    stepUpdate(state, gid, ts);
+    Classic(){};
 }
 
-void classicStepCPU(states *state, const int numx, const int tstep)
+struct Passer{
+    double *north, *south, *east, *west; // Buffers for pass
+    int nt, st, et, wt; // ids for procs to pass TO
+    int nf, sf, ef, wf; // ids to receive FROM
+
+    Passer(int pid, int sz){
+        // Malloc and get ids.
+    };
+
+    ~Passer(){};
+}
+
+__global__ void classicStep(states **state, states **outMail, const int ts)
 {
-    for (int k=1; k<numx; k++)
+    const int gidx = blockDim.x * blockIdx.x + threadIdx.x + 1; 
+    const int gidy = blockDim.y * blockIdx.y + threadIdx.y + 1; 
+    stepUpdate(state, gidx, gidy, ts);
+    __syncthreads();
+    if (gidy == 1) outMail[0][gidx-1] = state[gidy][gidx]; // SOUTH
+    if (gidx == 1) outMail[1][gidy-1] = state[gidy][gidx]; // WEST
+    if (gidy == (gridDim.y * blockDim.y)) outMail[2][gidx-1] = state[gidy][gidx]; //NORTH
+    if (gidx == (gridDim.x * blockDim.x)) outMail[3][gidy-1] = state[gidy][gidx]; //EAST
+}
+
+void classicStepCPU(states **state, states **outMail, const int ts)
+{
+    for (int k=1; k<=cGlob.yPointsRegion; k++)
     {
-        stepUpdate(state, k, tstep);
+        for (int i=1; i<=cGlob.xPointsRegion; i++)
+        {
+            stepUpdate(state, i, k, ts);
+
+            if (k == 1) outMail[0][i-1] = state[k][i];
+            if (i == 1) outMail[1][k-1] = state[k][i];
+            if (k == cGlob.yPointsRegion) outMail[2][i-1] = state[k][i];
+            if (i == cGlob.xPointsRegion) outMail[3][k-1] = state[k][i];
+        }
     }
 }
 
@@ -58,17 +87,13 @@ void classicPass(states *putSt, states *getSt, int tstep)
 
 }
 
-    int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
-    int rnk;
+cudaStream_t streams[cGlob.gpuA];
+for (int i = 0; i < cGlob.gpuA; i++) cudaStreamCreate(&streams[i]);
 
-    MPI_Isend(putSt, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
-    MPI_Isend(putSt + 1, 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
-    MPI_Recv(getSt + 1, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &stat[0]);
-    MPI_Recv(getSt, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
-
-    MPI_Wait(&req[0], &stat[0]);
-    MPI_Wait(&req[1], &stat[1]);
-
+// Proto Caller
+for (int i = 0; i < cGlob.gpuA; i++)
+{
+    classicStep <<< blockGrid, threadGrid, 0, streams[i] >>> (Regions stateRow, Regions passer, tstep);
 }
 
 // Classic Discretization wrapper.

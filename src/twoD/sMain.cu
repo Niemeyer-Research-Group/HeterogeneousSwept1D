@@ -40,16 +40,7 @@ int main(int argc, char *argv[])
     Region **regions;
     setRegion(regions);
 
-    //OH LORD
-
-    // NOW WE MUST ASSIGN PARTICULAR AREAS FOR EACH NODE, INITIALIZE THE ARRAY AND THE TWO ARRAYS OF POINTERS TO PARTS OF THE ARRAY.
-
-    cGlob.xStart = cGlob.xcpu * ranks[1] + cGlob.xg * prevGpu;
-    states **state;
-
     std::string pth = string(argv[3]);
-
-    writeOut(state, 0.0);
 
     // If you have selected scheme I, it will only initialize and output the initial values.
 

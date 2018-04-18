@@ -21,8 +21,7 @@ sys.path.append(pypath)
 import result_help as rh
 from main_help import *
 
-
-prob=["Euler", "Heat", "Const"]
+prob=["Euler", "Heat"]
 
 def justPlot(eq, shw=True, save=False):
     kj = prob[eq]

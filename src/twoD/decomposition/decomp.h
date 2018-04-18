@@ -15,6 +15,26 @@ typedef Json::Value jsons;
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
 */
 
+__global__ 
+void mailboxes(states **row, states *mail, int xLen, int yLen, int nrows)
+{
+    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
+    if (gid>=nrows) return;
+
+    int idx = (gid/2) * xLen + ((gid/2) + (gid%2)) * yLen; 
+    row[gid] = (states *)(mail + idx);
+}
+
+__global__ 
+void rowcast(states **row, states *state, int xLen, int nrows)
+{
+    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
+    if (gid>=nrows) return;
+
+    int idx = gid * xLen;
+    row[gid] = (states *)(state + idx);
+}
+
 // MPI process properties
 MPI_Datatype struct_type;
 int lastproc, nprocs, rank;
@@ -44,45 +64,45 @@ struct Globalism {
 
 struct Address
 {
-    int owner, localIdx, globalx, globaly;
+    int owner, gpu, localIdx, globalx, globaly;
 };
 
-void gtog(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
+void interProc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
 {
 
 }
 
-void ctog(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
+void intraProc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
 {
 
 }
 
-void ctoc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
-{
+typedef void (*mailCarrier) (Address *, Address *, states *, states *);
 
+struct Neighbor
+{
+    const Address id;
+    mailCarrier passer;
+    Neighbor(Address addr): id(addr)
+    {
+        passer = (rank == id.owner) ? interProc : intraProc;
+    } 
 }
 
-void gtoc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
-{
-
-}
-
-typedef void (*mailCarrier) (Address *, Address *, states *, states *)
 struct Region
 {    
     const Address self;
-    const std::vector<Address> neighbors;
-    const bool gpu;
+    const std::vector<Neighbor> neighbors;
     int xsw, ysw; //Needs the size information.
-    int regionAlloc;
+    int regionAlloc, rows, cols;
     std::string xstr, ystr, tstr, scheme;
     
     MPI_Request req[4];
     MPI_Status stat[4];
     jsons solution; 
 
-    states *state; // pts in region
-    states **stateRows; // rows in region
+    states *state, flatIn, flatOut, dState, dFlatIn, dFlatOut; // pts in region
+    states **stateRows, inbox, outbox, dStateRows, dInbox, dOutbox; // rows in region
     
     Region(Address stencil[5]) 
     :self(stencil[0])), neighbors(stencil+1, stencil+4), gpu(cGlob.hasGpu) 
@@ -93,16 +113,49 @@ struct Region
     }
     ~Region()
     {
+        cudaFree(dState);
+        cudaFree(dStateRows);
+        cudaFree(dFlatOut);
+        cudaFree(dFlatIn);
+        cudaFree(dInbox);
+        cudaFree(dOutbox);
+
         cudaFreeHost(state);
+    }
+
+    void gpuInit()
+    {
+        int mailSize = 2*(cGlob.xPointsRegion + cGlob.yPointsRegion)
+        cudaMalloc((void**) &dInbox, sizeof(*states)*4);
+        cudaMalloc((void**) &dOutbox, sizeof(*states)*4);
+        cudaMalloc((void**) &dStateRows, sizeof(*states)*rows);
+        
+        cudaMalloc((void**) &dFlatIn, sizeof(states)*mailSize);
+        cudaMalloc((void**) &dFlatOut, sizeof(states)*mailSize);
+        cudaMalloc((void**) &dState, sizeof(states)*regionAlloc);
+
+        mailboxes<<<1, 4>>>(dFlatIn, dInbox, cGlob.xPointsRegion, cGlob.yPointsRegion, 4);
+        mailboxes<<<1, 4>>>(dFlatOut, dOutbox, cGlob.xPointsRegion, cGlob.yPointsRegion, 4);
+        int tbx = rows/64 + 1;
+        rowcast<<<tbx, 64>>>(dStateRows, dState, cols, rows); 
+
+        cudaStream_t streams[cGlob.gpuA];
+        for (int i = 0; i < cGlob.gpuA; i++) cudaStreamCreate(&streams[i]);
+        cudaMemcpy(dState, state, sizeof(states)*regionAlloc, cudaMemcpyHostToDevice);
+    }
+    // Proto Caller
+    for (int i = 0; i < cGlob.gpuA; i++)
+    {
+        classicStep <<< blockGrid, threadGrid, 0, streams[i] >>> (Regions stateRow, Regions passer, tstep);
     }
 
     void initializeState(std::string algo)
     {
         scheme = algo;
         int exSpace = (!scheme.compare("S")) ? cGlob.ht : 2;
-        int rows = (cGlob.yPointsRegion + exSpace);
-        int cols = (cGlob.xPointsRegion + exSpace);
-        int regionAlloc =  rows * cols ;
+        rows = (cGlob.yPointsRegion + exSpace);
+        cols = (cGlob.xPointsRegion + exSpace);
+        regionAlloc =  rows * cols ;
 
         stateRows = new states*[rows];
     
@@ -123,16 +176,10 @@ struct Region
             for (int i=0; i<cGlob.xPointsRegion; i++)
             {   
                 xstr = std::to_string(i*cGlob.dx); 
-
-                    initState(&stateRows[k][i], k+ysw, i+xsw);
-                
+                initState(&stateRows[k][i], k+ysw, i+xsw);
             }
         }
-    }
-
-    void gpuInit()
-    {
-
+        if (gpu) gpuInit(cols);
     }
 
     void solutionOutput(double tstamp)
@@ -197,7 +244,7 @@ void setRegion(Region **regionals)
             xLoc = tregion%cGlob.xRegions;
             yLoc = tregion/cGlob.xRegions;
 
-            gridLook[yLoc][xLoc] = {k, tregion, xLoc, yLoc};
+            gridLook[yLoc][xLoc] = {k, cGlob.hasGpu, tregion, xLoc, yLoc};
             tregion++;
         }
     }

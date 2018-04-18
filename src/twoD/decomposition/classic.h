@@ -87,15 +87,6 @@ void classicPass(states *putSt, states *getSt, int tstep)
 
 }
 
-cudaStream_t streams[cGlob.gpuA];
-for (int i = 0; i < cGlob.gpuA; i++) cudaStreamCreate(&streams[i]);
-
-// Proto Caller
-for (int i = 0; i < cGlob.gpuA; i++)
-{
-    classicStep <<< blockGrid, threadGrid, 0, streams[i] >>> (Regions stateRow, Regions passer, tstep);
-}
-
 // Classic Discretization wrapper.
 double classicWrapper(states **state, int *tstep)
 {

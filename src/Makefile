@@ -14,7 +14,7 @@ DEF=
 
 UTILC:= $(wildcard $(UTIL_DIR)/*.c*)
 TARG:= $(notdir $(UTILC))
-COBJ:= $(addsuffix .o, $(basename $(TARG)))) 
+COBJ:= $(addsuffix .o, $(basename $(TARG)))
 
 # $(LIBCUDA) $(LIBMPI) 
 

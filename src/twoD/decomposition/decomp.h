@@ -17,36 +17,7 @@ typedef Json::Value jsons;
 
 // MPI process properties
 MPI_Datatype struct_type;
-MPI_Request req[2];
-MPI_Status stat[2];
 int lastproc, nprocs, rank;
-
-
-struct Address
-{
-    const int owner, localIdx, globalx, globaly;
-}
-
-// DO WE REALLY WANNA LOAD THIS UP AND THEN PASS IT TO THE KERNEL?
-struct Region: 
-{
-    const Address self;
-    Address neighbors[4];
-    const bool gpu;
-    jsons solution; 
-
-    states *state[]; // pts in region
-    states **stateRows[]; // rows in region
-    
-    Region() {};
-    Region(Address stencil[5], bool hasGpu) : self(stencil[0])), gpu(hasGpu)
-    {
-        if (gpu){cudaHostAlloc();}
-        else {malloc};
-    };
-    ~Region()
-    void solutionOutput();
-};
 
 struct Globalism {
 // Topology
@@ -71,7 +42,117 @@ struct Globalism {
 
 } cGlob;
 
-std::string fname = "GranularTime.csv";
+struct Address
+{
+    int owner, localIdx, globalx, globaly;
+};
+
+void gtog(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
+{
+
+}
+
+void ctog(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
+{
+
+}
+
+void ctoc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
+{
+
+}
+
+void gtoc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
+{
+
+}
+
+typedef void (*mailCarrier) (Address *, Address *, states *, states *)
+struct Region
+{    
+    const Address self;
+    const std::vector<Address> neighbors;
+    const bool gpu;
+    int xsw, ysw; //Needs the size information.
+    int regionAlloc;
+    std::string xstr, ystr, tstr, scheme;
+    
+    MPI_Request req[4];
+    MPI_Status stat[4];
+    jsons solution; 
+
+    states *state; // pts in region
+    states **stateRows; // rows in region
+    
+    Region(Address stencil[5]) 
+    :self(stencil[0])), neighbors(stencil+1, stencil+4), gpu(cGlob.hasGpu) 
+    {
+        xsw = cGlob.xPointsRegion * self.globalx;
+        ysw = cGlob.yPointsRegion * self.globaly;
+
+    }
+    ~Region()
+    {
+        cudaFreeHost(state);
+    }
+
+    void initializeState(std::string algo)
+    {
+        scheme = algo;
+        int exSpace = (!scheme.compare("S")) ? cGlob.ht : 2;
+        int rows = (cGlob.yPointsRegion + exSpace);
+        int cols = (cGlob.xPointsRegion + exSpace);
+        int regionAlloc =  rows * cols ;
+
+        stateRows = new states*[rows];
+    
+        if(gpu)
+        {
+            cudaHostAlloc((void **) &state, regionAlloc*cGlob.szState, cudaHostAllocDefault);
+        }
+        else 
+        {
+            state = (states*) malloc(regionAlloc * cGlob.szState);
+        }
+        for (int j=0; j<rows; j++)
+        {
+            stateRows[j] = (states *) state+(j*cols); 
+        }
+        for(int k=0; k<cGlob.yPointsRegion; k++)
+        {   
+            for (int i=0; i<cGlob.xPointsRegion; i++)
+            {   
+                xstr = std::to_string(i*cGlob.dx); 
+
+                    initState(&stateRows[k][i], k+ysw, i+xsw);
+                
+            }
+        }
+    }
+
+    void gpuInit()
+    {
+
+    }
+
+    void solutionOutput(double tstamp)
+    {
+        tstr = std::to_string(tstamp);
+        for(int k=0; k<cGlob.yPointsRegion; k++)
+        {   
+            ystr = std::to_string(k*cGlob.dy);
+            for (int i=0; i<cGlob.xPointsRegion; i++)
+            {   
+                xstr = std::to_string(i*cGlob.dx); 
+                for (int j=0; j<NVARS; j++)
+                {
+                    solution[outVars[j]][tstr][ystr][xstr] = HCONST.printout(&outState[k][i], j);
+                }
+            }
+        }
+        
+    }
+};
 
 jsons inJ;
 
@@ -128,14 +209,14 @@ void setRegion(Region **regionals)
         {
             if (gridLook[k][i].owner == rank)
             {
-                addr = {gridLook[k][i],
-                        gridLook[(k-1)%cGlob.yRegions][i],
-                        gridLook[k][(i-1)%cGlob.xRegions],
-                        gridLook[(k+1)%cGlob.yRegions][i],
-                        gridLook[k][(i-1)%cGlob.xRegions]
+                addr[0] = gridLook[k][i];
+                addr[1] = gridLook[(k-1)%cGlob.yRegions][i];
+                addr[2] = gridLook[k][(i-1)%cGlob.xRegions];
+                addr[3] = gridLook[(k+1)%cGlob.yRegions][i];
+                addr[4] = gridLook[k][(i-1)%cGlob.xRegions];
                 }
 
-                regionals[cnt] = new *Region(addr, cGlob.hasGpu);
+                regionals[cnt] = new Region(addr, cGlob.hasGpu);
             }
         }
     }
@@ -233,22 +314,6 @@ void initArgs()
 
     if (!rank)  std::cout << rank <<  " - Initialized Arguments -" << std::endl;
 }
-
-// I THINK THIS SHOULD BE IN THE NODE STRUCT
-void solutionOutput(states *outState, double tstamp, const int idx, const int idy)
-{
-    #ifdef NOS
-        return; // Prevents write out in performance experiments so they don't take all day.
-    #endif
-    std::string tsts = std::to_string(tstamp);
-    double xpt = indexer(cGlob.dx, idx, strt);
-    std::string xpts = std::to_string(xpt);
-    for (int k=0; k<NVARS; k++)
-    {
-        solution[outVars[k]][tsts][xpts] = printout(outState + idx, k);
-    }
-}
-
 struct mpiTime
 {
     std::vector<double> times;

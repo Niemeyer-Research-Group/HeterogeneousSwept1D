@@ -38,24 +38,9 @@ int main(int argc, char *argv[])
     initArgs();
 
     Region **regions;
-    setRegion(cGlob.gpuA; );
+    setRegion(regions);
 
     //OH LORD
-
-    int exSpace = (!scheme.compare("S") ? cGlob.ht : 2);
-    states *state;
-
-    int nodeAlloc = (cGlob.nodeSidex * cGlob.blockSide + exSpace) *  (cGlob.nodeSidey * cGlob.blockSide + exSpace);
-    int gpuAlloc = cGlob.nodeSidex * cGlob.blockSide * cGlob.gpux + exSpace) *  (cGlob.nodeSidey * cGlob.blockSide * cGlob.gpuy + exSpace);
-
-    if (cGlob.hasGpu)
-    {
-        cudaHostAlloc((void **) &state, gpuAlloc * cGlob.szState, cudaHostAllocDefault);
-    }
-    else
-    {
-        state = (states*) malloc(nodeAlloc * cGlob.szState);
-    }
 
     // NOW WE MUST ASSIGN PARTICULAR AREAS FOR EACH NODE, INITIALIZE THE ARRAY AND THE TWO ARRAYS OF POINTERS TO PARTS OF THE ARRAY.
 

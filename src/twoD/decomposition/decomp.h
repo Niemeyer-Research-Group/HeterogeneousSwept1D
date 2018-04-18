@@ -113,14 +113,17 @@ struct Region
     }
     ~Region()
     {
-        cudaFree(dState);
-        cudaFree(dStateRows);
-        cudaFree(dFlatOut);
-        cudaFree(dFlatIn);
-        cudaFree(dInbox);
-        cudaFree(dOutbox);
-
-        cudaFreeHost(state);
+        if (gpu)
+        {
+            cudaFree(dState);
+            cudaFree(dStateRows);
+            cudaFree(dFlatOut);
+            cudaFree(dFlatIn);
+            cudaFree(dInbox);
+            cudaFree(dOutbox);
+            cudaFreeHost(state);
+            //FREE STREAMS
+        }
     }
 
     void gpuInit()
@@ -179,6 +182,7 @@ struct Region
                 initState(&stateRows[k][i], k+ysw, i+xsw);
             }
         }
+        solutionOutput(0.0);
         if (gpu) gpuInit(cols);
     }
 

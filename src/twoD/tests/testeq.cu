@@ -9,8 +9,6 @@ int main(int argc, char *argv[])
 {
     makeMPI(argc, argv);
 
-    std::string i_ext = ".json";
-    std::string myrank = std::to_string(ranks[1]);
     std::string scheme = argv[1];
 
     // Equation, grid, affinity data
@@ -24,7 +22,13 @@ int main(int argc, char *argv[])
     Region **regions;
     setRegion(regions);
 
-    std::string pth = string(argv[3]);
+    std::string pth = argv[3];
+    int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
+
+    for (int k = 0; k<localRegions; k++)
+    {
+        regions[k]->initializeState(scheme, pth);
+    }
 
     // FOR REGION IN REGIONS WRITE IT OUT.
     

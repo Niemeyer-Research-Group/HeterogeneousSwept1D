@@ -17,6 +17,10 @@
 #include <string>
 #include <vector>
 
+#include "myVectorTypes.h"
+#include "json/json.h"
+
+
 // We're just going to assume doubles
 #define REAL            double
 #define REALtwo         double2
@@ -72,41 +76,33 @@ void mpi_type(MPI_Datatype *dtype)
 }
 
 // This struct is going in constant memory.
+// Could probably use Region dimensions in this.
 struct constWave
 {
 	int nx, ny;
-	int blockSide, BlockBase;
+	int blockSide, blockBase;
 	double cx, cy, homecoeff;
 
 	void init(jsons inJ)
 	{
-		int dx = inJ["dx"];
-		int dy = inJ["dy"];
-		int dt = inJ["dt"];
-		int cfl = inJ["cfl"]; //Some way to give c and get cfl
-		ny = inJ["nY"];
-		nx = inJ["nX"];
-		blockSide = inJ['blockSide'];
+		double dx = inJ["dx"].asDouble();
+		double dy = inJ["dy"].asDouble();
+		double dt = inJ["dt"].asDouble();
+		double cfl = inJ["cfl"].asDouble(); //Some way to give c and get cfl
+		ny = inJ["nY"].asDouble();
+		nx = inJ["nX"].asDouble();
+		blockSide = inJ['blockSide'].asDouble();
 		blockBase = blockSide+2; 
 
 		// CFL given should be max cfl for all dimensions.
-		c = cfl * std::min(dx,dy)/dt;
+		double c = cfl * std::min(dx,dy)/dt;
 
 		cx = c*dt/dx;
 		cx *= cx;
 		cy = c*dt/dy;
 		cy *= cy;
 		homecoeff = 2.0-2.0*(cx+cy);
-	};
-
-	void initState(states *state, const int x, const int y)	
-	{
-		double fillVal = std::exp(-50.0 * std::sqrt((x-nx*0.5) * (x-nx*0.5) + (y-ny*0.5) * (y-ny*0.5)));
-
-		for (int k=0; k<2; k++) state->u[k] = fillVal;
-	};
-
-	double printout(states *state) return state->u[0];
+	}
 };
 
 constWave HCONST;
@@ -118,8 +114,19 @@ __constant__ constWave DCONST;
     #define A    		HCONST
 #endif
 
+__host__
+void initState(states *state, const int x, const int y)	
+{
+	double fillVal = std::exp(-50.0 * std::sqrt((x-A.nx*0.5) * (x-A.nx*0.5) + (y-A.ny*0.5) * (y-A.ny*0.5)));
+
+	for (int k=0; k<2; k++) state->u[k] = fillVal;
+};
+
 __host__ __device__
-void stepUpdate(states *state, const int idx,  const int idy, const int tstep)
+double printout(states *state, int i) {return state->u[0];}
+
+__host__ __device__
+void stepUpdate(states **state, const int idx,  const int idy, const int tstep)
 {
 	const int otx = MODULA(tstep); //Modula is output place
 	const int itx = (otx^1); //Opposite in input place.

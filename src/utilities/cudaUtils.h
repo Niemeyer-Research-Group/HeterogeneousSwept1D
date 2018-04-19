@@ -14,7 +14,6 @@
 
 #include <cmath>
 #include <vector>
-#include "myVectorTypes.h"
 
 void cudaRunCheck()
 {
@@ -33,8 +32,8 @@ int* factor(int n)
         sq--;
         outf=n/sq;
     }
-    static int factors[2] = {sq, outf};
-    return factors;
+    int factors[2] = {sq, outf};
+    return &factors;
 }
 
 struct cudaTime

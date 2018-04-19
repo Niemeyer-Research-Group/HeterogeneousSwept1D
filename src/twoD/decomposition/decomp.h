@@ -14,9 +14,6 @@ void mailboxes(states **row, states *mail, int xLen, int yLen, int nrows)
 {
     const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
     if (gid>=nrows) return;
-
-    int idx = (gid/2) * xLen + ((gid/2) + (gid%2)) * yLen; 
-    row[gid] = (states *)(mail + idx);
 }
 
 __global__ 
@@ -62,28 +59,15 @@ struct Address
     int owner, gpu, localIdx, globalx, globaly;
 };
 
-void interProc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
-{
-    return ;
-}
-
-void intraProc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
-{
-    return ;
-}
-
-typedef void (*mailCarrier) (Address *, Address *, states *, states *);
+// typedef void (*mailCarrier) (Address *, Address *, states *, states *);
 
 struct Neighbor
 {
     const Address id;
-    mailCarrier passer;
-    MPI_Request req[4];
-    MPI_Status stat[4];
-
+    bool sameProc;
     Neighbor(Address addr): id(addr)
     {
-        passer = (rank == id.owner) ? interProc : intraProc;
+        sameProc = (rank == id.owner);
     } 
 };
 
@@ -130,9 +114,9 @@ struct Region
     {
         int mailSize = 2*(cGlob.xPointsRegion + cGlob.yPointsRegion);
 
-        cudaMalloc((void**) &dInbox, sizeof(*states)*4);
-        cudaMalloc((void**) &dOutbox, sizeof(*states)*4);
-        cudaMalloc((void**) &dStateRows, sizeof(*states)*rows);
+        cudaMalloc((void**) &dInbox, sizeof(states*)*4);
+        cudaMalloc((void**) &dOutbox, sizeof(states*)*4);
+        cudaMalloc((void**) &dStateRows, sizeof(states*)*rows);
         
         cudaMalloc((void**) &dFlatIn, sizeof(states)*mailSize);
         cudaMalloc((void**) &dFlatOut, sizeof(states)*mailSize);
@@ -234,15 +218,14 @@ void parseArgs(int argc, char *argv[])
         for (int k=4; k<argc; k+=2)
         {
             inarg = argv[k];
-			inJ[inarg] = atof(argv[k+1]);
+			inJ[inarg] = argv[k+1];
         }
     }
 }
 
-void setRegion(Region **regionals)
+void setRegion(std::vector <Region *> &regionals)
 {
     int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
-    regionals = new Region* [localRegions];
     int regionMap[nprocs];
     MPI_Allgather(&localRegions, 1, MPI_INT, &regionMap[0], 1, MPI_INT, MPI_COMM_WORLD);
     int tregion = 0;
@@ -262,7 +245,6 @@ void setRegion(Region **regionals)
         }
     }
 
-    int cnt = 0;
     Address addr[5];
     for (k = 0; k<cGlob.yRegions; k++)
     {
@@ -275,8 +257,9 @@ void setRegion(Region **regionals)
                 addr[2] = gridLook[k][(i-1)%cGlob.xRegions];
                 addr[3] = gridLook[(k+1)%cGlob.yRegions][i];
                 addr[4] = gridLook[k][(i-1)%cGlob.xRegions];
+                regionals.push_back(new Region(addr));
             }
-            regionals[cnt] = new Region(addr);
+            
                 
         }
     }

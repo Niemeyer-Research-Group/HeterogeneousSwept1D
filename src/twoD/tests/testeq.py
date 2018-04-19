@@ -43,14 +43,14 @@ if __name__ == "__main__":
     CFLAGS          =" -O3 --std=c++11 -w "
     LIBFLAGS        =" -lm -lmpi "
 
-    compileit = "nvcc testeq.cu -o " + testobj + CFLAGS + CUDAFLAGS + LIBFLAGS
+    compileit = "nvcc -c testeq.cu -o " + testobj + CFLAGS + CUDAFLAGS + LIBFLAGS
 
     runstring(compileit)
 
     utilObj = [op.join(utilBin, k) for k in os.listdir(utilBin)]
     execf = op.join(testBin, "waveTest")
     utilObj = " ".join(utilObj)
-    linkit = "nvcc " + utilObj + testobj + " -o " + execf + LIBFLAGS
+    linkit = "nvcc " + utilObj + " " + testobj + " -o " + execf + LIBFLAGS
 
     runstring(linkit)
 

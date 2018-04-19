@@ -1,5 +1,8 @@
-
-
+/**
+---------------------------
+    TEST CASE 1
+---------------------------
+*/
 
 #include "cudaUtils.h"
 #include "../equations/wave.h"

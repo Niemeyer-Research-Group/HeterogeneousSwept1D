@@ -33,7 +33,7 @@ int* factor(int n)
         outf=n/sq;
     }
     int factors[2] = {sq, outf};
-    return &factors;
+    return factors;
 }
 
 struct cudaTime

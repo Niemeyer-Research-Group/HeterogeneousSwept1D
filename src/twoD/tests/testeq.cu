@@ -1,5 +1,8 @@
-
-
+/**
+---------------------------
+    TEST CASE 1
+---------------------------
+*/
 
 #include "cudaUtils.h"
 #include "../equations/wave.h"
@@ -19,15 +22,15 @@ int main(int argc, char *argv[])
     parseArgs(argc, argv);
     initArgs();
 
-    Region **regions;
+    std::vector<Region *> regions;
     setRegion(regions);
 
     std::string pth = argv[3];
     int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
 
-    for (int k = 0; k<localRegions; k++)
+    for (auto r: regions)
     {
-        regions[k]->initializeState(scheme, pth);
+        r->initializeState(scheme, pth);
     }
 
     // FOR REGION IN REGIONS WRITE IT OUT.

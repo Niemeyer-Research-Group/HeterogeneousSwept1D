@@ -4,12 +4,6 @@
 
 #include <numeric>
 #include "gpuDetector.h"
-#include "json/jsons.h"
-#include "mpi.h"
-
-typedef Json::Value jsons;
-
-#define TAGS(x) x & 32767
 
 /*
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
@@ -39,12 +33,13 @@ void rowcast(states **row, states *state, int xLen, int nrows)
 MPI_Datatype struct_type;
 int lastproc, nprocs, rank;
 
-struct Globalism {
-// Topology
+struct Globalism
+{
+    // Topology
     int nGpu, nPts, nWrite, hasGpu;
     double gpuA;
 
-// Geometry-No second word is in overall grid.
+    // Geometry-No second word is in overall grid.
     //How Many Regions Per
     int nRegions, xRegions, yRegions;
     //How many Blocks Per
@@ -57,7 +52,7 @@ struct Globalism {
     int ht, htm, htp;
     int szState;
 
-// Iterator
+    // Iterator
     double tf, freq, dt, dx, dy, lx, ly;
 
 } cGlob;
@@ -69,12 +64,12 @@ struct Address
 
 void interProc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
 {
-
+    return ;
 }
 
 void intraProc(Address *sourceAddr, Address *destAddr, states *inbox, states *outbox)
 {
-
+    return ;
 }
 
 typedef void (*mailCarrier) (Address *, Address *, states *, states *);
@@ -83,11 +78,14 @@ struct Neighbor
 {
     const Address id;
     mailCarrier passer;
+    MPI_Request req[4];
+    MPI_Status stat[4];
+
     Neighbor(Address addr): id(addr)
     {
         passer = (rank == id.owner) ? interProc : intraProc;
     } 
-}
+};
 
 struct Region
 {    
@@ -95,17 +93,15 @@ struct Region
     const std::vector<Neighbor> neighbors;
     int xsw, ysw; //Needs the size information.
     int regionAlloc, rows, cols;
-    std::string xstr, ystr, tstr, scheme;
+    std::string xstr, ystr, tstr, spath, scheme;
     
-    MPI_Request req[4];
-    MPI_Status stat[4];
     jsons solution; 
 
-    states *state, flatIn, flatOut, dState, dFlatIn, dFlatOut; // pts in region
-    states **stateRows, inbox, outbox, dStateRows, dInbox, dOutbox; // rows in region
+    states *state, *flatIn, *flatOut, *dState, *dFlatIn, *dFlatOut; // pts in region
+    states **stateRows, **inbox, **outbox, **dStateRows, **dInbox, **dOutbox; // rows in region
     
     Region(Address stencil[5]) 
-    :self(stencil[0])), neighbors(stencil+1, stencil+4), gpu(cGlob.hasGpu) 
+    : self(stencil[0]), neighbors(stencil+1, stencil+4)
     {
         xsw = cGlob.xPointsRegion * self.globalx;
         ysw = cGlob.yPointsRegion * self.globaly;
@@ -113,8 +109,12 @@ struct Region
     }
     ~Region()
     {
-        if (gpu)
+        if (self.gpu)
         {
+            #ifndef NOS
+                writeSolution();
+            #endif
+
             cudaFree(dState);
             cudaFree(dStateRows);
             cudaFree(dFlatOut);
@@ -128,7 +128,8 @@ struct Region
 
     void gpuInit()
     {
-        int mailSize = 2*(cGlob.xPointsRegion + cGlob.yPointsRegion)
+        int mailSize = 2*(cGlob.xPointsRegion + cGlob.yPointsRegion);
+
         cudaMalloc((void**) &dInbox, sizeof(*states)*4);
         cudaMalloc((void**) &dOutbox, sizeof(*states)*4);
         cudaMalloc((void**) &dStateRows, sizeof(*states)*rows);
@@ -137,23 +138,24 @@ struct Region
         cudaMalloc((void**) &dFlatOut, sizeof(states)*mailSize);
         cudaMalloc((void**) &dState, sizeof(states)*regionAlloc);
 
-        mailboxes<<<1, 4>>>(dFlatIn, dInbox, cGlob.xPointsRegion, cGlob.yPointsRegion, 4);
-        mailboxes<<<1, 4>>>(dFlatOut, dOutbox, cGlob.xPointsRegion, cGlob.yPointsRegion, 4);
+        mailboxes<<<1, 4>>>(dInbox, dFlatIn, cGlob.xPointsRegion, cGlob.yPointsRegion, 4);
+        mailboxes<<<1, 4>>>(dOutbox, dFlatOut, cGlob.xPointsRegion, cGlob.yPointsRegion, 4);
         int tbx = rows/64 + 1;
         rowcast<<<tbx, 64>>>(dStateRows, dState, cols, rows); 
 
-        cudaStream_t streams[cGlob.gpuA];
+        cudaStream_t streams[4];
         for (int i = 0; i < cGlob.gpuA; i++) cudaStreamCreate(&streams[i]);
         cudaMemcpy(dState, state, sizeof(states)*regionAlloc, cudaMemcpyHostToDevice);
     }
     // Proto Caller
-    for (int i = 0; i < cGlob.gpuA; i++)
-    {
-        classicStep <<< blockGrid, threadGrid, 0, streams[i] >>> (Regions stateRow, Regions passer, tstep);
-    }
+    // for (int i = 0; i < cGlob.gpuA; i++)
+    // {
+    //     classicStep <<< blockGrid, threadGrid, 0, streams[i] >>> (Regions stateRow, Regions passer, tstep);
+    // }
 
-    void initializeState(std::string algo)
+    void initializeState(std::string algo, std::string pth)
     {
+        spath = pth + "/s" + fspec + "_" + std::to_string(rank) + ".json";
         scheme = algo;
         int exSpace = (!scheme.compare("S")) ? cGlob.ht : 2;
         rows = (cGlob.yPointsRegion + exSpace);
@@ -162,7 +164,7 @@ struct Region
 
         stateRows = new states*[rows];
     
-        if(gpu)
+        if(self.gpu)
         {
             cudaHostAlloc((void **) &state, regionAlloc*cGlob.szState, cudaHostAllocDefault);
         }
@@ -183,7 +185,7 @@ struct Region
             }
         }
         solutionOutput(0.0);
-        if (gpu) gpuInit(cols);
+        if (self.gpu) gpuInit();
     }
 
     void solutionOutput(double tstamp)
@@ -197,11 +199,18 @@ struct Region
                 xstr = std::to_string(i*cGlob.dx); 
                 for (int j=0; j<NVARS; j++)
                 {
-                    solution[outVars[j]][tstr][ystr][xstr] = HCONST.printout(&outState[k][i], j);
+                    solution[outVars[j]][tstr][ystr][xstr] = printout(&stateRows[k][i], j);
                 }
             }
         }
-        
+    }
+
+    void writeSolution()
+    {
+        std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
+//        if (!ranks[1]) solution["meta"] = inJ;
+        soljson << solution;
+        soljson.close();
     }
 };
 
@@ -234,14 +243,14 @@ void setRegion(Region **regionals)
 {
     int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
     regionals = new Region* [localRegions];
-    int regionMap[nProcs];
+    int regionMap[nprocs];
     MPI_Allgather(&localRegions, 1, MPI_INT, &regionMap[0], 1, MPI_INT, MPI_COMM_WORLD);
     int tregion = 0;
     Address gridLook[cGlob.yRegions][cGlob.xRegions];
     int k, i;
     int xLoc, yLoc;
 
-    for (k = 0; k<nProcs; k++)
+    for (k = 0; k<nprocs; k++)
     {
         for (i = 0; i<regionMap[k]; i++)
         {
@@ -253,6 +262,7 @@ void setRegion(Region **regionals)
         }
     }
 
+    int cnt = 0;
     Address addr[5];
     for (k = 0; k<cGlob.yRegions; k++)
     {
@@ -265,13 +275,13 @@ void setRegion(Region **regionals)
                 addr[2] = gridLook[k][(i-1)%cGlob.xRegions];
                 addr[3] = gridLook[(k+1)%cGlob.yRegions][i];
                 addr[4] = gridLook[k][(i-1)%cGlob.xRegions];
-                }
-
-                regionals[cnt] = new Region(addr, cGlob.hasGpu);
             }
+            regionals[cnt] = new Region(addr);
+                
         }
     }
 }
+
 
 void initArgs()
 {
@@ -295,7 +305,7 @@ void initArgs()
     inJ["blockSide"] = cGlob.xPointsBlock;
 
     // FIND NUMBER OF GPUS AVAILABLE.
-	cGlob.gpuA = inJ["gpuA"].asDouble(); // AFFINITY
+	cGlob.gpuA = inJ["gpuA"].asInt(); // AFFINITY
 	int ranker = rank;
 	int sz = nprocs;
 
@@ -320,7 +330,7 @@ void initArgs()
         if (!cGlob.nGpu)
         {
             std::cout << "You provided a prime number of processes and no GPU capability. That's just silly and you absolutely cannot do it because we must be able to form a rectangle from the number of processes on each device.  Retry!" << std::endl;
-            exit();
+            exit(1);
         }
 
         cGlob.gpuA++;
@@ -348,14 +358,16 @@ void initArgs()
     cGlob.yPointsRegion = cGlob.xPointsBlock * cGlob.yBlocksRegion;
     cGlob.xPoints = cGlob.xPointsRegion * cGlob.xRegions;
     cGlob.yPoints = cGlob.yPointsRegion * cGlob.yRegions;
+    inJ["nX"] = cGlob.xPoints;
+    inJ["nY"] = cGlob.yPoints;
 
     cGlob.ht = (cGlob.xPointsBlock-2)/2;
     cGlob.htm = cGlob.ht-1;
     cGlob.htp = cGlob.ht+1;
     // Derived quantities
 
-    cGlob.dx = cGlob.lx/(double)cGlob.nx; // Spatial step
-    cGlob.dy = cGlob.ly/(double)cGlob.ny; // Spatial step
+    cGlob.dx = cGlob.lx/(double)cGlob.xPoints; // Spatial step
+    cGlob.dy = cGlob.ly/(double)cGlob.yPoints; // Spatial step
     cGlob.nWrite = cGlob.tf/cGlob.freq + 2;
     inJ["dx"] = cGlob.dx; // To send back to equation folder. 
     inJ["dy"] = cGlob.dy;
@@ -365,22 +377,8 @@ void initArgs()
 
     if (!rank)  std::cout << rank <<  " - Initialized Arguments -" << std::endl;
 }
-struct mpiTime
-{
-    std::vector<double> times;
-    double ti;
-    std::string typ = "CPU";
 
-    void tinit(){ ti = MPI_Wtime(); }
-
-    void tfinal() { times.push_back((MPI_Wtime()-ti)*1000.0); }
-
-    int avgt() { 
-        return std::accumulate(times.begin(), times.end(), 0)/ (float)times.size();
-        }
-};
-
-void atomicWrite(std::string st, std::vector<double> t)
+void atomicWrite(std::string st, std::vector<double> t, std::string fname)
 {
     FILE *tTemp;
     MPI_Barrier(MPI_COMM_WORLD);

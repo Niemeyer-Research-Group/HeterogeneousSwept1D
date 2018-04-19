@@ -1,5 +1,5 @@
 {
-    "nX"    : 10000,
+    "nPts"    : 10000,
     "tpb"   : 256,
     "freq"  : 2,
     "gpuA"  : 0,
@@ -8,6 +8,6 @@
     "ly"    : 1.0,
     "tf"    : 10.0,
     "cfl"   : 0.5,
-    "IC"    : "LINEAR",
+    "IC"    : "GAUSSIAN",
     "BC"    : "PERIODIC"
 }

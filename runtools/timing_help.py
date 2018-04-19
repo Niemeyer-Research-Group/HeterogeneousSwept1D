@@ -3,7 +3,7 @@
     Interpolating version
 '''
 
-# Dependencies: gitpython, palettable, cycler
+# Dependencies: gitpython,cycler
 
 import collections
 import itertools

@@ -18,8 +18,6 @@ testBin = op.join(thispath, "bin")
 mainBin = op.join(spath, "bin")
 utilBin = op.join(mainBin, "util")
 utilInc = op.join(spath, "utilities")
-os.mkdir(testResult)
-os.mkdir(testBin)
 
 sys.path.append(pypath)
 import result_help as rh
@@ -28,28 +26,33 @@ from main_help import *
 def runstring(toRun):
     compstr = shlex.split(toRun)
     proc = sp.Popen(compstr)
-    sp.Popen.wait(proc)
-    return 
+    rc = sp.Popen.wait(proc)
+    if rc == 1:
+        sys.exit(1)
+    return True
 
 # COMPILATION
 if __name__ == "__main__":
 
+    os.makedirs(testResult, exist_ok=True)
+    os.makedirs(testBin, exist_ok=True)
+
     testobj = op.join(testBin, "waveTest.o")
 
-    CUDAFLAGS       =" -gencode arch=compute_35,code=sm_35 -restrict         --ptxas-options=-v -I" + utilInc   
+    CUDAFLAGS       =" -gencode arch=compute_35,code=sm_35 -restrict --ptxas-options=-v -I" + utilInc   
     CFLAGS          =" -O3 --std=c++11 -w "
     LIBFLAGS        =" -lm -lmpi "
 
-    compileit = "nvcc testeq.cpp -o " + testobj + CFLAGS + CUDAFLAGS + LIBFLAGS
+    compileit = "nvcc testeq.cu -o " + testobj + CFLAGS + CUDAFLAGS + LIBFLAGS
 
-    runstring(toRun)
+    runstring(compileit)
 
     utilObj = [op.join(utilBin, k) for k in os.listdir(utilBin)]
     execf = op.join(testBin, "waveTest")
-
+    utilObj = " ".join(utilObj)
     linkit = "nvcc " + utilObj + testobj + " -o " + execf + LIBFLAGS
 
-    runstring(toRun)
+    runstring(linkit)
 
     runTest = "mpirun -np 8 " + execf + " I waveTest.json " + testResult
     runstring(runTest)

@@ -25,23 +25,46 @@
 #define WATOM
 #endif
 
-using namespace std;
+struct Address;
+struct Neighbor;
+struct Region;
 
-struct Classic{
+void sender(Region *home, Region *neighbor, int idx, int ts)
+{
+    static const int items[4] = {cGlob.yPointsRegion,                                     cGlob.xPointsRegion, 
+                                cGlob.yPointsRegion, cGlob.xPointsRegion};
 
-    Classic(){};
+    cudaMemcpy(home->dInbox[idx], neighbor->dOutbox[idx] cGlob.szState*items[idx], cudaMemcpyDeviceToDevice);
+    // Now what to do about the gpu process getting data from the 
 }
 
-struct Passer{
-    double *north, *south, *east, *west; // Buffers for pass
-    int nt, st, et, wt; // ids for procs to pass TO
-    int nf, sf, ef, wf; // ids to receive FROM
+void sender(Region *home, Region *neighbor, int idx, int ts)
+{
+    static const int items[4] = {cGlob.yPointsRegion,                                     cGlob.xPointsRegion, 
+                                cGlob.yPointsRegion, cGlob.xPointsRegion};
 
-    Passer(int pid, int sz){
-        // Malloc and get ids.
-    };
+    
+    MPI_ISend(home->inbox[idx], items[idx], struct_type, neighbor->id.owner, TAGS(tstep+idx), MPI_COMM_WORLD, neighbor->req); // PUT REQUEST IN NEIGHBOR OBJECT
+}
 
-    ~Passer(){};
+void pass(Region **procChunk, int ts)
+{
+    // PUT IN CGLOB
+    int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1); 
+    Region *neighbor;
+    for (int k=0; k<localRegions; k++)
+    {
+        for (int i=0; i<4; i++)
+        {
+            if (procChunk[k]->neighbors[i].sameProc) 
+            {
+                // return bool if this process = other process
+                neighbor = procChunk[k]->neighbors[i];
+            }
+        }
+    
+    }    
+
 }
 
 __global__ void classicStep(states **state, states **outMail, const int ts)
@@ -72,31 +95,13 @@ void classicStepCPU(states **state, states **outMail, const int ts)
     }
 }
 
-void classicPass(states *putSt, states *getSt, int tstep)
-{
-    int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
-    int rnk;
-
-    MPI_Isend(putSt, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
-    MPI_Isend(putSt + 1, 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
-    MPI_Recv(getSt + 1, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &stat[0]);
-    MPI_Recv(getSt, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
-
-    MPI_Wait(&req[0], &stat[0]);
-    MPI_Wait(&req[1], &stat[1]);
-
-}
-
 // Classic Discretization wrapper.
-double classicWrapper(states **state, int *tstep)
+double classicWrapper(Region **region)
 {
     int tmine = *tstep;
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
-
-    states putSt[2];
-    states getSt[2];
 
     int t0, t1;
 
@@ -108,13 +113,6 @@ double classicWrapper(states **state, int *tstep)
         int xcp = xc+1;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
         const int gpusize = cGlob.szState * xgpp;
-
-        states *dState;
-
-        cudaMalloc((void **)&dState, gpusize);
-        // Copy the initial conditions to the device array.
-        // This is ok, the whole array has been malloced.
-        cudaMemcpy(dState, state[1], gpusize, cudaMemcpyHostToDevice);
 
         // Four streams for four transfers to and from cpu.
         cudaStream_t st1, st2, st3, st4;
@@ -138,13 +136,6 @@ double classicWrapper(states **state, int *tstep)
             cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
             cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4);
 
-            putSt[0] = state[0][1];
-            putSt[1] = state[2][xc];
-            classicPass(&putSt[0], &getSt[0], tmine);
-
-            if (cGlob.bCond[0]) state[0][0] = getSt[0];
-            if (cGlob.bCond[1]) state[2][xcp] = getSt[1];
-
             // Increment Counter and timestep
             if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
             tmine++;
@@ -152,8 +143,10 @@ double classicWrapper(states **state, int *tstep)
             // OUTPUT
             if (t_eq > twrite)
             {
-                writeOut(state, t_eq);
-                twrite += cGlob.freq;
+                for (auto r: region)
+                {
+                    r->solutionOutput(tmine);
+                }
             }
         }
 

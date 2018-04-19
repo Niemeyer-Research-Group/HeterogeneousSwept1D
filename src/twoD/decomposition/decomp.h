@@ -82,10 +82,10 @@ typedef void (*mailCarrier) (Address *, Address *, states *, states *);
 struct Neighbor
 {
     const Address id;
-    mailCarrier passer;
+    bool sameProc;
     Neighbor(Address addr): id(addr)
     {
-        passer = (rank == id.owner) ? interProc : intraProc;
+        sameProc = (rank == id.owner);
     } 
 }
 

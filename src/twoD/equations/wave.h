@@ -46,11 +46,12 @@
 
 #define DIVMOD(x)           (MODULA(x)) >> 1
 #define INDEXER(x, y, nx)	y*nx + x
+#define TSTEPI				2
 
 
 //---------------//
 struct states{
-    REAL u[2];
+    double u[2];
     //size_t tstep; // Consider as padding.
 };
 typedef Json::Value jsons;
@@ -81,20 +82,22 @@ void mpi_type(MPI_Datatype *dtype)
 struct constWave
 {
 	int nx, ny;
+	double dx, dy;
 	int blockSide, blockBase;
 	double cx, cy, homecoeff;
 
 	void init(jsons inJ)
 	{
-		double dx = inJ["dx"].asDouble();
-		double dy = inJ["dy"].asDouble();
 		double dt = inJ["dt"].asDouble();
 		double cfl = inJ["cfl"].asDouble(); //Some way to give c and get cfl
-		ny = inJ["nY"].asDouble();
-		nx = inJ["nX"].asDouble();
-		blockSide = inJ['blockSide'].asDouble();
+		ny = inJ["nY"].asInt();
+		nx = inJ["nX"].asInt();
+		dx = inJ["dx"].asDouble();
+		dy = inJ["dy"].asDouble();
+		blockSide = inJ["blockSide"].asDouble();
+		std::cout << inJ << std::endl;
 		blockBase = blockSide+2; 
-
+		
 		// CFL given should be max cfl for all dimensions.
 		double c = cfl * std::min(dx,dy)/dt;
 
@@ -116,9 +119,11 @@ __constant__ constWave DCONST;
 #endif
 
 __host__
-void initState(states *state, const int x, const int y)	
+void initState(states *state, const double x, const double y)	
 {
-	double fillVal = std::exp(-50.0 * std::sqrt((x-A.nx*0.5) * (x-A.nx*0.5) + (y-A.ny*0.5) * (y-A.ny*0.5)));
+	double dxx = (x-A.nx/2) * A.dx;
+	double dyy = (y-A.ny/2) * A.dy;
+	double fillVal = std::exp(-50.0 * std::sqrt(dxx*dxx + dyy*dyy));
 
 	for (int k=0; k<2; k++) state->u[k] = fillVal;
 };

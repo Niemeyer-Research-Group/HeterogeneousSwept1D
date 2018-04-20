@@ -14,6 +14,7 @@
 
 #include <cmath>
 #include <vector>
+#include <array>
 
 void cudaRunCheck()
 {
@@ -23,7 +24,7 @@ void cudaRunCheck()
     printf("CUDA Driver Version / Runtime Version  --- %d.%d / %d.%d\n", dv/1000, (dv%100)/10, rv/1000, (rv%100)/10);
 }
 
-int* factor(int n)
+void factor(int n, int* factors)
 {
     int sq = std::sqrt(n);
     int outf = n/sq;
@@ -32,8 +33,8 @@ int* factor(int n)
         sq--;
         outf=n/sq;
     }
-    int factors[2] = {sq, outf};
-    return factors;
+    factors[0] = sq;
+    factors[1] = outf;
 }
 
 struct cudaTime

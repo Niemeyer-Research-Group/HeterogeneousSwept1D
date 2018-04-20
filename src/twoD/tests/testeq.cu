@@ -26,7 +26,6 @@ int main(int argc, char *argv[])
     setRegion(regions);
 
     std::string pth = argv[3];
-    int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
 
     for (auto r: regions)
     {
@@ -34,6 +33,7 @@ int main(int argc, char *argv[])
     }
 
     // FOR REGION IN REGIONS WRITE IT OUT.
-    
+
+
     return 0;
 }

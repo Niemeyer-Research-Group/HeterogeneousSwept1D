@@ -33,7 +33,7 @@ int lastproc, nprocs, rank;
 struct Globalism
 {
     // Topology
-    int nGpu, nPts, nWrite, hasGpu;
+    int nGpu, nPts, nWrite, hasGpu, procRegions;
     double gpuA;
 
     // Geometry-No second word is in overall grid.
@@ -64,17 +64,19 @@ struct Address
 struct Neighbor
 {
     const Address id;
-    bool sameProc;
-    Neighbor(Address addr): id(addr)
-    {
-        sameProc = (rank == id.owner);
-    } 
+    const short sidx, ridx;
+    const bool sameProc;
+    MPI_Request req;
+    MPI_Status stat;
+    Neighbor(Address addr, short sidx): id(addr), sidx(sidx), ridx((sidx + 2) % 4) , sameProc(rank == id.owner) {};
 };
+
+typedef std::array <Neighbor *, 4> stencil;
 
 struct Region
 {    
     const Address self;
-    const std::vector<Neighbor> neighbors;
+    const stencil neighbors;
     int xsw, ysw; //Needs the size information.
     int regionAlloc, rows, cols;
     std::string xstr, ystr, tstr, spath, scheme;
@@ -85,12 +87,12 @@ struct Region
     states **stateRows, **inbox, **outbox, **dStateRows, **dInbox, **dOutbox; // rows in region
     
     Region(Address stencil[5]) 
-    : self(stencil[0]), neighbors(stencil+1, stencil+4)
+    : self(stencil[0]), neighbors(meetNeighbors(&stencil[1]))
     {
         xsw = cGlob.xPointsRegion * self.globalx;
         ysw = cGlob.yPointsRegion * self.globaly;
-
     }
+
     ~Region()
     {
         if (self.gpu)
@@ -108,6 +110,20 @@ struct Region
             cudaFreeHost(state);
             //FREE STREAMS
         }
+        else
+        {
+            free(state);
+        }
+    }
+
+    stencil meetNeighbors(Address *addr)
+    {
+        stencil n;
+        for(int k=0; k<4; k++)
+        {
+            n[k] = new Neighbor(addr[k], k);
+        }
+        return n;
     }
 
     void gpuInit()

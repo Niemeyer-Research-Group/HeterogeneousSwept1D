@@ -29,38 +29,39 @@ struct Address;
 struct Neighbor;
 struct Region;
 
-void sender(Region *home, Region *neighbor, int idx, int ts)
+void sender(Region *home, Region *neighbor, idx)
 {
     static const int items[4] = {cGlob.yPointsRegion,                                     cGlob.xPointsRegion, 
                                 cGlob.yPointsRegion, cGlob.xPointsRegion};
+
 
     cudaMemcpy(home->dInbox[idx], neighbor->dOutbox[idx] cGlob.szState*items[idx], cudaMemcpyDeviceToDevice);
     // Now what to do about the gpu process getting data from the 
 }
 
-void sender(Region *home, Region *neighbor, int idx, int ts)
+void sender(Region *home, Address *neighbor) 
 {
-    static const int items[4] = {cGlob.yPointsRegion,                                     cGlob.xPointsRegion, 
-                                cGlob.yPointsRegion, cGlob.xPointsRegion};
-
+    static const int items[4] = {cGlob.yPointsRegion, cGlob.xPointsRegion, cGlob.yPointsRegion, cGlob.xPointsRegion};
     
-    MPI_ISend(home->inbox[idx], items[idx], struct_type, neighbor->id.owner, TAGS(tstep+idx), MPI_COMM_WORLD, neighbor->req); // PUT REQUEST IN NEIGHBOR OBJECT
+    MPI_ISend(home->inbox[neighbor->sidx], items[neighbor->sidx], struct_type, neighbor->id.owner, neighbor->id.localIdx, MPI_COMM_WORLD, neighbor->req); // PUT REQUEST IN NEIGHBOR OBJECT
 }
 
-void pass(Region **procChunk, int ts)
+void pass(std::vector <Region *> &regionals)
 {
-    // PUT IN CGLOB
-    int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1); 
-    Region *neighbor;
-    for (int k=0; k<localRegions; k++)
+    int nidx;
+    Region *rix;
+    for (auto &r: regionals)
     {
         for (int i=0; i<4; i++)
         {
-            if (procChunk[k]->neighbors[i].sameProc) 
+            if (r->neighbors[i].sameProc) 
             {
                 // return bool if this process = other process
-                neighbor = procChunk[k]->neighbors[i];
+                nidx = r->neighbors[i].id.localIdx;
+                rix = regionals[nidx];
+                sender(r, rix, i);
             }
+            else 
         }
     
     }    

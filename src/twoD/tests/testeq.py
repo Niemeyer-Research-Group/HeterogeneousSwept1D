@@ -47,6 +47,8 @@ if __name__ == "__main__":
 
     runstring(compileit)
 
+    print("   ---------------")
+    print("Compiled")
     utilObj = [op.join(utilBin, k) for k in os.listdir(utilBin)]
     execf = op.join(testBin, "waveTest")
     utilObj = " ".join(utilObj)
@@ -54,8 +56,12 @@ if __name__ == "__main__":
 
     runstring(linkit)
 
+
+    print("   ---------------")
+    print("Linked")
     runTest = "mpirun -np 8 " + execf + " I waveTest.json " + testResult
     runstring(runTest)
+    print("   ---------------")
 
 
 

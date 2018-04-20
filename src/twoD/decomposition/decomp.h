@@ -26,6 +26,8 @@ void rowcast(states **row, states *state, int xLen, int nrows)
     row[gid] = (states *)(state + idx);
 }
 
+void endMPI();
+
 // MPI process properties
 MPI_Datatype struct_type;
 int lastproc, nprocs, rank;
@@ -79,6 +81,7 @@ struct Region
     const stencil neighbors;
     int xsw, ysw; //Needs the size information.
     int regionAlloc, rows, cols;
+    int tstep;
     std::string xstr, ystr, tstr, spath, scheme;
     
     jsons solution; 
@@ -91,16 +94,18 @@ struct Region
     {
         xsw = cGlob.xPointsRegion * self.globalx;
         ysw = cGlob.yPointsRegion * self.globaly;
+        tstep = TSTEPI;
     }
 
     ~Region()
     {
+        std::cout << "CLOSE REGION" << std::endl;
+        #ifndef NOS
+            writeSolution();
+        #endif
         if (self.gpu)
         {
-            #ifndef NOS
-                writeSolution();
-            #endif
-
+        
             cudaFree(dState);
             cudaFree(dStateRows);
             cudaFree(dFlatOut);
@@ -180,8 +185,7 @@ struct Region
         {   
             for (int i=0; i<cGlob.xPointsRegion; i++)
             {   
-                xstr = std::to_string(i*cGlob.dx); 
-                initState(&stateRows[k][i], k+ysw, i+xsw);
+                initState(&stateRows[k][i], i+xsw, k+ysw);
             }
         }
         solutionOutput(0.0);
@@ -193,10 +197,10 @@ struct Region
         tstr = std::to_string(tstamp);
         for(int k=0; k<cGlob.yPointsRegion; k++)
         {   
-            ystr = std::to_string(k*cGlob.dy);
+            ystr = std::to_string(cGlob.dy * (k+ysw));
             for (int i=0; i<cGlob.xPointsRegion; i++)
             {   
-                xstr = std::to_string(i*cGlob.dx); 
+                xstr = std::to_string(cGlob.dx* (i+xsw)); 
                 for (int j=0; j<NVARS; j++)
                 {
                     solution[outVars[j]][tstr][ystr][xstr] = printout(&stateRows[k][i], j);
@@ -208,7 +212,8 @@ struct Region
     void writeSolution()
     {
         std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
-//        if (!ranks[1]) solution["meta"] = inJ;
+        std::cout << spath << std::endl;
+        // if (!ranks[1]) solution["meta"] = inJ;
         soljson << solution;
         soljson.close();
     }
@@ -241,6 +246,7 @@ void parseArgs(int argc, char *argv[])
 
 void setRegion(std::vector <Region *> &regionals)
 {
+    std::cout << " -- MADE IT -- 2.0" << std::endl;
     int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
     int regionMap[nprocs];
     MPI_Allgather(&localRegions, 1, MPI_INT, &regionMap[0], 1, MPI_INT, MPI_COMM_WORLD);
@@ -248,6 +254,8 @@ void setRegion(std::vector <Region *> &regionals)
     Address gridLook[cGlob.yRegions][cGlob.xRegions];
     int k, i;
     int xLoc, yLoc;
+
+    std::cout << " -- MADE IT -- 2.0" << std::endl;
 
     for (k = 0; k<nprocs; k++)
     {
@@ -274,8 +282,8 @@ void setRegion(std::vector <Region *> &regionals)
                 addr[3] = gridLook[(k+1)%cGlob.yRegions][i];
                 addr[4] = gridLook[k][(i-1)%cGlob.xRegions];
                 regionals.push_back(new Region(addr));
-            }
-            
+                std::cout << " -- MADE IT -- 2." << i << std::endl;
+            }  
                 
         }
     }
@@ -284,7 +292,7 @@ void setRegion(std::vector <Region *> &regionals)
 
 void initArgs()
 {
-    int *dimFinder;
+    int dimFinder[2];
 
     //VALUES THAT NEED NO INTROSPECTION
 
@@ -319,35 +327,36 @@ void initArgs()
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
         sz -= cGlob.nGpu;
     }
-
-    cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
-    dimFinder = factor(cGlob.nRegions);
     
+    cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
+    factor(cGlob.nRegions, &dimFinder[0]);
     // WE JUST WANT THE DIMENSIONS TO BE RELATIVELY SIMILAR.
     while (dimFinder[1]/dimFinder[0] > 2)
     {
         if (!cGlob.nGpu)
         {
             std::cout << "You provided a prime number of processes and no GPU capability. That's just silly and you absolutely cannot do it because we must be able to form a rectangle from the number of processes on each device.  Retry!" << std::endl;
+            endMPI();
             exit(1);
         }
 
         cGlob.gpuA++;
         cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
-        dimFinder = factor(cGlob.nRegions);
+        factor(cGlob.nRegions, &dimFinder[0]);
     }
+    
     cGlob.xRegions = dimFinder[0]; 
     cGlob.yRegions = dimFinder[1];
-
+    
     // Something that makes this work if you give it nRegions rather than nPts.
     cGlob.nPoints = inJ["nPts"].asInt();
     cGlob.nBlocksRegion = cGlob.nPoints/(cGlob.nPointsBlock * cGlob.nRegions);
-    dimFinder = factor(cGlob.nBlocksRegion);
+    factor(cGlob.nBlocksRegion, &dimFinder[0]);
 
     while (dimFinder[1]/dimFinder[0] > 2)
     {
         cGlob.nBlocksRegion++;
-        dimFinder = factor(cGlob.nBlocksRegion);
+        factor(cGlob.nBlocksRegion, &dimFinder[0]);
     }
 
     cGlob.nPoints = cGlob.nPointsBlock * cGlob.nRegions * cGlob.nBlocksRegion;
@@ -357,12 +366,15 @@ void initArgs()
     cGlob.yPointsRegion = cGlob.xPointsBlock * cGlob.yBlocksRegion;
     cGlob.xPoints = cGlob.xPointsRegion * cGlob.xRegions;
     cGlob.yPoints = cGlob.yPointsRegion * cGlob.yRegions;
+    
+    inJ["nPts"] = cGlob.nPoints;
     inJ["nX"] = cGlob.xPoints;
     inJ["nY"] = cGlob.yPoints;
 
     cGlob.ht = (cGlob.xPointsBlock-2)/2;
     cGlob.htm = cGlob.ht-1;
     cGlob.htp = cGlob.ht+1;
+
     // Derived quantities
 
     cGlob.dx = cGlob.lx/(double)cGlob.xPoints; // Spatial step
@@ -370,10 +382,9 @@ void initArgs()
     cGlob.nWrite = cGlob.tf/cGlob.freq + 2;
     inJ["dx"] = cGlob.dx; // To send back to equation folder. 
     inJ["dy"] = cGlob.dy;
-
+    
     HCONST.init(inJ);
     cudaMemcpyToSymbol(DCONST, &HCONST, sizeof(HCONST));
-
     if (!rank)  std::cout << rank <<  " - Initialized Arguments -" << std::endl;
 }
 

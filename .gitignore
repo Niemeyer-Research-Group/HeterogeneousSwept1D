@@ -17,6 +17,7 @@ temp*
 *.pdf
 src/*/trslt/*.json
 src/*/rslts/*.json
+src/*/tests/testResult/
 src/*/utilities/js*
 src/config.mk
 nohup*

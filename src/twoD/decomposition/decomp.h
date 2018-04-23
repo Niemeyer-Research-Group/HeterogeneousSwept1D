@@ -9,23 +9,6 @@
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
 */
 
-__global__ 
-void mailboxes(states **row, states *mail, int xLen, int yLen, int nrows)
-{
-    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
-    if (gid>=nrows) return;
-}
-
-__global__ 
-void regioncast(states **region, states *state, int regions)
-{
-    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
-    if (gid<regions) {
-        int idx = gid * xLen;
-        region[gid] = (states *)(state + idx);
-    }
-}
-
 void endMPI();
 
 // MPI process properties
@@ -34,20 +17,17 @@ int lastproc, nprocs, rank;
 
 struct Globalism
 {
-    // Topology
-    int nGpu, nPts, nWrite, hasGpu, procRegions;
-    double gpuA;
+    // Topology || Affinity is int now.
+    int nGpu, nWrite, hasGpu, procRegions, gpuA;
+    std::string shapeRequest;
 
     // Geometry-No second word is in overall grid.
     //How Many Regions Per
+    int tpbx, tpby;
     int nRegions, xRegions, yRegions;
-    //How many Blocks Per
-    int nBlocks, xBlocks, yBlocks;
-    int nBlocksRegion, xBlocksRegion, yBlocksRegion; 
     // How many points per
     int nPoints, xPoints, yPoints;
-    int nPointsRegion, xPointsRegion, yPointsRegion;
-    int nPointsBlock, xPointsBlock;
+    int regionSide, regionBase;
     int ht, htm, htp;
     int szState;
 
@@ -70,7 +50,7 @@ struct Neighbor
     const bool sameProc;
     MPI_Request req;
     MPI_Status stat;
-    Neighbor(Address addr, short sidx): id(addr), sidx(sidx), ridx((sidx + 2) % 4) , sameProc(rank == id.owner) {};
+    Neighbor(Address addr, short sidx): id(addr), sidx(sidx), ridx((sidx + 2) % 4) , sameProc(rank == id.owner) {}
 };
 
 typedef std::array <Neighbor *, 4> stencil;
@@ -86,39 +66,28 @@ struct Region
     
     jsons solution; 
 
-    states *state, *flatIn, *flatOut, *dState, *dFlatIn, *dFlatOut; // pts in region
-    states **stateRows, **inbox, **outbox, *dStat, **dInbox, **dOutbox; // rows in region
+    states *state;
+    states **stateRows; // Convenience accessor.
+
     
     Region(Address stencil[5]) 
     : self(stencil[0]), neighbors(meetNeighbors(&stencil[1]))
     {
-        xsw = cGlob.xPointsRegion * self.globalx;
-        ysw = cGlob.yPointsRegion * self.globaly;
+        xsw = cGlob.regionSide * self.globalx;
+        ysw = cGlob.regionSide * self.globaly;
         tstep = TSTEPI;
     }
 
     ~Region()
     {
         std::cout << "CLOSE REGION" << std::endl;
+
         #ifndef NOS
             writeSolution();
         #endif
-        if (self.gpu)
-        {
-        
-            cudaFree(dState);
-            cudaFree(dStateRows);
-            cudaFree(dFlatOut);
-            cudaFree(dFlatIn);
-            cudaFree(dInbox);
-            cudaFree(dOutbox);
-            cudaFreeHost(state);
-            //FREE STREAMS
-        }
-        else
-        {
-            free(state);
-        }
+
+        cudaFreeHost(state);
+        delete [] stateRows;
     }
 
     stencil meetNeighbors(Address *addr)
@@ -131,33 +100,6 @@ struct Region
         return n;
     }
 
-    void gpuInit()
-    {
-        int mailSize = 2*(cGlob.xPointsRegion + cGlob.yPointsRegion);
-
-        cudaMalloc((void**) &dInbox, sizeof(states*)*4);
-        cudaMalloc((void**) &dOutbox, sizeof(states*)*4);
-        cudaMalloc((void**) &dStateRows, sizeof(states*)*rows);
-        
-        cudaMalloc((void**) &dFlatIn, sizeof(states)*mailSize);
-        cudaMalloc((void**) &dFlatOut, sizeof(states)*mailSize);
-        cudaMalloc((void**) &dState, sizeof(states)*regionAlloc);
-
-        mailboxes<<<1, 4>>>(dInbox, dFlatIn, cGlob.xPointsRegion, cGlob.yPointsRegion, 4);
-        mailboxes<<<1, 4>>>(dOutbox, dFlatOut, cGlob.xPointsRegion, cGlob.yPointsRegion, 4);
-        int tbx = rows/64 + 1;
-        rowcast<<<tbx, 64>>>(dStateRows, dState, cols, rows); 
-
-        cudaStream_t streams[4];
-        for (int i = 0; i < cGlob.gpuA; i++) cudaStreamCreate(&streams[i]);
-        cudaMemcpy(dState, state, sizeof(states)*regionAlloc, cudaMemcpyHostToDevice);
-    }
-    // Proto Caller
-    // for (int i = 0; i < cGlob.gpuA; i++)
-    // {
-    //     classicStep <<< blockGrid, threadGrid, 0, streams[i] >>> (Regions stateRow, Regions passer, tstep);
-    // }
-
     void initializeState(std::string algo, std::string pth)
     {
         spath = pth + "/s" + fspec + "_" + std::to_string(rank) + ".json";
@@ -169,14 +111,9 @@ struct Region
 
         stateRows = new states*[rows];
     
-        if(self.gpu)
-        {
-            cudaHostAlloc((void **) &state, regionAlloc*cGlob.szState, cudaHostAllocDefault);
-        }
-        else 
-        {
-            state = (states*) malloc(regionAlloc * cGlob.szState);
-        }
+
+        cudaHostAlloc((void **) &state, regionAlloc*cGlob.szState, cudaHostAllocDefault);
+  
         for (int j=0; j<rows; j++)
         {
             stateRows[j] = (states *) state+(j*cols); 
@@ -189,7 +126,20 @@ struct Region
             }
         }
         solutionOutput(0.0);
-        if (self.gpu) gpuInit();
+    }
+
+    // O for out 1 for in
+    //Ok but how do I use this for MPI transfers?
+    void gpuCopy(states *dState, int dir, cudaStream_t stream)
+    {
+        if (dir)
+        {
+            cudaMemcpyAsync(state, dState, cudaMemcpyDeviceToHost, st1);
+        }
+        else
+        {
+            cudaMemcpyAsync(state, dState, cudaMemcpyHostToDevice, st1);
+        }
     }
 
     void solutionOutput(double tstamp)
@@ -198,9 +148,11 @@ struct Region
         for(int k=0; k<cGlob.yPointsRegion; k++)
         {   
             ystr = std::to_string(cGlob.dy * (k+ysw));
+
             for (int i=0; i<cGlob.xPointsRegion; i++)
             {   
-                xstr = std::to_string(cGlob.dx* (i+xsw)); 
+                xstr = std::to_string(cGlob.dx * (i+xsw)); 
+
                 for (int j=0; j<NVARS; j++)
                 {
                     solution[outVars[j]][tstr][ystr][xstr] = printout(&stateRows[k][i], j);
@@ -213,7 +165,7 @@ struct Region
     {
         std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
         std::cout << spath << std::endl;
-        // if (!ranks[1]) solution["meta"] = inJ;
+        if (!rank) solution["meta"] = inJ;
         soljson << solution;
         soljson.close();
     }
@@ -295,7 +247,7 @@ void initArgs()
     int dimFinder[2];
 
     //VALUES THAT NEED NO INTROSPECTION
-
+    cGlob.shapeRequest = inJ["Shape"].asString(); //How square required?
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
@@ -304,12 +256,10 @@ void initArgs()
     cGlob.szState = sizeof(states);
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
-    // IF TPB IS NOT SQUARE AND DIVISIBLE BY 32 PICK CLOSEST VALUE THAT IS.
+    // IF TPB IS NOT DIVISIBLE BY 32 PICK CLOSEST VALUE THAT IS.
     int tpbReq = inJ["tpb"].asInt();
-    cGlob.xPointsBlock = std::sqrt(tpbReq);
-    if (cGlob.xPointsBlock % 8) cGlob.xPointsBlock = 8 * (1 + (cGlob.xPointsBlock/8)); 
-    cGlob.nPointsBlock = cGlob.xPointsBlock * cGlob.xPointsBlock;
-    inJ["blockSide"] = cGlob.xPointsBlock;
+    tpbx = 32;
+    tpby = tpbReq/tpbx;
 
     // FIND NUMBER OF GPUS AVAILABLE.
 	cGlob.gpuA = inJ["gpuA"].asInt(); // AFFINITY
@@ -330,7 +280,8 @@ void initArgs()
     
     cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
     factor(cGlob.nRegions, &dimFinder[0]);
-    // WE JUST WANT THE DIMENSIONS TO BE RELATIVELY SIMILAR.
+    // How Similar should the dimensions be?
+
     while (dimFinder[1]/dimFinder[0] > 2)
     {
         if (!cGlob.nGpu)
@@ -350,14 +301,6 @@ void initArgs()
     
     // Something that makes this work if you give it nRegions rather than nPts.
     cGlob.nPoints = inJ["nPts"].asInt();
-    cGlob.nBlocksRegion = cGlob.nPoints/(cGlob.nPointsBlock * cGlob.nRegions);
-    factor(cGlob.nBlocksRegion, &dimFinder[0]);
-
-    while (dimFinder[1]/dimFinder[0] > 2)
-    {
-        cGlob.nBlocksRegion++;
-        factor(cGlob.nBlocksRegion, &dimFinder[0]);
-    }
 
     cGlob.nPoints = cGlob.nPointsBlock * cGlob.nRegions * cGlob.nBlocksRegion;
     cGlob.xBlocksRegion = dimFinder[1];

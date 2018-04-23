@@ -55,8 +55,8 @@ struct states{
     //size_t tstep; // Consider as padding.
 };
 typedef Json::Value jsons;
-std::string fspec = "Wave";
-std::string outVars[NVARS] = {"Velocity"}; //---------------//
+const std::string fspec = "Wave";
+const std::string outVars[NVARS] = {"Velocity"}; //---------------//
 
 /*
 	============================================================
@@ -81,22 +81,24 @@ void mpi_type(MPI_Datatype *dtype)
 // Could probably use Region dimensions in this.
 struct constWave
 {
+	// short xBlock, yBlock;
 	int nx, ny;
+	int regionSide, regionBase;
+	
 	double dx, dy;
-	int blockSide, blockBase;
 	double cx, cy, homecoeff;
 
 	void init(jsons inJ)
 	{
 		double dt = inJ["dt"].asDouble();
+		// if inJ["cfl"].asDouble() isn't there a .empty method?
 		double cfl = inJ["cfl"].asDouble(); //Some way to give c and get cfl
 		ny = inJ["nY"].asInt();
 		nx = inJ["nX"].asInt();
 		dx = inJ["dx"].asDouble();
 		dy = inJ["dy"].asDouble();
-		blockSide = inJ["blockSide"].asDouble();
-		std::cout << inJ << std::endl;
-		blockBase = blockSide+2; 
+		// xBlock = inJ["blockSide"].asDouble();
+		// yBlock = xBlock; 
 		
 		// CFL given should be max cfl for all dimensions.
 		double c = cfl * std::min(dx,dy)/dt;
@@ -107,6 +109,21 @@ struct constWave
 		cy *= cy;
 		homecoeff = 2.0-2.0*(cx+cy);
 	}
+
+	// __host__ __device__ __forceinline__
+	// int flatidx(const int idx, const int idy, const int kx, const int ky) 
+	// { 
+	// 	const int xp = kx * xBlock + idx;
+	// 	const int yp = ky * yBlock + idy;
+	// 	return yp * regionSide + xp;
+	// }
+
+	__host__ __device__ __forceinline__
+	int getx(int ind) { return ind % regionBase;}
+
+	__host__ __device__ __forceinline__
+	int gety(int ind) { return ind / regionBase;}
+
 };
 
 constWave HCONST;
@@ -132,10 +149,10 @@ __host__ __device__
 double printout(states *state, int i) {return state->u[0];}
 
 __host__ __device__
-void stepUpdate(states **state, const int idx,  const int idy, const int tstep)
+void stepUpdate(states *state, const int ind, const int tstep)
 {
 	const int otx = MODULA(tstep); //Modula is output place
 	const int itx = (otx^1); //Opposite in input place.
 
-	state[idy][idx].u[otx] =  A.homecoeff * state[idy][idx].u[itx] - state[idy][idx].u[otx] + A.cx * (state[idy][idx+1].u[itx] + state[idy][idx-1].u[itx]) + A.cy * (state[idy+1][idx].u[itx] + state[idy-1][idx].u[itx]);
+	state[ind].u[otx] -=  A.homecoeff * state[ind].u[itx] + A.cx * (state[ind+1].u[itx] + state[ind-1].u[itx]) + A.cy * (state[ind+A.regionBase].u[itx] + state[ind-A.regionBase].u[itx]);
 }

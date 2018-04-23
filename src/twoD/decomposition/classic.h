@@ -71,40 +71,67 @@ void pass(std::vector <Region *> &regionals)
 __global__ void classicStep(states **regions, const int ts)
 {
     states *blkState = regions[blockIdx.x]; //Launch 1D grid of 2d Blocks
-    const int tidx = threadIdx.x + 1; 
-    const int tidy = threadIdx.y + 1;
+    int kx = threadIdx.x + 1; 
+    int ky = threadIdx.y + 1;
+    int sid;
 
-    int idx, idy, sid;
-
-    for (int kx=0; kx<A.sBlocks; kx++)
+    for (; ky<=A.regionSide; ky+=blockDim.y)
     {
-        idy = tidy + ky * blockDim.y;
-        for(int ky=0; ky<A.sBlocks; ky++) 
+        for(; kx<=A.regionSide; kx+=blockDim.x) 
         {
-            sid = idy * A.sBlocks + kx * blockDim.x + tidx;
+            sid =  ky * A.regionBase + kx;
             stepUpdate(blkState, sid, ts);
         }
-        __syncthreads();
     }
-    
-    if (gidy == 1) outMail[0][gidx-1] = state[gidy][gidx]; // SOUTH
-    if (gidx == 1) outMail[1][gidy-1] = state[gidy][gidx]; // WEST
-    if (gidy == (gridDim.y * blockDim.y)) outMail[2][gidx-1] = state[gidy][gidx]; //NORTH
-    if (gidx == (gridDim.x * blockDim.x)) outMail[3][gidy-1] = state[gidy][gidx]; //EAST
 }
 
-void classicStepCPU(states **state, states **outMail, const int ts)
+__global__
+void classicGPUSwap(states *ins, states *outs, int type)
 {
-    for (int k=1; k<=cGlob.yPointsRegion; k++)
-    {
-        for (int i=1; i<=cGlob.xPointsRegion; i++)
-        {
-            stepUpdate(state, i, k, ts);
+    const int gid = 1 + threadIdx.x + blockDim.x * blockIdx.x; 
+    
+    if (gid>A.regionSide) return;
 
-            if (k == 1) outMail[0][i-1] = state[k][i];
-            if (i == 1) outMail[1][k-1] = state[k][i];
-            if (k == cGlob.yPointsRegion) outMail[2][i-1] = state[k][i];
-            if (i == cGlob.xPointsRegion) outMail[3][k-1] = state[k][i];
+    int inidx, outidx;
+    if (type & 1) 
+    {
+        if (type >> 1)
+        {
+            inidx = ((gid + 1) * A.regionBase) - 2;
+            outidx = (gid * A.regionBase);
+        }
+        else
+        {
+            inidx = (gid * A.regionBase) + 1;
+            outidx = ((gid + 1)  * A.regionBase) - 1;
+        }
+    }
+    else
+    {
+        if (type >> 1)
+        {
+            inidx = gid + (A.regionSide * A.regionBase);
+            outidx = gid;
+        }
+        else
+        {
+            inidx = gid + A.regionBase;
+            outidx = gid + ((A.regionSide + 1) * A.regionBase);
+        }
+    }
+    outs[outidx] = ins[inidx];
+}
+
+void classicStepCPU(states *state, const int ts)
+{
+    static int ky = 1;
+    static int kx = 1;
+    for (; ky<=A.regionSide; ky++)
+    {
+        for(; kx<=A.regionSide; kx++) 
+        {
+            sid =  ky * A.regionBase + kx;
+            stepUpdate(state, sid, ts);
         }
     }
 }

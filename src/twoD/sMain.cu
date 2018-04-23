@@ -18,15 +18,13 @@ int main(int argc, char *argv[])
 {
     makeMPI(argc, argv);
 
-    if (!ranks[1]) cudaRunCheck();
+    if (!rank) cudaRunCheck();
 
     #ifdef NOS
-        if (!ranks[1]) std::cout << "No Solution Version." << std::endl;
+        if (!rank) std::cout << "No Solution Version." << std::endl;
     #endif
 
-    std::string i_ext = ".json";
     std::string t_ext = ".csv";
-    std::string myrank = std::to_string(ranks[1]);
     std::string scheme = argv[1];
 
     // Equation, grid, affinity data
@@ -37,10 +35,16 @@ int main(int argc, char *argv[])
     parseArgs(argc, argv);
     initArgs();
 
-    Region **regions;
+    std::vector<Region *> regions;
+   
     setRegion(regions);
 
-    std::string pth = string(argv[3]);
+    std::string pth = argv[3];
+
+    for (auto r: regions)
+    {
+        r->initializeState(scheme, pth);
+    }
 
     // If you have selected scheme I, it will only initialize and output the initial values.
 

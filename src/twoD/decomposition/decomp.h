@@ -17,13 +17,13 @@ void mailboxes(states **row, states *mail, int xLen, int yLen, int nrows)
 }
 
 __global__ 
-void rowcast(states **row, states *state, int xLen, int nrows)
+void regioncast(states **region, states *state, int regions)
 {
     const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
-    if (gid>=nrows) return;
-
-    int idx = gid * xLen;
-    row[gid] = (states *)(state + idx);
+    if (gid<regions) {
+        int idx = gid * xLen;
+        region[gid] = (states *)(state + idx);
+    }
 }
 
 void endMPI();
@@ -87,7 +87,7 @@ struct Region
     jsons solution; 
 
     states *state, *flatIn, *flatOut, *dState, *dFlatIn, *dFlatOut; // pts in region
-    states **stateRows, **inbox, **outbox, **dStateRows, **dInbox, **dOutbox; // rows in region
+    states **stateRows, **inbox, **outbox, *dStat, **dInbox, **dOutbox; // rows in region
     
     Region(Address stencil[5]) 
     : self(stencil[0]), neighbors(meetNeighbors(&stencil[1]))

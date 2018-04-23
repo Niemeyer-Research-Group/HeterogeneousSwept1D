@@ -16,6 +16,16 @@
 #include <vector>
 #include <array>
 
+// From cppOverload in CUDASamples.
+#define OUTPUT_ATTR(attr)  \
+    printf("Shared Size:   %d\n", (int)attr.sharedSizeBytes);   \
+    printf("Constant Size: %d\n", (int)attr.constSizeBytes);                 \
+    printf("Local Size:    %d\n", (int)attr.localSizeBytes);                 \
+    printf("Max Threads Per Block: %d\n", attr.maxThreadsPerBlock);          \
+    printf("Number of Registers: %d\n", attr.numRegs);                       \
+    printf("PTX Version: %d\n", attr.ptxVersion);                            \
+    printf("Binary Version: %d\n", attr.binaryVersion);                      \
+
 void cudaRunCheck()
 {
     int rv, dv;

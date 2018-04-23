@@ -68,12 +68,25 @@ void pass(std::vector <Region *> &regionals)
 
 }
 
-__global__ void classicStep(states **state, states **outMail, const int ts)
+__global__ void classicStep(states **regions, const int ts)
 {
-    const int gidx = blockDim.x * blockIdx.x + threadIdx.x + 1; 
-    const int gidy = blockDim.y * blockIdx.y + threadIdx.y + 1; 
-    stepUpdate(state, gidx, gidy, ts);
-    __syncthreads();
+    states *blkState = regions[blockIdx.x]; //Launch 1D grid of 2d Blocks
+    const int tidx = threadIdx.x + 1; 
+    const int tidy = threadIdx.y + 1;
+
+    int idx, idy, sid;
+
+    for (int kx=0; kx<A.sBlocks; kx++)
+    {
+        idy = tidy + ky * blockDim.y;
+        for(int ky=0; ky<A.sBlocks; ky++) 
+        {
+            sid = idy * A.sBlocks + kx * blockDim.x + tidx;
+            stepUpdate(blkState, sid, ts);
+        }
+        __syncthreads();
+    }
+    
     if (gidy == 1) outMail[0][gidx-1] = state[gidy][gidx]; // SOUTH
     if (gidx == 1) outMail[1][gidy-1] = state[gidy][gidx]; // WEST
     if (gidy == (gridDim.y * blockDim.y)) outMail[2][gidx-1] = state[gidy][gidx]; //NORTH

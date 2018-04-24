@@ -6,19 +6,37 @@
 
 typedef std::vector<int> ivec;
 
-states ssLeft[3];
-states ssRight[3];
+__global__ void upPyramid(states **state, const int ts);
+__global__ void horizontalBridge(states **state, const int ts);
+__global__ void verticalBridge(states **state, const int ts);
+__global__ void downPyramid(states **state, const int ts);
+__global__ void wholePyramid(states **state, const int ts);
 
-__global__ void upTriangle(states **state, states **outMail, const int ts)
+// GET SMEM SIZE FROM KERNEL CAPACITY AT COMPILE TIME AND INITIALIZE STATIC SHARED MEM.
+constexpr int smemsize()
 {
-	extern __shared__ states temper[];
+    struct cudaFuncAttributes attr;
+    memset(&attr, 0, sizeof(attr));
+    cudaFuncGetAttributes(&attr, upPyramid);
+    return attr.maxDynamicSharedSizeBytes/8;
+}
 
-	int gid = blockDim.x * blockIdx.x + threadIdx.x; //Global Thread ID
-	int tidx = threadIdx.x; //Block Thread ID
+constexpr int SMEM smemsize();
+
+__shared__ states tState[SMEM];
+
+__global__ void upPyramid(states **state, const int ts)
+{
+	states *blkState = state[blockIdx.x]
+
+	//Launch 1D grid of 2d Blocks
+    int kx = threadIdx.x + 1; 
+    int ky = threadIdx.y + 1;
+    int sid;
+
     int mid = blockDim.x >> 1;
 
     // Using tidx as tid is kind of confusing for reader but looks valid.
-
 	temper[tidx] = state[gid + 1];
 
     __syncthreads();
@@ -34,17 +52,9 @@ __global__ void upTriangle(states **state, states **outMail, const int ts)
     state[gid + 1] = temper[tidx];
 }
 
-/**
-    Builds an inverted triangle using the swept rule.
-
-    Inverted triangle using the swept rule.  downTriangle is only called at the end when data is passed left.  It's never split.  Sides have already been passed between nodes, but will be swapped and parsed by readIn function.
-
-    @param IC Full solution at some timestep.
-    @param inRight Array of right edges seeding solution vector.
-*/
 __global__
 void
-downTriangle(states *state, const int tstep, const int offset)
+horizontalBridge(states *state, const int tstep, const int offset)
 {
 	extern __shared__ states temper[];
 
@@ -73,22 +83,6 @@ downTriangle(states *state, const int tstep, const int offset)
     state[gid] = temper[tidx];
 }
 
-// __global__
-// void
-// printgpu(states *state, int n, int on)
-// {
-//     printf("%i\n", on);
-//     for (int k=0; k<n; k++) printf("%i %.2f\n", k, state[k].T[on]);
-// }
-
-/**
-    Builds an diamond using the swept rule after a left pass.
-
-    Unsplit diamond using the swept rule.  wholeDiamond must apply boundary conditions only at it's center.
-
-    @param state The working array of structures states.
-    @param tstep The count of the first timestep.
-*/
 __global__
 void
 wholeDiamond(states *state, const int tstep, const int offset)

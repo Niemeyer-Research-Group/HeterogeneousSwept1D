@@ -39,6 +39,7 @@ int main(int argc, char *argv[])
    
     setRegion(regions);
 
+    regions.shrink_to_fit();
     std::string pth = argv[3];
 
     for (auto r: regions)
@@ -50,17 +51,15 @@ int main(int argc, char *argv[])
 
     if (scheme.compare("I"))
     {
-        int tstep = 1;
         double timed, tfm;
-
-		if (!ranks[1])
+		if (rank)
 		{
             printf ("Scheme: %s - Grid Size: %d - Affinity: %.2f\n", scheme.c_str(), cGlob.nX, cGlob.gpuA);
             printf ("threads/blk: %d - timesteps: %.2f\n", cGlob.tpb, cGlob.tf/cGlob.dt);
 		}
 
         MPI_Barrier(MPI_COMM_WORLD);
-        if (!ranks[1]) timed = MPI_Wtime();
+        if (!rank) timed = MPI_Wtime();
 
         if (!scheme.compare("C"))
         {
@@ -76,7 +75,7 @@ int main(int argc, char *argv[])
         }
 
         MPI_Barrier(MPI_COMM_WORLD);
-        if (!ranks[1]) timed = (MPI_Wtime() - timed);
+        if (!ranks) timed = (MPI_Wtime() - timed);
         if (cGlob.hasGpu)  
 		{
 			cudaError_t error = cudaGetLastError();
@@ -89,9 +88,7 @@ int main(int argc, char *argv[])
 			cudaDeviceSynchronize();
 		}
 
-        writeOut(state, tfm);
-
-        if (!ranks[1])
+        if (!rank])
         {
             timed *= 1.e6;
 
@@ -113,28 +110,15 @@ int main(int argc, char *argv[])
             fclose(timeOut);
         }
     }
-        //WRITE OUT JSON solution to differential equation
 
-	#ifndef NOS
-        std::string spath = pth + "/s" + fspec + "_" + myrank + i_ext;
-        std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
-        if (!ranks[1]) solution["meta"] = inJ;
-        soljson << solution;
-        soljson.close();
-	#endif
-
-    if (cGlob.hasGpu)
+    for (auto r: regions)
     {
-        cudaFreeHost(state);
-        cudaDeviceSynchronize();
-        cudaDeviceReset();
-    }
-    else
-    {
-        free(state);
+        delete[] r;
     }
 
+    regions.clear();
     endMPI();
+
     return 0;
 }
 

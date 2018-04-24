@@ -27,7 +27,7 @@ struct Globalism
     int nRegions, xRegions, yRegions;
     // How many points per
     int nPoints, xPoints, yPoints;
-    int regionSide, regionBase;
+    int regionPoints, regionSide, regionBase;
     int ht, htm, htp;
     int szState;
 
@@ -50,7 +50,8 @@ struct Neighbor
     const bool sameProc;
     MPI_Request req;
     MPI_Status stat;
-    Neighbor(Address addr, short sidx): id(addr), sidx(sidx), ridx((sidx + 2) % 4) , sameProc(rank == id.owner) {}
+    Neighbor(Address addr, short sidx): id(addr), sidx(sidx), 
+    ridx((sidx + 2) % 4) , sameProc(rank == id.owner) {}
 };
 
 typedef std::array <Neighbor *, 4> stencil;
@@ -59,9 +60,10 @@ struct Region
 {    
     const Address self;
     const stencil neighbors;
-    int xsw, ysw; //Needs the size information.
-    int regionAlloc, rows, cols;
-    int tstep;
+    int xsw, ysw;
+    int regionAlloc, copyBytes, rows, cols;
+    int tStep, stepsPerCycle;
+    double tStamp;
     std::string xstr, ystr, tstr, spath, scheme;
     
     jsons solution; 
@@ -75,7 +77,8 @@ struct Region
     {
         xsw = cGlob.regionSide * self.globalx;
         ysw = cGlob.regionSide * self.globaly;
-        tstep = TSTEPI;
+        tStep = 0;
+        tStamp = 0.0;
     }
 
     ~Region()
@@ -83,11 +86,17 @@ struct Region
         std::cout << "CLOSE REGION" << std::endl;
 
         #ifndef NOS
+            solutionOutput();
             writeSolution();
         #endif
 
         cudaFreeHost(state);
-        delete [] stateRows;
+        delete[] stateRows;
+        for (auto n: neighbors)
+        {
+            delete[] n;
+        }
+        neighbors.clear();
     }
 
     stencil meetNeighbors(Address *addr)
@@ -100,56 +109,72 @@ struct Region
         return n;
     }
 
+    void incrementTime()
+    {
+        tStep += stepsPerCycle;
+        tStamp = (double)tStep * cGlob.dt;  
+    }
+
     void initializeState(std::string algo, std::string pth)
     {
         spath = pth + "/s" + fspec + "_" + std::to_string(rank) + ".json";
         scheme = algo;
-        int exSpace = (!scheme.compare("S")) ? cGlob.ht : 2;
-        rows = (cGlob.yPointsRegion + exSpace);
-        cols = (cGlob.xPointsRegion + exSpace);
-        regionAlloc =  rows * cols ;
+        int exSpace;
+        if (!scheme.compare("S")) 
+        {
+            exSpace = cGlob.htp;
+            stepsPerCycle = cGlob.ht;
+        }
+        else
+        {
+            exSpace = 2;
+            stepsPerCycle = 1;
+        }
+
+        fullSide = (cGlob.regionSide + exSpace);
+        regionAlloc = fullSide * cGlob.szState ;
+        copyBytes = cGlob.regionPoints * cGlob.szState;
 
         stateRows = new states*[rows];
-    
-
-        cudaHostAlloc((void **) &state, regionAlloc*cGlob.szState, cudaHostAllocDefault);
+        cudaHostAlloc((void **) &state, regionAlloc, cudaHostAllocDefault);
   
         for (int j=0; j<rows; j++)
         {
             stateRows[j] = (states *) state+(j*cols); 
         }
-        for(int k=0; k<cGlob.yPointsRegion; k++)
+        for(int k=0; k<cGlob.regionSide+2; k++)
         {   
-            for (int i=0; i<cGlob.xPointsRegion; i++)
+            for (int i=0; i<cGlob.regionSide+2; i++)
             {   
-                initState(&stateRows[k][i], i+xsw, k+ysw);
+                initState(&stateRows[k][i], i+xsw-1, k+ysw-1);
             }
         }
-        solutionOutput(0.0);
+        solutionOutput();
+        tStep = TSTEPI;
     }
 
     // O for out 1 for in
-    //Ok but how do I use this for MPI transfers?
+    // Ok but how do I use this for MPI transfers?
     void gpuCopy(states *dState, int dir, cudaStream_t stream)
     {
         if (dir)
         {
-            cudaMemcpyAsync(state, dState, cudaMemcpyDeviceToHost, st1);
+            cudaMemcpyAsync(state, dState, copyBytes, cudaMemcpyDeviceToHost, stream);
         }
         else
         {
-            cudaMemcpyAsync(state, dState, cudaMemcpyHostToDevice, st1);
+            cudaMemcpyAsync(state, dState, copyBytes, cudaMemcpyHostToDevice, stream);
         }
     }
 
-    void solutionOutput(double tstamp)
+    void solutionOutput()
     {
         tstr = std::to_string(tstamp);
-        for(int k=0; k<cGlob.yPointsRegion; k++)
+        for(int k=0; k<cGlob.regionSide; k++)
         {   
             ystr = std::to_string(cGlob.dy * (k+ysw));
 
-            for (int i=0; i<cGlob.xPointsRegion; i++)
+            for (int i=0; i<cGlob.regionSide; i++)
             {   
                 xstr = std::to_string(cGlob.dx * (i+xsw)); 
 
@@ -198,7 +223,6 @@ void parseArgs(int argc, char *argv[])
 
 void setRegion(std::vector <Region *> &regionals)
 {
-    std::cout << " -- MADE IT -- 2.0" << std::endl;
     int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
     int regionMap[nprocs];
     MPI_Allgather(&localRegions, 1, MPI_INT, &regionMap[0], 1, MPI_INT, MPI_COMM_WORLD);
@@ -241,25 +265,35 @@ void setRegion(std::vector <Region *> &regionals)
     }
 }
 
+int tolerance(std::string shape)
+{
+    switch (shape){
+        case "Perfect": return 1.05;
+        case "Strict": return 1.5;
+        case "Moderate": return 4.0;
+        case "Loose": return 20.0;
+        case default: return 1.5;
+    }
+}
 
 void initArgs()
 {
     int dimFinder[2];
 
     //VALUES THAT NEED NO INTROSPECTION
-    cGlob.shapeRequest = inJ["Shape"].asString(); //How square required?
     cGlob.dt = inJ["dt"].asDouble();
     cGlob.tf = inJ["tf"].asDouble();
     cGlob.freq = inJ["freq"].asDouble();
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.ly = inJ["ly"].asDouble();
     cGlob.szState = sizeof(states);
+    cGlob.nPoints = inJ["nPts"].asInt();
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
     // IF TPB IS NOT DIVISIBLE BY 32 PICK CLOSEST VALUE THAT IS.
-    int tpbReq = inJ["tpb"].asInt();
-    tpbx = 32;
-    tpby = tpbReq/tpbx;
+    int tpbReq = inJ["tpb"].asInt();    
+    cGlob.tpbx = 32;
+    cGlob.tpby = tpbReq/cGlob.tpbx;
 
     // FIND NUMBER OF GPUS AVAILABLE.
 	cGlob.gpuA = inJ["gpuA"].asInt(); // AFFINITY
@@ -280,9 +314,10 @@ void initArgs()
     
     cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
     factor(cGlob.nRegions, &dimFinder[0]);
+    int tol = tolerance(inJ["Shape"].asString());
     // How Similar should the dimensions be?
 
-    while (dimFinder[1]/dimFinder[0] > 2)
+    while (((double)dimFinder[1])/dimFinder[0] > tol)
     {
         if (!cGlob.nGpu)
         {
@@ -299,29 +334,28 @@ void initArgs()
     cGlob.xRegions = dimFinder[0]; 
     cGlob.yRegions = dimFinder[1];
     
-    // Something that makes this work if you give it nRegions rather than nPts.
-    cGlob.nPoints = inJ["nPts"].asInt();
+    // Regions must be square because they are the units the pyramids and bridges are built on.
+    cGlob.regionPoints = cGlob.nPoints/cGlob.nRegions;
+    cGlob.regionSide = std::sqrt(cGlob.regionPoints);
+    cGlob.regionSide = 32 * (cGlob.regionSide / 32 + 1); 
+    cGlob.regionPoints = cGlob.regionSide * cGlob.regionSide;
 
-    cGlob.nPoints = cGlob.nPointsBlock * cGlob.nRegions * cGlob.nBlocksRegion;
-    cGlob.xBlocksRegion = dimFinder[1];
-    cGlob.yBlocksRegion = dimFinder[0];
-    cGlob.xPointsRegion = cGlob.xPointsBlock * cGlob.xBlocksRegion;
-    cGlob.yPointsRegion = cGlob.xPointsBlock * cGlob.yBlocksRegion;
-    cGlob.xPoints = cGlob.xPointsRegion * cGlob.xRegions;
-    cGlob.yPoints = cGlob.yPointsRegion * cGlob.yRegions;
+    cGlob.nPoints = cGlob.regionPoints * cGlob.nRegions;
+    cGlob.xPoints = cGlob.regionSide * cGlob.xRegions;
+    cGlob.yPoints = cGlob.regionSide * cGlob.yRegions;
     
     inJ["nPts"] = cGlob.nPoints;
     inJ["nX"] = cGlob.xPoints;
     inJ["nY"] = cGlob.yPoints;
 
-    cGlob.ht = (cGlob.xPointsBlock-2)/2;
+    cGlob.ht = (cGlob.regionSide-2)/2;
     cGlob.htm = cGlob.ht-1;
     cGlob.htp = cGlob.ht+1;
 
     // Derived quantities
 
-    cGlob.dx = cGlob.lx/(double)cGlob.xPoints; // Spatial step
-    cGlob.dy = cGlob.ly/(double)cGlob.yPoints; // Spatial step
+    cGlob.dx =  ((double) cGlob.lx)/cGlob.xPoints; // Spatial step
+    cGlob.dy = ((double) cGlob.ly)/cGlob.yPoints; // Spatial step
     cGlob.nWrite = cGlob.tf/cGlob.freq + 2;
     inJ["dx"] = cGlob.dx; // To send back to equation folder. 
     inJ["dy"] = cGlob.dy;

@@ -139,100 +139,104 @@ void classicStepCPU(states *state, const int ts)
 // Classic Discretization wrapper.
 double classicWrapper(Region **region)
 {
-    int tmine = *tstep;
+    state *dState; // OR IN Region?
 
-    double t_eq = 0.0;
-    double twrite = cGlob.freq - QUARTER*cGlob.dt;
-
-    int t0, t1;
-
-    if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
-    {
-        cout << "Classic Decomposition GPU" << endl;
-        cudaTime timeit;
-        const int xc = cGlob.xcpu/2;
-        int xcp = xc+1;
-        const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
-        const int gpusize = cGlob.szState * xgpp;
-
-        // Four streams for four transfers to and from cpu.
-        cudaStream_t st1, st2, st3, st4;
-        cudaStreamCreate(&st1);
-        cudaStreamCreate(&st2);
-        cudaStreamCreate(&st3);
-        cudaStreamCreate(&st4);
-
-        cout << "Entering Loop" << endl;
-
-        while (t_eq < cGlob.tf)
-        {
-            //TIMEIN;
-            classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
-            //TIMEOUT;
-            classicStepCPU(state[0], xcp, tmine);
-            classicStepCPU(state[2], xcp, tmine);
-
-            cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
-            cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
-            cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
-            cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4);
-
-            // Increment Counter and timestep
-            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
-            tmine++;
-
-            // OUTPUT
-            if (t_eq > twrite)
-            {
-                for (auto r: region)
-                {
-                    r->solutionOutput(tmine);
-                }
-            }
-        }
-
-        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
-        // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
-        //WATOM;
-
-        cudaStreamDestroy(st1);
-        cudaStreamDestroy(st2);
-        cudaStreamDestroy(st3);
-        cudaStreamDestroy(st4);
-
-        cudaFree(dState);
-    }
-    else
-    {
-        int xcp = cGlob.xcpu + 1;
-        mpiTime timeit;
-        while (t_eq < cGlob.tf)
-        {
-            //TIMEIN;
-            classicStepCPU(state[0], xcp, tmine);
-            //TIMEOUT;
-
-            putSt[0] = state[0][1];
-            putSt[1] = state[0][cGlob.xcpu];
-            classicPass(&putSt[0], &getSt[0], tmine);
-
-            if (cGlob.bCond[0]) state[0][0] = getSt[0];
-            if (cGlob.bCond[1]) state[0][xcp] = getSt[1];
-
-            // Increment Counter and timestep
-            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
-            tmine++;            
-
-            if (t_eq > twrite)
-            {
-                writeOut(state, t_eq);
-                twrite += cGlob.freq;
-            }
-        }
-        // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
-        //WATOM;
-    }
-    *tstep = tmine;
-
-    return t_eq;
 }
+
+//     int tmine = *tstep;
+
+//     double t_eq = 0.0;
+//     double twrite = cGlob.freq - QUARTER*cGlob.dt;
+
+//     int t0, t1;
+
+//     if (cGlob.hasGpu) 
+//     {
+//         cout << "Classic Decomposition GPU" << endl;
+//         cudaTime timeit;
+//         const int xc = cGlob.xcpu/2;
+//         int xcp = xc+1;
+//         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
+//         const int gpusize = cGlob.szState * xgpp;
+
+//         // Four streams for four transfers to and from cpu.
+//         cudaStream_t st1, st2, st3, st4;
+//         cudaStreamCreate(&st1);
+//         cudaStreamCreate(&st2);
+//         cudaStreamCreate(&st3);
+//         cudaStreamCreate(&st4);
+
+//         cout << "Entering Loop" << endl;
+
+//         while (t_eq < cGlob.tf)
+//         {
+//             //TIMEIN;
+//             classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
+//             //TIMEOUT;
+//             classicStepCPU(state[0], xcp, tmine);
+//             classicStepCPU(state[2], xcp, tmine);
+
+//             cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
+//             cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
+//             cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
+//             cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4);
+
+//             // Increment Counter and timestep
+//             if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
+//             tmine++;
+
+//             // OUTPUT
+//             if (t_eq > twrite)
+//             {
+//                 for (auto r: region)
+//                 {
+//                     r->solutionOutput(tmine);
+//                 }
+//             }
+//         }
+
+//         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+//         // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
+//         //WATOM;
+
+//         cudaStreamDestroy(st1);
+//         cudaStreamDestroy(st2);
+//         cudaStreamDestroy(st3);
+//         cudaStreamDestroy(st4);
+
+//         cudaFree(dState);
+//     }
+//     else
+//     {
+//         int xcp = cGlob.xcpu + 1;
+//         mpiTime timeit;
+//         while (t_eq < cGlob.tf)
+//         {
+//             //TIMEIN;
+//             classicStepCPU(state[0], xcp, tmine);
+//             //TIMEOUT;
+
+//             putSt[0] = state[0][1];
+//             putSt[1] = state[0][cGlob.xcpu];
+//             classicPass(&putSt[0], &getSt[0], tmine);
+
+//             if (cGlob.bCond[0]) state[0][0] = getSt[0];
+//             if (cGlob.bCond[1]) state[0][xcp] = getSt[1];
+
+//             // Increment Counter and timestep
+//             if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
+//             tmine++;            
+
+//             if (t_eq > twrite)
+//             {
+//                 writeOut(state, t_eq);
+//                 twrite += cGlob.freq;
+//             }
+//         }
+//         // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
+//         //WATOM;
+//     }
+//     *tstep = tmine;
+
+//     return t_eq;
+// }

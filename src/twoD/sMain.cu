@@ -63,11 +63,11 @@ int main(int argc, char *argv[])
 
         if (!scheme.compare("C"))
         {
-            tfm = classicWrapper(state, &tstep);
+            tfm = classicWrapper(state);
         }
         else if  (!scheme.compare("S"))
         {
-            tfm = sweptWrapper(state, &tstep);
+            tfm = sweptWrapper(state);
         }
         else
         {
@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
             	printf("CUDA error: %s\n", cudaGetErrorString(error));
             	exit(-1);
         	}
-			cudaDeviceSynchronize();
+			
 		}
 
         if (!rank])

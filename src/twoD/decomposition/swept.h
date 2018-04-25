@@ -254,7 +254,7 @@ void passSwept(states *passer, states *getter, int tstep, int turn)
 
 
 // Now we need to put the last value in a bucket, and append that to the start of the next array.
-double sweptWrapper(states **state,  int *tstep)
+double sweptWrapper(std::vector <Region *> &regionals)
 {
 	if (!ranks[1]) cout << "SWEPT Decomposition " << cGlob.tpb << endl;
 

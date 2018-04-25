@@ -122,7 +122,7 @@ void classicGPUSwap(states *ins, states *outs, int type)
     outs[outidx] = ins[inidx];
 }
 
-void classicStepCPU(states *state, const int ts)
+void classicStepCPU(Region *regional)
 {
     static int ky = 1;
     static int kx = 1;
@@ -131,16 +131,53 @@ void classicStepCPU(states *state, const int ts)
         for(; kx<=A.regionSide; kx++) 
         {
             sid =  ky * A.regionBase + kx;
-            stepUpdate(state, sid, ts);
+            stepUpdate(regional->state, sid, regional->ts);
         }
     }
 }
 
-// Classic Discretization wrapper.
-double classicWrapper(Region **region)
+__global__
+void setgpuRegion(states *rdouble, state *rmember)
 {
-    state *dState; // OR IN Region?
+    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
+    if (gid>1) return;
 
+    rdouble[i] = (states *)(&rmember[0]);
+}
+
+// Classic Discretization wrapper.
+double classicWrapper(std::vector <Region *> &regionals)
+{
+    const int gpuRegions = cGlob.hasGpu * regionals.size();
+    state ** regionSelector;
+    if (gpuRegions) 
+    {
+        cudaMalloc((void **) &regionSelector, sizeof(states *) * gpuRegions);
+        for (int i=0; i<gpuRegions; i++)
+        {
+            setgpuRegion <<< 1, 1 >>> (regionSelector, regionals[i]->dState, i);
+            std::cout << regionals[i]->self.globalx << regionals[i]->self.globaly << std::endl;
+        }
+        else
+        {
+            Region *cpuRegion = regionals[0];
+        }
+    }
+    std::cout << "HOLY SHIT IT WORKED" << std::endl;
+    dim3 tdim(cGlob.tpbx,cGlob.tpby);
+
+    while (regionals[0]->tStamp < cGlob.tfinal)
+    {   
+        int turn = regionals[0]->tStep; 
+        if (gpuRegions)     classicStep <<< gpuRegions, tdim >>>(regionSelector, turn)
+        else                classicStepCPU(cpuRegion);
+
+        for (auto r: regionals) r->incrementTime();
+        
+        //Something to pass
+    }     
+
+    cudaFree(regionSelector);
 }
 
 //     int tmine = *tstep;

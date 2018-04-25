@@ -45,6 +45,8 @@ if __name__ == "__main__":
 
     compileit = "nvcc -c testeq.cu -o " + testobj + CFLAGS + CUDAFLAGS + LIBFLAGS
 
+    print (compileit)
+
     runstring(compileit)
 
     print("   ---------------")
@@ -59,7 +61,8 @@ if __name__ == "__main__":
 
     print("   ---------------")
     print("Linked")
-    runTest = "mpirun -np 8 " + execf + " I waveTest.json " + testResult
+    runTest = "mpirun -np 6 " + execf + " I waveTest.json " + testResult + " Shape Perfect"
+    print(runTest)
     runstring(runTest)
     print("   ---------------")
 

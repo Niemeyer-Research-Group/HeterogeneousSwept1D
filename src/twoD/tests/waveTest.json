@@ -2,12 +2,13 @@
     "nPts"    : 10000,
     "tpb"   : 256,
     "freq"  : 2,
-    "gpuA"  : 0,
+    "gpuA"  : 1,
     "dt"    : 0.001,
     "lx"    : 1.0,
     "ly"    : 1.0,
     "tf"    : 10.0,
     "cfl"   : 0.5,
     "IC"    : "GAUSSIAN",
-    "BC"    : "PERIODIC"
+    "BC"    : "PERIODIC",
+    "Shape" : "Loose"
 }

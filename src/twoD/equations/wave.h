@@ -136,7 +136,7 @@ __constant__ constWave DCONST;
 #endif
 
 __host__
-void initState(states *state, const double x, const double y)	
+void initState(states *state, const int x, const int y)	
 {
 	double dxx = (x-A.nx/2) * A.dx;
 	double dyy = (y-A.ny/2) * A.dy;

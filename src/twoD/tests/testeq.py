@@ -32,7 +32,12 @@ def runstring(toRun):
     return True
 
 # COMPILATION
-if __name__ == "__main__":
+if __name__ == "__main__": 
+    compileq = 1
+    try:
+        compileq = int(sys.argv[1])
+    except:
+        pass
 
     os.makedirs(testResult, exist_ok=True)
     os.makedirs(testBin, exist_ok=True)
@@ -44,23 +49,24 @@ if __name__ == "__main__":
     LIBFLAGS        =" -lm -lmpi "
 
     compileit = "nvcc -c testeq.cu -o " + testobj + CFLAGS + CUDAFLAGS + LIBFLAGS
-
-    print (compileit)
-
-    runstring(compileit)
-
-    print("   ---------------")
-    print("Compiled")
     utilObj = [op.join(utilBin, k) for k in os.listdir(utilBin)]
     execf = op.join(testBin, "waveTest")
     utilObj = " ".join(utilObj)
     linkit = "nvcc " + utilObj + " " + testobj + " -o " + execf + LIBFLAGS
 
-    runstring(linkit)
+    if compileq:
+        print (compileit)
 
+        runstring(compileit)
 
-    print("   ---------------")
-    print("Linked")
+        print("   ---------------")
+        print("Compiled")
+
+        runstring(linkit)
+
+        print("   ---------------")
+        print("Linked")
+
     runTest = "mpirun -np 6 " + execf + " I waveTest.json " + testResult + " Shape Perfect"
     print(runTest)
     runstring(runTest)

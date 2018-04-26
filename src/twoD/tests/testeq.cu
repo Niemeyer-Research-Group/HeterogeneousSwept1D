@@ -7,53 +7,50 @@
 #include "cudaUtils.h"
 #include "../equations/wave.h"
 #include "../decomposition/decomp.h"
+#include "../decomposition/classic.h"
 #include <vector>
 #include <cuda.h>
 #include <array>
 
-__global__
-void setgpuRegion(states **rdouble, states *rmember, int i)
+__device__
+void printme(double *poi, int k)
 {
-    printf("ONCE!\n");
-    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
-    if (gid>1) return;
+    printf("%.d, %.2f ", k, poi[k]);
+}
 
-    printf("ONCE! %.f\n", rmember[gid]);
-    rdouble[i] = (states *)(&rmember[0]);
+__device__ 
+void setSMEM(double *smem, double *gmem, int gid, int k)
+{
+    smem[gid-k] = gmem[gid]+10.5;
 }
 
 __global__
-void printRegion(states **rdouble)
+void testMidShared(double *globptr)
 {
-    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
-    states *regional = rdouble[gid];
-    const int mid = A.regionSide * A.regionSide;
-    printf("gid %.d MiddleItem %.8e\n", gid, regional[mid]);
-
-}
-
-// Classic Discretization wrapper.
-void classicWrapper(std::vector <Region *> &regionals)
-{
-    const int gpuRegions = cGlob.hasGpu * regionals.size();
-    states ** regionSelector;
-    std::cout << "BEFORE THING - " << rank << std::endl;
-    if (gpuRegions) 
+    double *localptr = (double *) (globptr); 
+    extern __shared__ double sptr[];
+    
+    const int gid = blockDim.x * blockIdx.x + threadIdx.x;
+    int k = 0;
+    bool b = true;
+    while (k < (blockDim.x >> 1))
     {
-        cudaMalloc((void **) &regionSelector, sizeof(states *) * gpuRegions);
-        for (int i=0; i<gpuRegions; i++)
+        if (gid>k && gid<(blockDim.x-k)) 
         {
-            setgpuRegion <<< 1, 1 >>> (regionSelector, regionals[i]->dState, i);
-            std::cout << regionals[i]->self.globalx << regionals[i]->self.globaly << std::endl;
+            printme(localptr, k);
+            if ((blockDim.x-2*k) < 17 && b) 
+            {
+                setSMEM(sptr, localptr, gid, k);
+                b=false;
+            }
         }
-        printRegion <<< gpuRegions, 1 >>> (regionSelector);
-        cudaFree(regionSelector);
+        if ((blockDim.x-2*k) < 17) localptr = sptr;
+
+        k++;
+        __syncthreads();
     }
-    std::cout << "AFTER THING - " << rank << std::endl;
-    MPI_Barrier(MPI_COMM_WORLD);
+
 }
-
-
 
 int main(int argc, char *argv[])
 {
@@ -78,23 +75,41 @@ int main(int argc, char *argv[])
     for (auto r: regions)
     {
         r->initializeState(scheme, pth);
+        // std::cout << (rank & 1) << std::endl;
+        // printf("------------ %d, %d -------\n", rank, r->self.localIdx);
+        // for (auto n: r->neighbors) n->printer();
     }
    
-    classicWrapper(regions);
+    //classicWrapper(regions);
  
+    // for (auto const& id : solution["Velocity"].getMemberNames()) 
+    // {
+    //     std::cout << id << std::endl;
+    // }
+
+    int np = 32;
+    double hin[32];
+    for (int i=0; i<np; i++) hin[i] = ((double) i)+0.2; 
+
+    double *jean;
+    int alloc = sizeof(double) * np;
+    int salloc = alloc/2;
+    cudaMalloc((void **) &jean, alloc);
+    cudaMemcpy(jean, hin, alloc, cudaMemcpyHostToDevice);
+
+    //testMidShared <<< 1, 32, salloc>>> (jean);
+    cudaDeviceSynchronize();
+    cudaFree(jean);
+
+    classicWrapper(regions);
+
+    MPI_Barrier(MPI_COMM_WORLD);    
+
     for (int i=0; i<regions.size(); i++)
     {   
         delete regions[i];        
     }
     regions.clear();
-
-    for (auto const& id : solution["Velocity"].getMemberNames()) 
-    {
-        std::cout << id << std::endl;
-    }
-
-    MPI_Barrier(MPI_COMM_WORLD);
-    // regions.clear();
     
     endMPI();
 

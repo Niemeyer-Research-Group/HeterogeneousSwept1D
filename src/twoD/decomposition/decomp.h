@@ -14,17 +14,6 @@
 
 void endMPI();
 
-__global__
-void setgpuRegionA(states *rdouble, states *rmember)
-{
-    printf("ONCE!\n");
-    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
-    if (gid>1) return;
-
-    printf("ONCE! %.f", rmember[gid]);
-    rdouble = (states *)(&rmember[0]);
-}
-
 // MPI process properties
 MPI_Datatype struct_type;
 int lastproc, nprocs, rank;
@@ -55,8 +44,6 @@ struct Address
     int owner, gpu, localIdx, globalx, globaly;
 };
 
-// typedef void (*mailCarrier) (Address *, Address *, states *, states *);
-
 struct Neighbor
 {
     const Address id;
@@ -64,8 +51,12 @@ struct Neighbor
     const bool sameProc;
     MPI_Request req;
     MPI_Status stat;
-    Neighbor(Address addr, short sidx): id(addr), sidx(sidx), 
-    ridx((sidx + 2) % 4) , sameProc(rank == id.owner) {}
+    Neighbor(Address addr, short sidx): id(addr), sidx(sidx), ridx((sidx + 2) % 4), sameProc(rank == id.owner) {}
+    void printer()
+    {   
+        std::string dir[] = {"SOUTH", "WEST", "NORTH", "EAST"};
+        printf("%d, %d, %d, %d, %d, %s\n", id.owner, id.localIdx, id.gpu, id.globalx, id.globaly, dir[sidx].c_str());
+    }
 };
 
 typedef std::array <Neighbor *, 4> stencil;
@@ -75,7 +66,7 @@ struct Region
     const Address self;
     const stencil neighbors;
     int xsw, ysw;
-    int regionAlloc, fullSide, copyBytes;
+    int regionAlloc, fullSide, copyBytes, bufAlloc, bufAmt;
     int tStep, stepsPerCycle;
     double tStamp, tWrite;
     std::string xstr, ystr, tstr, spath, scheme;
@@ -84,13 +75,19 @@ struct Region
     states **stateRows; // Convenience accessor.
     // GPU STUFF
     states *dState;
+    states *sendBuffer, *recvBuffer, *dSend, *dRecv;
     cudaStream_t stream;
 
     Region(Address stencil[5]) 
     : self(stencil[0]), neighbors(meetNeighbors(&stencil[1])), tStep(0), tStamp(0.0), tWrite(cGlob.freq)
     {
-        xsw = cGlob.regionSide * self.globalx;
-        ysw = cGlob.regionSide * self.globaly;
+        xsw         = cGlob.regionSide * self.globalx;
+        ysw         = cGlob.regionSide * self.globaly;
+        sendBuffer  = nullptr;
+        recvBuffer  = nullptr;
+        dState      = nullptr;
+        dSend       = nullptr;
+        dRecv       = nullptr;
     }
 
     ~Region()
@@ -106,11 +103,36 @@ struct Region
             cudaStreamDestroy(stream);
             cudaFree(dState);
         }
+        if (sendBuffer)
+        {
+            delete[] sendBuffer;
+            delete[] recvBuffer;
+
+            if (self.gpu)
+            {
+                cudaFree(dSend);
+                cudaFree(dRecv);
+            }
+        }
         
         delete[] stateRows;
         delete[] state;
         
         for (int i=0; i<3; i++)  delete neighbors[i];
+    }
+
+    inline void makeBuffers(int nPts, int nSides)
+    {
+        bufAmt = nPts; // For MPI_send-recv.
+        bufAlloc = nPts*cGlob.szState;
+        sendBuffer = new states[nSides*nPts];
+        recvBuffer = new states[nSides*nPts];
+
+        if (self.gpu)
+        {
+            cudaMalloc((void **) &dSend, nSides * bufAlloc);
+            cudaMalloc((void **) &dRecv, nSides * bufAlloc);
+        }
     }
 
     stencil meetNeighbors(Address *addr)
@@ -123,7 +145,8 @@ struct Region
         return n;
     }
 
-    void incrementTime()
+    
+    inline void incrementTime()
     {
         tStep += stepsPerCycle;
         tStamp = (double)tStep * cGlob.dt; 
@@ -141,15 +164,8 @@ struct Region
         gpuCopy(false);
     }
 
-    void setGPUPointers(states *dDouble)
-    {
-        std::cout << "PORQUE NO" << std::endl;
-        setgpuRegionA <<< 1, 1 >>> (dDouble, dState);
-        // cudaDeviceSynchronize();
-    }
-
     // True is Down to Host.  False is Up to Device.
-    void gpuCopy(int dir)
+    inline void gpuCopy(int dir)
     {   
         if (!self.gpu) return; //Guards against unauthorized access. 
 
@@ -160,6 +176,46 @@ struct Region
         else
         {
             cudaMemcpyAsync(dState, state, regionAlloc, cudaMemcpyHostToDevice, stream);
+        }
+    }
+
+    inline void bufMessage(int dir, int nIdx)
+    {
+        int offs = nIdx*bufAmt;
+        int tagg;
+
+        if (dir) 
+        {
+            tagg = self.owner + self.localIdx + neighbors[nIdx]->id.localIdx+5;
+            MPI_Isend(sendBuffer+offs, bufAmt, struct_type, 
+                        neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
+                        &neighbors[nIdx]->req);
+        }
+        else
+        {   
+            tagg = neighbors[nIdx]->id.owner + neighbors[nIdx]->id.localIdx + self.localIdx+5;
+            MPI_Irecv(recvBuffer+offs, bufAmt, struct_type, 
+                        neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
+                        &neighbors[nIdx]->req);
+
+            MPI_Wait(&neighbors[nIdx]->req, &neighbors[nIdx]->stat);
+        }
+    }
+
+    inline void gpuBufCopy(int dir, int nIdx)
+    {
+        if (!self.gpu) return; //Guards against unauthorized access. 
+        int offs = nIdx*bufAmt;
+
+        if (dir) 
+        {
+            cudaMemcpy(sendBuffer+offs, dSend+offs, bufAlloc, cudaMemcpyDeviceToHost);
+            bufMessage(dir, nIdx);
+        }
+        else
+        {   
+            bufMessage(dir, nIdx);
+            cudaMemcpy(dRecv+offs, recvBuffer+offs, bufAlloc, cudaMemcpyHostToDevice);
         }
     }
 
@@ -185,7 +241,7 @@ struct Region
         copyBytes   = cGlob.regionPoints * cGlob.szState;
         
         stateRows   = new states*[fullSide];
-        state       = new states[fullSide*fullSide];
+        state       = new states [fullSide*fullSide];
 
         if (self.gpu)   makeGPUState();       
 
@@ -202,7 +258,7 @@ struct Region
         }
 
         solutionOutput();
-        
+
         tStep   += 2;
         tStamp  = (double)tStep * cGlob.dt;
     }
@@ -210,7 +266,7 @@ struct Region
     void solutionOutput()
     {
         tstr = std::to_string(tStamp);
-     
+
         for(int k=0; k<cGlob.regionSide; k++)
         {   
             ystr = std::to_string(cGlob.dy * (k+ysw));
@@ -278,11 +334,12 @@ void setRegion(std::vector <Region *> &regionals)
             xLoc = tregion%cGlob.xRegions;
             yLoc = tregion/cGlob.xRegions;
 
-            gridLook[yLoc][xLoc] = {k, cGlob.hasGpu, tregion, xLoc, yLoc};
+            gridLook[yLoc][xLoc] = {k, cGlob.hasGpu, i, xLoc, yLoc};
             tregion++;
         }
     }
 
+    int ii, kk;
     Address addr[5];
     for (k = 0; k<cGlob.yRegions; k++)
     {
@@ -290,11 +347,13 @@ void setRegion(std::vector <Region *> &regionals)
         {
             if (gridLook[k][i].owner == rank)
             {
+                ii = i - 1 + cGlob.xRegions; //MODULO IN OTHER LANGUAGES IS SENSIBLE. 
+                kk = k - 1 + cGlob.yRegions; 
                 addr[0] = gridLook[k][i];
-                addr[1] = gridLook[(k-1)%cGlob.yRegions][i];
-                addr[2] = gridLook[k][(i-1)%cGlob.xRegions];
+                addr[1] = gridLook[kk%cGlob.yRegions][i];
+                addr[2] = gridLook[k][ii%cGlob.xRegions];
                 addr[3] = gridLook[(k+1)%cGlob.yRegions][i];
-                addr[4] = gridLook[k][(i-1)%cGlob.xRegions];
+                addr[4] = gridLook[k][(i+1)%cGlob.xRegions];
                 regionals.push_back(new Region(addr));
             }  
                 

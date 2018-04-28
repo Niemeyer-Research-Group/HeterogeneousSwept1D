@@ -38,6 +38,7 @@ classicStep(states **regions, const int ts)
     }
 }
 
+// This isn't a two way swap yet is it?
 __global__ void 
 classicGPUSwap(states *ins, states *outs, const int loc, const int type)
 {
@@ -78,23 +79,13 @@ classicGPUSwap(states *ins, states *outs, const int loc, const int type)
     outs[outidx] = ins[inidx];
 }
 
-__global__ void 
-setgpuRegion(states **rdouble, states *rmember, int i)
-{
-    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
-    if (gid>1) return;
-
-    rdouble[i] = (states *)(&rmember[0]);
-}
-
 void classicStepCPU(Region *regional)
 {
-    static int ky = 1;
-    static int kx = 1;
+    int ky, kx;
     int sid;
-    for (; ky<=A.regionSide; ky++)
+    for (ky = 1; ky<=A.regionSide; ky++)
     {
-        for(; kx<=A.regionSide; kx++) 
+        for(kx = 1; kx<=A.regionSide; kx++) 
         {
             sid =  ky * A.regionBase + kx;
             stepUpdate(regional->state, sid, regional->tStep);
@@ -111,20 +102,15 @@ void cpuBufCopy(states **stRows, states *buf, const int loc, const int type)
     {
         switch(loc)
         {
-            case 0: for (i=0; i<cGlob.regionSide; i++) {
+            case 0: for (i=0; i<cGlob.regionSide; i++) 
                 buf[i+offs] = stRows[1][i+1];
-                }
-            case 1: for(i=0; i<cGlob.regionSide; i++) {
+            case 1: for(i=0; i<cGlob.regionSide; i++)
                 buf[i+offs] = stRows[1+i][1];
-                }
-            case 2: for(i=0; i<cGlob.regionSide; i++) {
+            case 2: for(i=0; i<cGlob.regionSide; i++)
                 buf[i+offs] = stRows[cGlob.regionSide][i+1];
-                }
-            case 3: for(i=0; i<cGlob.regionSide; i++) {
+            case 3: for(i=0; i<cGlob.regionSide; i++) 
                 buf[i+offs] = stRows[i+1][cGlob.regionSide];
-                }
         }
-
     }
     else
     {
@@ -145,6 +131,7 @@ void cpuBufCopy(states **stRows, states *buf, const int loc, const int type)
 // Classic Discretization wrapper.
 void classicWrapper(std::vector <Region *> &regionals)
 {
+    if (!rank) std::cout << " - CLASSIC Decomposition - " << nproc << std::endl;
     const int gpuRegions = cGlob.hasGpu * regionals.size();
     states **regionSelector;
     if (gpuRegions) 
@@ -165,7 +152,6 @@ void classicWrapper(std::vector <Region *> &regionals)
     while (regionals[0]->tStamp < cGlob.tf)
     {   
         stepNow = regionals[0]->tStep;
-        MPI_Barrier(MPI_COMM_WORLD);
         if (gpuRegions)     classicStep <<< gpuRegions, tdim >>>(regionSelector, stepNow);
         else                classicStepCPU(regionals[0]);
 
@@ -201,7 +187,6 @@ void classicWrapper(std::vector <Region *> &regionals)
             r->incrementTime(); //Any Write out occurs within the swapping procedure.
             for (auto n: r->neighbors)
             {
-            
                 if(!n->sameProc)
                 {
                     if (gpuRegions) 
@@ -214,14 +199,11 @@ void classicWrapper(std::vector <Region *> &regionals)
         
                         r->bufMessage(0, n->sidx);
                         cpuBufCopy(r->stateRows, r->recvBuffer, n->sidx, 0);
-                    }
-                    std::cout << stepNow << " " << r->self.localIdx << rank << " " << n->sidx <<  " I'm Way up Here" << std::endl;
-                }
-                
-            }
-        }
-          
-    }     
+                    } // End gpu vs cpu receiver choice. 
+                }     // End mask over neighbors already swapped. 
+            }         // End Loop over all this region's neighbors. 
+        }             // End Loop over all regions on this process. 
+    }                 // End while loop over all timesteps
     cudaFree(regionSelector);
 }
 

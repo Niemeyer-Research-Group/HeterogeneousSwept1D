@@ -12,6 +12,15 @@
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
 */
 
+__global__ void 
+setgpuRegion(states **rdouble, states *rmember, int i)
+{
+    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
+    if (gid>1) return;
+
+    rdouble[i] = (states *)(&rmember[0]);
+}
+
 void endMPI();
 
 // MPI process properties
@@ -148,12 +157,17 @@ struct Region
     
     inline void incrementTime()
     {
-        tStep += stepsPerCycle;
+        tStep += stepsPerCycle; 
         tStamp = (double)tStep * cGlob.dt; 
+        //But you really have to call down Triangle to get this. so... 
         if (tStamp > tWrite)
         {
-            if (self.gpu) gpuCopy(true);
-            solutionOutput();
+            if (scheme.compare("S"))
+            {
+                if (self.gpu) gpuCopy(true);
+                solutionOutput();
+                tWrite += cGlob.freq;
+            }
         } 
     }
 

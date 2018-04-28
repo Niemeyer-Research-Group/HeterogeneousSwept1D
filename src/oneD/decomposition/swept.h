@@ -12,7 +12,7 @@ typedef std::vector<int> ivec;
 states ssLeft[3];
 states ssRight[3];
 
-__global__ void upTriangle(states *state, int tstep)
+__global__ void upTriangle(states *state, const int tstep)
 {
 	extern __shared__ states sharedstate[];
 

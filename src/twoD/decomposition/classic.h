@@ -16,29 +16,29 @@
 */
 
 
-
 // KERNELS //
 #include <algorithm>
 
 __global__ void 
 classicStep(states **regions, const int ts)
 {
-    states *blkState = (states *) regions[blockIdx.x]; //Launch 1D grid of 2d Blocks
-    int kx = threadIdx.x + 1; 
-    int ky = threadIdx.y + 1;
+    int ky, kx;
     int sid;
-
-    for (; ky<=A.regionSide; ky+=blockDim.y)
+    
+    //Launch 1D grid of 2d Blocks
+    states *blkState = (states *) regions[blockIdx.x]; 
+    
+    for (ky = threadIdx.y + 1; ky<=A.regionSide; ky+=blockDim.y)
     {
-        for(; kx<=A.regionSide; kx+=blockDim.x) 
+        for(kx = threadIdx.x + 1; kx<=A.regionSide; kx+=blockDim.x) 
         {
             sid =  ky * A.regionBase + kx;
-            stepUpdate(blkState, sid, ts);
+            stepUpdate(blkState, sid, ts++);
         }
     }
 }
 
-// This isn't a two way swap yet is it?
+// For two gpu regions, swaps one way, swaps the other way on the neighbor's turn.
 __global__ void 
 classicGPUSwap(states *ins, states *outs, const int loc, const int type)
 {
@@ -143,9 +143,8 @@ void classicWrapper(std::vector <Region *> &regionals)
          }
     }
 
-    
     for (auto r: regionals) r->makeBuffers(cGlob.regionSide, 4);
-    dim3 tdim(cGlob.tpbx,cGlob.tpby);
+    dim3 tdim(cGlob.tpbx, cGlob.tpby);
     const int minLaunch = cGlob.regionSide/1024 + 1;
     int stepNow;
 

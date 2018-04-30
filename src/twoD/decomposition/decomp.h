@@ -154,7 +154,6 @@ struct Region
         return n;
     }
 
-    
     inline void incrementTime()
     {
         tStep += stepsPerCycle; 
@@ -238,19 +237,17 @@ struct Region
         spath = pth + "/s" + fspec + "_" + std::to_string(rank) + ".json";
         scheme = algo;
 
-        int exSpace;
         if (!scheme.compare("S")) 
         {
-            exSpace         = cGlob.htp;
-            stepsPerCycle   = cGlob.ht;
+            fullSide        = (3 * cGlob.regionBase)/2 - 1;
+            stepsPerCycle   = cGlob.ht/NSTEPS;
         }
         else
         {
-            exSpace         = 2;
+            exSpace         = cGlob.regionBase;
             stepsPerCycle   = 1;
         }
 
-        fullSide    = (cGlob.regionSide + exSpace);
         regionAlloc = fullSide * fullSide * cGlob.szState;
         copyBytes   = cGlob.regionPoints * cGlob.szState;
         
@@ -448,6 +445,7 @@ void initArgs()
     cGlob.regionSide    = std::sqrt(cGlob.regionPoints);
     cGlob.regionSide    = 32 * (cGlob.regionSide / 32 + 1); 
     cGlob.regionPoints  = cGlob.regionSide * cGlob.regionSide;
+    cGlob.regionBase    = cGlob.regionSide + 2;
 
     cGlob.nPoints = cGlob.regionPoints * cGlob.nRegions;
     cGlob.xPoints = cGlob.regionSide * cGlob.xRegions;
@@ -457,7 +455,7 @@ void initArgs()
     inJ["nX"]   = cGlob.xPoints;
     inJ["nY"]   = cGlob.yPoints;
 
-    cGlob.ht    = (cGlob.regionSide-2)/2;
+    cGlob.ht    = cGlob.regionSide/2;
     cGlob.htm   = cGlob.ht-1;
     cGlob.htp   = cGlob.ht+1;
 
@@ -472,27 +470,6 @@ void initArgs()
     HCONST.init(inJ);
     cudaMemcpyToSymbol(DCONST, &HCONST, sizeof(HCONST));
     if (!rank)  std::cout << rank <<  " - Initialized Arguments - " << cGlob.nRegions << std::endl;
-}
-
-void atomicWrite(std::string st, std::vector<double> t, std::string fname)
-{
-    FILE *tTemp;
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    for (int k=0; k<nprocs; k++)
-    {
-        if (rank == k)
-        {
-            tTemp = fopen(fname.c_str(), "a+");
-            fseek(tTemp, 0, SEEK_END);
-            fprintf(tTemp, "\n%d,%s", rank, st.c_str());
-            for (auto i = t.begin(); i != t.end(); ++i)
-            {
-                fprintf(tTemp, ",%4f", *i);
-            }
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
 }
 
 void endMPI()

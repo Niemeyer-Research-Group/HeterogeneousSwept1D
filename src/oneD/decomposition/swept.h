@@ -121,7 +121,6 @@ wholeDiamond(states *state, const int tstep, const int offset)
 		__syncthreads();
 	}
 
-
 	for (k=2; k<=mid; k++)
 	{
 		if (tidx < (base-k) && tidx >= k)
@@ -131,7 +130,6 @@ wholeDiamond(states *state, const int tstep, const int offset)
 		tnow++;
 		__syncthreads();
     }
-
     state[gid + 1] = sharedstate[tidx];
 }
 
@@ -300,9 +298,13 @@ double sweptWrapper(states **state,  int *tstep)
         cudaMalloc((void **)&dState, gpusize);
         cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
 
-        /*
-        -- DOWN MUST FOLLOW A SPLIT AND UP CANNOT BE IN WHILE LOOP SO DO UP AND FIRST SPLIT OUTSIDE OF LOOP THEN LOOP CAN BE WITH WHOLE - DIAMOND - CHECK DOWN.
+        /* RULES
+        -- DOWN MUST FOLLOW A SPLIT 
+        -- UP CANNOT BE IN WHILE LOOP 
+        -||- ACTION: DO UP AND FIRST SPLIT OUTSIDE OF LOOP 
+        -||- THEN LOOP CAN BEGIN WITH WHOLE DIAMOND.
         */
+
         // ------------ Step Forward ------------ //
         // ------------ UP ------------ //
 
@@ -376,14 +378,8 @@ double sweptWrapper(states **state,  int *tstep)
             cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
             cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
 
-            // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
-            // unstructify(&putSt[0], &putRe[0]);
-
-            // passSwept(&putRe[0], &getRe[0], tmine, 0);
             passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
 
-            // restructify(&getSt[0], &getRe[0]);
-            // for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
 
             // Increment Counter and timestep
             tmine += cGlob.ht;
@@ -410,10 +406,8 @@ double sweptWrapper(states **state,  int *tstep)
 
             // ------------ Pass Edges ------------ //
             // -- BACK TO FRONT -- //
-
             cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
             cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-
 
             passSwept(state[2] + xc, state[0], tmine, 1);
 

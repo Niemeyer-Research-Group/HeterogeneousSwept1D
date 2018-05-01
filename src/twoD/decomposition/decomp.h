@@ -154,19 +154,18 @@ struct Region
         return n;
     }
 
-    inline void incrementTime()
+    inline void incrementTime(bool writeNow=true)
     {
         tStep += stepsPerCycle; 
         tStamp = (double)tStep * cGlob.dt; 
-        //But you really have to call down Triangle to get this. so... 
+
+        if (!writeNow) return;
+
         if (tStamp > tWrite)
         {
-            if (scheme.compare("S"))
-            {
-                if (self.gpu) gpuCopy(true);
-                solutionOutput();
-                tWrite += cGlob.freq;
-            }
+            if (self.gpu) gpuCopy(true);
+            solutionOutput();
+            tWrite += cGlob.freq;
         } 
     }
 

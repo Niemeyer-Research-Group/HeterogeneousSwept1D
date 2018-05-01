@@ -110,20 +110,6 @@ struct constWave
 		homecoeff = 2.0-2.0*(cx+cy);
 	}
 
-	// __host__ __device__ __forceinline__
-	// int flatidx(const int idx, const int idy, const int kx, const int ky) 
-	// { 
-	// 	const int xp = kx * xBlock + idx;
-	// 	const int yp = ky * yBlock + idy;
-	// 	return yp * regionSide + xp;
-	// }
-
-	__host__ __device__ __forceinline__
-	int getx(int ind) { return ind % regionBase;}
-
-	__host__ __device__ __forceinline__
-	int gety(int ind) { return ind / regionBase;}
-
 };
 
 constWave HCONST;
@@ -148,11 +134,13 @@ void initState(states *state, const int x, const int y)
 __host__ __device__
 double printout(states *state, int i) {return state->u[0];}
 
+
+// A.regionBase is not necessarily the width.
 __host__ __device__
-void stepUpdate(states *state, const int ind, const int tstep)
+void stepUpdate(states *state, const int ind, const int tstep, const int wid)
 {
 	const int otx = MODULA(tstep); //Modula is output place
 	const int itx = (otx^1); //Opposite in input place.
 
-	state[ind].u[otx] -=  A.homecoeff * state[ind].u[itx] + A.cx * (state[ind+1].u[itx] + state[ind-1].u[itx]) + A.cy * (state[ind+A.regionBase].u[itx] + state[ind-A.regionBase].u[itx]);
+	state[ind].u[otx] -=  A.homecoeff * state[ind].u[itx] + A.cx * (state[ind+1].u[itx] + state[ind-1].u[itx]) + A.cy * (state[ind+ wid].u[itx] + state[ind-wid].u[itx]);
 }

@@ -6,7 +6,7 @@
 
 struct sweptConst
 {
-    int sideSmem, rBase, hBridgeOffset, vBridgeOffset, sharedOffset, splitOffset;
+    int sideSmem, rBase, hBridgeOffset, vBridgeOffset, sharedOffset, splitOffset, nPass;
 };
 
 struct passIndex
@@ -29,8 +29,6 @@ struct passIndex
             pyr[k]  = (int *) (pyramid + nPass*k);
             brg[k]  = (int *) (pyramid + nPass*k);  
         }
-
-        this->initialize()
     }
     ~passIndex()
     {
@@ -80,27 +78,24 @@ struct passIndex
 __constant__ sweptConst dSweptConst;
 sweptConst hSweptConst;
 
-__global__ void horizontalBridge(states **state, const int ts);
-__global__ void verticalBridge(states **state, const int ts);
-__global__ void wholeOctahedron(states **state, const int ts);
-
-// Can it work for host too?
+// Can it work for host too?  Yes if you guard them with preprocessor.
 __device__ int 
 upPyramid(states *state, int ts, const int tol, const int base)
 {
     int sid;
     int kx, ky, kt;
-    for (kt = 1; kt<=tol; kt++)
+    for (kt = 2; kt<=tol; kt++)
     {
         for (ky = threadIdx.y + kt; ky<(base - kt); ky+=blockDim.y)
         {
             for(kx = threadIdx.x + kt; kx<(base - kt); kx+=blockDim.x)
             {       
                 sid =  ky * dSweptConst.rBase  + kx;
-                stepUpdate(state, sid, ts++);
+                stepUpdate(state, sid, ts, dSweptConst.rBase);
             }
         }    
         __syncthreads();
+        ts++
     }
     return ts; 
 }
@@ -117,19 +112,21 @@ downPyramid(states *state, int ts, const int tol, const int base)
             for(kx = threadIdx.x + kt; kx<(base - kt); kx+=blockDim.x) 
             {
                 sid =  ky * dSweptConst.rBase + kx;
-                stepUpdate(state, sid, ts++);
+                stepUpdate(state, sid, ts, dSweptConst.rBase);
             }
         }    
         __syncthreads();
+        ts++;
     }
     return ts; 
 }
 
+template <bool TOGLOBAL>
 __device__ void
-swapMem(states *toState, states *fromState, const bool to_global)
+swapMem(states *toState, states *fromState)
 {
     int tid, fid, tbase, fbase, toff, foff;
-    if (to_global)
+    if (TOGLOBAL)
     {
         fbase   = dSweptConst.sideSmem;
         tbase   = dSweptConst.rBase;
@@ -159,40 +156,55 @@ swapMem(states *toState, states *fromState, const bool to_global)
 // Int not const because needs to be handled between calls.  Return with device function.
 // Type 0 for downPyramid, 1 for upPyramid, 2 for wholeOcto 
 // Calculate global offset as linear index as constant mem?  or 
+template <bool SPLIT, int TYPE> 
 __global__ void 
-wholeOctahedron(states **regions, int ts, const bool split, const int type)
+wholeOctahedron(states **regions, int ts)
 {
     //Launch 1D grid of 2d Blocks
-    states *blkState = ((states *) regions[blockIdx.x]) + split * dSweptConst.splitOffset; 
+    states *blkState = ((states *) regions[blockIdx.x]) + SPLIT * dSweptConst.splitOffset; 
     extern __shared__ states sharedState[];
     
     // Down pyr shared -> global.
-    if (type-1)
+    if (TYPE-1)
     {   
-        swapMem(sharedState, blkState, false);
+        swapMem <false> (sharedState, blkState);
         ts = downPyramid(sharedState, ts, dSweptConst.sideSmem/2, dSweptConst.sideSmem);
-        swapMem(blkState, sharedState, true);
+        swapMem <true> (blkState, sharedState);
         ts = downPyramid(blkState, ts, dSweptConst.sharedOffset, dSweptConst.rBase);
     }
-    if (type)
+    if (TYPE)
     {
         ts = upPyramid(blkState, ts, dSweptConst.sharedOffset, dSweptConst.rBase);
-        swapMem(sharedState, blkState, false);
+        swapMem <false> (sharedState, blkState);
         ts = upPyramid(sharedState, ts, dSweptConst.sideSmem/2, dSweptConst.sideSmem);
-        swapMem(blkState, sharedState, true);
+        swapMem <true> (blkState, sharedState);
     }
 }
-
+//Launch 1D grid of 2d Blocks
 // It probably needs another parameter for the offset case
-__global__ void homeBridges(states **regions, int ts)
+template <bool OFFS> 
+__global__ void 
+bridges(states **regions, int ts)
 {
-    //Launch 1D grid of 2d Blocks
-    states *horizBridge = ((states *) regions[blockIdx.x]) +  dSweptConst.hBridgeOffset; 
-    states *vertBridge = ((states *) regions[blockIdx.x]) +  dSweptConst.vBridgeOffset; 
+    int hoff, voff;
+    if (OFFS)   
+    {
+        hoff = dSweptConst.hBridgeOffset; 
+        voff = dSweptConst.vBridgeOffset; 
+    }
+    else
+    {
+        hoff = dSweptConst.vBridgeOffset; 
+        voff = dSweptConst.hBridgeOffset; 
+    }
     // extern __shared__ states sharedState[];
     int sidh, sid2, dimStart;
-    int rStart = (DCONST.regionSide - 2)/2;
-    int kx, ky, kt;
+    int rStart = (DCONST.regionSide - 2) >> 1; 
+    int kx, ky, kt;        
+
+    states *horizBridge = ((states *) regions[blockIdx.x]) +  hoff; 
+    states *vertBridge = ((states *) regions[blockIdx.x]) + voff; 
+
     for (kt=rStart; kt>0; kt--)
     {
         dimStart = 1 + (rStart-kt);
@@ -201,9 +213,9 @@ __global__ void homeBridges(states **regions, int ts)
             for(kx = threadIdx.x + kt; kx<(DCONST.regionSide - kt); kx+=blockDim.x) 
             {
                 sidh =  ky * dSweptConst.rBase + kx;
-                stepUpdate(horizBridge, sidh, ts++);
+                stepUpdate(horizBridge, sidh, ts, dSweptConst.rBase);
                 sidv =  kx * dSweptConst.rBase + ky;
-                stepUpdate(vertBridge, sidv, ts++);
+                stepUpdate(vertBridge, sidv, ts, dSweptConst.rBase);
             }
         }    
         __syncthreads();
@@ -214,12 +226,15 @@ __global__ void homeBridges(states **regions, int ts)
     MARK : HOST SWEPT ROUTINES
 */
 // USE SPLIT FLAG AND OFFSET OR APPLY OFFSET IN MAIN?
-void wholeOctahedronCPU(states *state, int tnow, const int type)
+template <bool SPLIT, int TYPE> 
+void wholeOctahedronCPU(states *state, int tnow)
 {
+    states *cornerState = state + SPLIT * dSweptConst.splitOffset; 
+
     int h, x, y;
     int sid;
     int fromEnd;
-    if (type-1)
+    if (TYPE-1)
     {   
         for (h=cGlob.ht, h>0; h--)
         {
@@ -229,13 +244,13 @@ void wholeOctahedronCPU(states *state, int tnow, const int type)
                 for (x=h; x<fromEnd; x++)
                 {
                     sid = y*cGlob.fullStep + x;
-                    stepUpdate(state, sid, tnow++);
+                    stepUpdate(cornerState, sid, tnow, dSweptConst.rBase);
                 }
             }
             tnow++;
         }
     }
-    if (type)
+    if (TYPE)
     {
         for (h=1, h<cGlob.ht; h++)
         {
@@ -245,7 +260,7 @@ void wholeOctahedronCPU(states *state, int tnow, const int type)
                 for (x=h; x<fromEnd; x++)
                 {
                     sid = y*cGlob.fullStep + x;
-                    stepUpdate(state, sid, tnow++);
+                    stepUpdate(cornerState, sid, tnow, dSweptConst.rBase);
                 }
             }
             tnow++;
@@ -253,15 +268,27 @@ void wholeOctahedronCPU(states *state, int tnow, const int type)
     }
 }
 
-void homeBridgeCPU(states *region, int ts)
+template <bool OFFS> 
+void bridgesCPU(states *regions, int ts)
 {
-    //Launch 1D grid of 2d Blocks
-    states *horizBridge = ((states *) regions +  hSweptConst.hBridgeOffset); 
-    states *vertBridge = ((states *) regions +  hSweptConst.vBridgeOffset); 
-    // extern __shared__ states sharedState[];
+    int hoff, voff;
+    if (OFFS)
+    {
+        hoff = hSweptConst.hBridgeOffset; 
+        voff = hSweptConst.vBridgeOffset; 
+    }
+    else
+    {
+        hoff = hSweptConst.vBridgeOffset; 
+        voff = hSweptConst.hBridgeOffset; 
+    }
+ 
     int sidh, sid2, dimStart;
     int rStart = (HCONST.regionSide - 2)/2;
     int kx, ky, kt;
+
+    states *horizBridge = ((states *) regions + hoff); 
+    states *vertBridge  = ((states *) regions + voff);
     for (kt=rStart; kt>0; kt--)
     {
         dimStart = 1 + (rStart-kt);
@@ -270,38 +297,138 @@ void homeBridgeCPU(states *region, int ts)
             for(kx = kt; kx<(HCONST.regionSide - kt); kx++) 
             {
                 sidh =  ky * hSweptConst.rBase + kx;
-                stepUpdate(horizBridge, sidh, ts++);
+                stepUpdate(horizBridge, sidh, ts, dSweptConst.rBase);
                 sidv =  kx * hSweptConst.rBase + ky;
-                stepUpdate(vertBridge, sidv, ts++);
+                stepUpdate(vertBridge, sidv, ts, dSweptConst.rBase);
             }
         }    
-        __syncthreads();
     }
 }
+
 /*
     MARK : PASSING ROUTINES
 */
 
-// I THINK WE NEED ANOTHER BRIDGE ROUTINE BUT AS FAR AS I CAN TELL IT'S DONE TO HERE.
+
+// TYPE
+// Device to Device (2) | Device to Host (1) | Host to Device (0) 
+template <int LOCA, int TYPE, int OFFSET, bool INTERIOR> 
 __global__
-void passGPU(states *put, states *get, const int *idxmaps)
+void passGPU(states *ins, states *outs, int *idxmaps)
 {
-    const int putidx    = //(getidx+2) & 3;
-    const int gid       = 1 + threadIdx.x + blockDim.x * blockIdx.x; 
-    
-    if (gid>A.regionSide) return;
+    const int gid          = threadIdx.x + blockDim.x * blockIdx.x; 
+    const int rOffset[4]   = {DCONST.regionSide * dSweptConst.rBase, DCONST.regionSide, -DCONST.regionSide * dSweptConst.rBase,-DCONST.regionSide};
+    const int rawOffset    = OFFSET * dSweptConst.splitOffset; 
+
+    if (gid>A.regionSide) return;    
+
+    int inidx           = gid + (LOCA*dSweptConst.nPass);
+    int outidx          = gid + (LOCA*dSweptConst.nPass);
+
+    if (TYPE)   inidx     = idxmaps[inidx]  + rawOffset + (INTERIOR)  * rOffset[LOCA]; 
+    if (TYPE-1) outidx    = idxmaps[outidx] + rawOffset + (!INTERIOR) * rOffset[LOCA];
+
+    outs[outidx] = ins[inidx];
 }
 
-__global__
-void collectGPU()
-{
+/*
+InteriorPass --
+EAST panel, from east neighbor, west vertical bridge:
+(East idx + offset - roffset) -- INIDX
+(East idx + offset) -- OUTIDX
+NORTH panel, from north neighbor, south vertical bridge:
+(North idx + offset - roffset) -- INIDX
+(North idx + offset) -- OUTIDX
+*/ 
 
+template <int LOCA, int TYPE, int OFFSET, bool INTERIOR>
+void collectCPU(states *ins, states *outs, int *idxmaps)
+{
+    int i;
+    int workidx;
+    const int rOffset[4]   = {HCONST.regionSide * hSweptConst.rBase, HCONST.regionSide, -HCONST.regionSide * hSweptConst.rBase,-HCONST.regionSide};
+    const int rawOffset    = OFFSET * dSweptConst.splitOffset; 
+
+
+    int inidx           = gid + (LOCA*dSweptConst.nPass);
+    int outidx          = gid + (LOCA*dSweptConst.nPass);
+
+    if (TYPE)
+    {
+        for (i=0; i<hSweptConst.nPass; i++)
+        {
+            workidx = idxmaps[inidx[i]] + rawOffset + (INTERIOR) * rOffset[LOCA];
+            outs[i] = ins[workidx];
+        }
+    }   
+    else
+    {
+        for (i=0; i<hSweptConst.nPass; i++)
+        {
+            workidx = idxmaps[outidx[i]] + rawOffset + (!INTERIOR) * rOffset[LOCA];
+            outs[workidx] = ins[i];
+        }
+    }
 }
 
-void collectCPU()
+inline int passMask(int direction)
 {
-
+    return ((direction & 3) < 2)
 }
+
+// PASSING PART --
+void passPanel(std::vector <Region *> &regionals, int turn)
+{
+    // Last time I put the passing mechanisms in the class.  So... it won't work unless you do that or adjust the scheme.
+    for (auto r: regionals)
+    {
+        for (auto n: r->neighbors)
+        {
+            if passMask(n->sidx + turn) continue;
+            if (n->sameProc) //Only occurs in gpu blocks.
+            {
+                classicGPUSwap <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, n->sidx, 2);
+            }
+            else
+            {
+                if (gpuRegions) 
+                {
+                    classicGPUSwap <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, n->sidx, 1);
+                    r->gpuBufCopy(1, n->sidx);
+                }
+                else
+                {
+                    cpuBufCopy(r->stateRows, r->sendBuffer, n->sidx, 1);
+                    r->bufMessage(1, n->sidx);
+                }
+            }
+        }
+    }
+    // RECEIVE
+    for (auto r: regionals) 
+    {
+        r->incrementTime(); //Any Write out occurs within the swapping procedure.
+        for (auto n: r->neighbors)
+        {
+            if passMask(n->ridx + turn) continue;
+            if(!n->sameProc)
+            {
+                if (gpuRegions) 
+                {   
+                    r->gpuBufCopy(0, n->sidx);
+                    classicGPUSwap <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dRecv, n->sidx, 0);
+                }
+                else
+                {
+                    r->bufMessage(0, n->sidx);
+                    cpuBufCopy(r->stateRows, r->recvBuffer, n->sidx, 0);
+                } // End gpu vs cpu receiver choice. 
+            }     // End mask over neighbors already swapped. 
+        }         // End Loop over all this region's neighbors. 
+    }             // End Loop over all regions on this process. 
+}
+
+
 
 int smemsize()
 {
@@ -320,7 +447,7 @@ void sweptWrapper(std::vector <Region *> &regionals)
     states **regionSelector;
     
     int bigBuffer = (cGlob.regionSide * (cGlob.regionSide + 2)) / 4 + cGlob.regionBase;
-    for (auto r: regionals) r->makeBuffers(buffersize, 1);
+    for (auto r: regionals) r->makeBuffers(bigBuffer, 1);
     dim3 tdim(cGlob.tpbx,cGlob.tpby);
     const int minLaunch = cGlob.regionSide/1024 + 1;
     int stepNow = regionals[0]->tStep;
@@ -338,13 +465,16 @@ void sweptWrapper(std::vector <Region *> &regionals)
     hSweptConst.sharedOffset    = sharedCoord * (hSweptConst.rBase + 1);
 
     passIndex pidx(cGlob.regionSide, hSweptConst.rBase);
+    pidx.iniitalize();
+    hSweptConst.nPass = pidx.nPass;
 
     int *dPyramid, *dBridge;
-    int passAlloc = 4 * sizeof(int) * pidx.nPass;
+    //Im uncomfortable with them being the same.
+    int passAlloc = 4 * sizeof(int) * pidx.nPass; 
     cudaMalloc((void **) &dPyramid, passAlloc);
     cudaMalloc((void **) &dBridge, passAlloc);
-    cudaMemcpy(pidx.&pyramid, dPyramid, passAlloc, cudaMemcpyHostToDevice);
-    cudaMemcpy(pidx.&bridge, dBridge, passAlloc, cudaMemcpyHostToDevice);
+    cudaMemcpy(dPyramid, pidx.&pyramid, passAlloc, cudaMemcpyHostToDevice);
+    cudaMemcpy(dBridge, pidx.&bridge, passAlloc, cudaMemcpyHostToDevice);
 
     if (gpuRegions) 
     {
@@ -356,73 +486,74 @@ void sweptWrapper(std::vector <Region *> &regionals)
         }
     }
     stepNow = regionals[0]->tStep;
+    
+    // -----  UP_PYRAMID -------
 
-    // UP_PYRAMID
-    if (gpuRegions)     wholeOctahedron <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow, false, 1);
-    else                wholeOctahedronCPU(regionals[0]->state, stepNow, 1);
+    if (gpuRegions)     wholeOctahedron <false, 1> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
+    else                wholeOctahedronCPU <false, 1> (regionals[0]->state, stepNow);
 
-    // PASSING SW
+    // ----- OFFSET (SPLIT) OCTAHEDRON -------
+    
+    passPanel(regionals, 0);
  
     // Then BRIDGES NE - .
-    if (gpuRegions)     homeBridge <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
-    else                homeBridgeCPU (regionals[0]->state, stepNow);
+    if (gpuRegions)     bridges <false> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
+    else                bridgesCPU <false> (regionals[0]->state, stepNow);
 
-    // PASSING INTERIOR EDGES - .
+    passPanel(regionals, 0);
+
+    if (gpuRegions)     wholeOctahedron <true, 2> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
+    else                wholeOctahedronCPU <true, 2> (regionals[0]->state, stepNow);
+
+    for (auto r: regionals) r->incrementTime(false); 
 
     while (regionals[0]->tStamp < cGlob.tf)
     {   
-        // OFFSET WHOLE OCTAHEDRON
-        if (gpuRegions)     wholeOctahedron <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow, false, 2);
-        else                wholeOctahedronCPU(regionals[0]->state + hSweptConst.splitOffset, stepNow, 2);
+        // ----- HOME SLOT (WHOLE) OCTAHEDRON -------
 
-        // PASSING NE
+        passPanel(regionals, 2);
 
-        for (auto r: regionals)
-        {
-            for (auto n: r->neighbors)
-            {
-                if (n->sameProc) //Only occurs in gpu blocks.
-                {
-                    n->printer();
-                    classicGPUSwap <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, n->sidx, 2);
-                }
-                else
-                {
-                    if (gpuRegions) 
-                    {
-                        classicGPUSwap <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, n->sidx, 1);
-                        r->gpuBufCopy(1, n->sidx);
-                    }
-                    else
-                    {
-                        cpuBufCopy(r->stateRows, r->sendBuffer, n->sidx, 1);
-                        r->bufMessage(1, n->sidx);
-           
-                    }
-                }
-            }
-        }
-        // RECEIVE
-        for (auto r: regionals) 
-        {
-            r->incrementTime(); //Any Write out occurs within the swapping procedure.
-            for (auto n: r->neighbors)
-            {
-                if(!n->sameProc)
-                {
-                    if (gpuRegions) 
-                    {   
-                        r->gpuBufCopy(0, n->sidx);
-                        classicGPUSwap <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dRecv, n->sidx, 0);
-                    }
-                    else
-                    {
-                        r->bufMessage(0, n->sidx);
-                        cpuBufCopy(r->stateRows, r->recvBuffer, n->sidx, 0);
-                    } // End gpu vs cpu receiver choice. 
-                }     // End mask over neighbors already swapped. 
-            }         // End Loop over all this region's neighbors. 
-        }             // End Loop over all regions on this process. 
-    }                 // End while loop over all timesteps
+        // Then BRIDGES SW - .
+        if (gpuRegions)     bridges <true> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
+        else                bridgesCPU <true> (regionals[0]->state, stepNow);
+        
+        passPanel(regionals, 2);
+
+        if (gpuRegions)     wholeOctahedron <false, 2> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
+        else                wholeOctahedronCPU <false, 2> (regionals[0]->state, stepNow);
+
+        for (auto r: regionals) r->incrementTime(false); 
+        // ----- OFFSET (SPLIT) OCTAHEDRON -------
+        
+        passPanel(regionals, 0);
+    
+        // Then BRIDGES NE - .
+        if (gpuRegions)     bridges <false> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
+        else                bridgesCPU <false> (regionals[0]->state, stepNow);
+
+        passPanel(regionals, 0);
+
+        if (gpuRegions)     wholeOctahedron <true, 2> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
+        else                wholeOctahedronCPU <true, 2> (regionals[0]->state, stepNow);
+
+        for (auto r: regionals) r->incrementTime(); 
+
+    } // End Loop over all timesteps.
+
+    // -- DOWN PYRAMID --
+    // Then BRIDGES SW - .
+
+    if (gpuRegions)     bridges <true> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
+    else                bridgesCPU <true> (regionals[0]->state, stepNow);
+    
+    // PASSING INTERIOR EDGES - .
+
+    if (gpuRegions)     wholeOctahedron <false, 1> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
+    else                wholeOctahedronCPU <false, 1> (regionals[0]->state, stepNow);
+
+    for (auto r: regionals) r->incrementTime(false); 
+
     cudaFree(regionSelector);
+    cudaFree(dPyramid);
+    cudaFree(dBridge);
 }

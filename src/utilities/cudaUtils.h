@@ -16,6 +16,36 @@
 #include <vector>
 #include <array>
 
+// template< typename T >
+// void check(T result, char const *const func, const char *const file, int const line)
+// {
+//     if (result)
+//     {
+//         fprintf(stderr, "CUDA error at %s:%d code=%d(%s) \"%s\" \n",
+//                 file, line, static_cast<unsigned int>(result), _cudaGetErrorEnum(result), func);
+//         DEVICE_RESET
+//         // Make sure we call CUDA Device Reset before exiting
+//         exit(EXIT_FAILURE);
+//     }
+// }
+
+// #define checkCudaErrors(val)           check ( (val), #val, __FILE__, __LINE__ )
+
+void cudaKernelCheck(bool gpuq)
+{
+    if (gpuq)  
+    {
+        cudaError_t error = cudaGetLastError();
+        if(error != cudaSuccess)
+        {
+            // print the CUDA error message and exit
+            printf("CUDA error: %s\n", cudaGetErrorString(error));
+            exit(-1);
+        }
+        cudaDeviceSynchronize();
+    }
+}
+
 // From cppOverload in CUDASamples.
 #define OUTPUT_ATTR(attr)  \
     printf("Shared Size:   %d\n", (int)attr.sharedSizeBytes);   \

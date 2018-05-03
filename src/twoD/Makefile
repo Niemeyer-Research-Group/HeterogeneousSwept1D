@@ -1,9 +1,7 @@
 # DEF adds extra defines. Specificially -DNOS. This prevents the program from writing the solution out so it can be 
 # performance tested more efficiently.
 # run make DEF="-DNOS"
-DEF=
 
-include conf
 
 MAKEPATH:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 

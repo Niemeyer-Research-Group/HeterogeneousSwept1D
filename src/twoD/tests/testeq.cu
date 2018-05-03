@@ -8,6 +8,7 @@
 #include "../equations/wave.h"
 #include "../decomposition/decomp.h"
 #include "../decomposition/classic.h"
+#include "../decomposition/swept.h"
 #include <vector>
 #include <cuda.h>
 #include <array>
@@ -101,7 +102,9 @@ int main(int argc, char *argv[])
     cudaDeviceSynchronize();
     cudaFree(jean);
 
-    classicWrapper(regions);
+    //classicWrapper(regions);
+
+    sweptWrapper(regions);
 
     MPI_Barrier(MPI_COMM_WORLD);    
 

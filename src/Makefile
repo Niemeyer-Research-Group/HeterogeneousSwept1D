@@ -1,7 +1,8 @@
 
 include config.mk
 
-CODE_DIR:= $(SOURCEPATH)/oneD # twoD
+CODES:= oneD twoD
+CODE_DIR:= $(addprefix $(SOURCEPATH)/, $(CODES))
 BIN_DIR:= $(SOURCEPATH)/bin
 UTIL_DIR:= $(SOURCEPATH)/utilities
 UTIL_BIN:= $(BIN_DIR)/util

@@ -12,7 +12,7 @@
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
 */
 
-__global__ void 
+__global__ void
 setgpuRegion(states **rdouble, states *rmember, int i)
 {
     const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
@@ -69,9 +69,9 @@ struct Neighbor
 };
 
 typedef std::array <Neighbor *, 4> stencil;
-jsons solution; 
+jsons solution;
 struct Region
-{    
+{
     const Address self;
     const stencil neighbors;
     int xsw, ysw;
@@ -79,7 +79,7 @@ struct Region
     int tStep, stepsPerCycle;
     double tStamp, tWrite;
     std::string xstr, ystr, tstr, spath, scheme;
-    
+
     states *state;
     states **stateRows; // Convenience accessor.
     // GPU STUFF
@@ -87,7 +87,7 @@ struct Region
     states *sendBuffer, *recvBuffer, *dSend, *dRecv;
     cudaStream_t stream;
 
-    Region(Address stencil[5]) 
+    Region(Address stencil[5])
     : self(stencil[0]), neighbors(meetNeighbors(&stencil[1])), tStep(0), tStamp(0.0), tWrite(cGlob.freq)
     {
         xsw         = cGlob.regionSide * self.globalx;
@@ -198,14 +198,14 @@ struct Region
 
         if (dir) 
         {
-            tagg = self.owner + self.localIdx + neighbors[nIdx]->id.localIdx+5;
+            tagg = self.owner + self.localIdx + neighbors[nIdx]->id.localIdx + 5;
             MPI_Isend(sendBuffer+offs, bufAmt, struct_type, 
                         neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
                         &neighbors[nIdx]->req);
         }
         else
         {   
-            tagg = neighbors[nIdx]->id.owner + neighbors[nIdx]->id.localIdx + self.localIdx+5;
+            tagg = neighbors[nIdx]->id.owner + neighbors[nIdx]->id.localIdx + self.localIdx + 5;
             MPI_Irecv(recvBuffer+offs, bufAmt, struct_type, 
                         neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
                         &neighbors[nIdx]->req);
@@ -227,6 +227,7 @@ struct Region
         else
         {   
             bufMessage(dir, nIdx);
+            
             cudaMemcpy(dRecv+offs, recvBuffer+offs, bufAlloc, cudaMemcpyHostToDevice);
         }
     }
@@ -235,25 +236,26 @@ struct Region
     {
         spath = pth + "/s" + fspec + "_" + std::to_string(rank) + ".json";
         scheme = algo;
+        std::cout << rank << " "+scheme << std::endl;
 
-        if (!scheme.compare("S")) 
+        if (!scheme.compare("S"))
         {
             fullSide        = (3 * cGlob.regionBase)/2 - 1;
             stepsPerCycle   = cGlob.ht/NSTEPS;
         }
         else
         {
-            exSpace         = cGlob.regionBase;
+            fullSide        = cGlob.regionBase;
             stepsPerCycle   = 1;
         }
 
         regionAlloc = fullSide * fullSide * cGlob.szState;
         copyBytes   = cGlob.regionPoints * cGlob.szState;
-        
+
         stateRows   = new states*[fullSide];
         state       = new states [fullSide*fullSide];
 
-        if (self.gpu)   makeGPUState();       
+        if (self.gpu)   makeGPUState();
 
         for (int j=0; j<fullSide; j++)
         {

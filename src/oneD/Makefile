@@ -3,10 +3,14 @@
 # run make DEF="-DNOS"
 
 
-ODIR:= $(SOURCEPATH)/oneD
+MAKEPATH:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
 
-EQPATH:=$(ODIR)/equations
-DECOMPPATH:=$(ODIR)/decomposition
+# LPATH+=
+
+BINPATH:=$(MAKEPATH)bin
+EQPATH:=$(MAKEPATH)equations
+DECOMPPATH:=$(MAKEPATH)decomposition
+UTILPATH:=$(MAKEPATH)utilities
 
 IFLAGS+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
 

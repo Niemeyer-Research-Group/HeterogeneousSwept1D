@@ -39,41 +39,41 @@ classicStep(states **regions, const int ts)
 }
 
 // For two gpu regions, swaps one way, swaps the other way on the neighbor's turn.
-template <int LOCA, int TYPE> 
+template <int TYPE> 
 __global__ void 
-classicGPUSwap(states *ins, states *outs)
+classicGPUSwap(states *ins, states *outs, const int loca)
 {
-    const int gid = 1 + threadIdx.x + blockDim.x * blockIdx.x; 
-    
+    const int gid = 1 + threadIdx.x + blockDim.x * blockIdx.x;
+
     if (gid>A.regionSide) return;
 
-    int inidx   = (gid-1) + (LOCA*A.regionSide);
-    int outidx  = (gid-1) + (LOCA*A.regionSide);
+    int inidx   = (gid-1) + (loca*A.regionSide);
+    int outidx  = (gid-1) + (loca*A.regionSide);
 
-    // if both (2) it's device to device 
+    // if both (2) it's device to device
     if (TYPE) //Device to Host (1)
     {
-        if (LOCA & 1) // If odd its on the veritcal edge (1, 3)
+        if (loca & 1) // If odd its on the veritcal edge (1, 3)
         {
-            if (LOCA >> 1)  inidx = ((gid + 1) * A.regionBase) - 2; //(3)
+            if (loca >> 1)  inidx = ((gid + 1) * A.regionBase) - 2; //(3)
             else            inidx = (gid * A.regionBase) + 1; //(1)
         }
         else // It's even, its horizontal.
         {
-            if (LOCA >> 1)  inidx = gid + (A.regionSide * A.regionBase); //(2)
+            if (loca >> 1)  inidx = gid + (A.regionSide * A.regionBase); //(2)
             else            inidx = gid + A.regionBase; //(0)
         }
     }
     if (TYPE-1) //Host to Device (0)
     {
-        if (LOCA & 1) // (1 , 3)
+        if (loca & 1) // (1 , 3)
         {
-            if (LOCA >> 1)  outidx = (gid * A.regionBase);
+            if (loca >> 1)  outidx = (gid * A.regionBase);
             else            outidx = ((gid + 1)  * A.regionBase) - 1;
         }
         else    // (2, 4)
         {
-            if (LOCA >> 1)  outidx = gid;
+            if (loca >> 1)  outidx = gid;
             else            outidx = gid + ((A.regionSide + 1) * A.regionBase);
         }
     }
@@ -94,15 +94,15 @@ void classicStepCPU(Region *regional)
     }
 }
 
-template <int LOCA, int TYPE> 
-void cpuBufCopy(states **stRows, states *buf)
+template <int TYPE>
+void cpuBufCopy(states **stRows, states *buf, const int loca)
 {
     int i;
-    const int offs  = cGlob.regionSide * LOCA;
+    const int offs  = cGlob.regionSide * loca;
 
     if (TYPE)
     {
-        switch(LOCA)
+        switch(loca)
         {
             case 0: for (i=0; i<cGlob.regionSide; i++) 
                 buf[i+offs] = stRows[1][i+1];
@@ -116,7 +116,7 @@ void cpuBufCopy(states **stRows, states *buf)
     }
     else
     {
-        switch(LOCA)
+        switch(loca)
         {
             case 0: for(i=0; i<cGlob.regionSide; i++) 
                 stRows[0][i+1] = buf[i+offs];
@@ -133,7 +133,7 @@ void cpuBufCopy(states **stRows, states *buf)
 // Classic Discretization wrapper.
 void classicWrapper(std::vector <Region *> &regionals)
 {
-    if (!rank) std::cout << " - CLASSIC Decomposition - " << nproc << std::endl;
+    if (!rank) std::cout << " - CLASSIC Decomposition - " << nprocs << std::endl;
     const int gpuRegions = cGlob.hasGpu * regionals.size();
     states **regionSelector;
     if (gpuRegions) 
@@ -163,42 +163,41 @@ void classicWrapper(std::vector <Region *> &regionals)
                 if (n->sameProc) //Only occurs in gpu blocks.
                 {
                     n->printer();
-                    classicGPUSwap <n->sidx, 2> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState);
+                    classicGPUSwap <2> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, n->sidx);
                 }
                 else
                 {
-                    if (gpuRegions) 
+                    if (gpuRegions)
                     {
-                        classicGPUSwap <n->sidx, 1> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend);
+                        classicGPUSwap <1> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, n->sidx);
                         r->gpuBufCopy(1, n->sidx);
                     }
                     else
                     {
-                        cpuBufCopy <n->sidx, 1> (r->stateRows, r->sendBuffer);
+                        cpuBufCopy <1> (r->stateRows, r->sendBuffer, n->sidx);
                         r->bufMessage(1, n->sidx);
-           
                     }
                 }
             }
         }
         // RECEIVE
-        for (auto r: regionals) 
+        for (auto r: regionals)
         {
             r->incrementTime(); //Any Write out occurs within the swapping procedure.
             for (auto n: r->neighbors)
             {
                 if(!n->sameProc)
                 {
-                    if (gpuRegions) 
-                    {   
+                    if (gpuRegions)
+                    {
                         r->gpuBufCopy(0, n->sidx);
-                        classicGPUSwap <n->sidx, 0> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dRecv);
+                        classicGPUSwap <0> <<< minLaunch, cGlob.regionSide >>> ( r->dRecv, r->dState, n->sidx);
                     }
                     else
                     {
         
                         r->bufMessage(0, n->sidx);
-                        cpuBufCopy <n->sidx, 0> (r->stateRows, r->recvBuffer);
+                        cpuBufCopy <0> (r->stateRows, r->recvBuffer, n->sidx);
                     } // End gpu vs cpu receiver choice. 
                 }     // End mask over neighbors already swapped. 
             }         // End Loop over all this region's neighbors. 

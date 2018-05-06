@@ -89,7 +89,7 @@ int main(int argc, char *argv[])
     // }
 
     int np = 32;
-    double hin[32];
+    double hin[np];
     for (int i=0; i<np; i++) hin[i] = ((double) i)+0.2; 
 
     double *jean;
@@ -102,9 +102,9 @@ int main(int argc, char *argv[])
     cudaDeviceSynchronize();
     cudaFree(jean);
 
-    //classicWrapper(regions);
+    classicWrapper(regions);
 
-    sweptWrapper(regions);
+    // sweptWrapper(regions);
 
     MPI_Barrier(MPI_COMM_WORLD);    
 

@@ -45,7 +45,7 @@ if __name__ == "__main__":
     testobj = op.join(testBin, "waveTest.o")
 
     CUDAFLAGS       =" -gencode arch=compute_35,code=sm_35 -restrict --ptxas-options=-v -I" + utilInc   
-    CFLAGS          =" -G -g --std=c++11 -w "
+    CFLAGS          =" --std=c++11 -w "
     LIBFLAGS        =" -lm -lmpi "
 
     compileit = "nvcc -c testeq.cu -o " + testobj + CFLAGS + CUDAFLAGS + LIBFLAGS
@@ -67,7 +67,7 @@ if __name__ == "__main__":
         print("   ---------------")
         print("Linked")
 
-    runTest = "mpiexec -np 6 -report-pid - " + execf + " S waveTest.json " + testResult + " Shape Perfect "
+    runTest = "mpiexec -np 6 -report-pid - " + execf + " C waveTest.json " + testResult + " Shape Perfect "
     print(runTest)
     runstring(runTest)
     print("   ---------------")

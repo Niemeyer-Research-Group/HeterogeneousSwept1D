@@ -179,7 +179,7 @@ if __name__ == "__main__":
     tt = [(k, kk) for k in inst.uniques['tpb'] for kk in inst.uniques['gpuA']]
 
     fgt, axgt = plt.subplots(2, 1, sharex=True)
-    fio, axio = plt.subplots(2, 2)
+    fio, axio = plt.subplots(2, 2, figsize=(11,9))
     fio.suptitle("Best interpolated run vs observation")
     mnCoords = pd.DataFrame()
 
@@ -217,16 +217,18 @@ if __name__ == "__main__":
             dfBF['gpuA'].plot(ax=axgt[1], logx=True, legend=False) 
         
 
-            dfBF[respvar].plot(ax=axraw, logx=True, label=ks, title=ke+" Best Runs")
+            dfBF[respvar].plot(ax=axraw, loglog=True, label=ks, title=ke+" Best Runs")
             dfBF['efficiency'].plot(ax=axeff, logx=True, label=ks, title=ke+" Best Run Efficiency")           
             collBestI[ke][ks] = dfBI
             collBestIG[ke][ks] = dfBIG
             collBest[ke][ks] = dfBF
 
             dfSpeed["NoGPU"][ke+ks] = dfBIG['time', 0.0]/dfBF['time']
-            dfBF.plot(y=respvar, ax=axn, loglog=True, legend=False)
-            iss.oFrame.plot(x='nX', y=respvar, ax=axn, c='gpuA', kind='scatter', legend=False, loglog=True)
+            dfBF.plot(y=respvar, ax=axn, marker="", loglog=True, legend=False)
+            iss.oFrame.plot(x='nX', y=respvar, ax=axn, c='gpuA', kind='scatter',  legend=False, loglog=True)
             axn.set_title(ke+ks)
+            axn.set_xlabel(xlbl)
+            axn.set_ylabel("Time per timestep (us)")
             print(typ)
         
         dfSpeed["Raw"][ke] = ie[schemes[0]].oFrame[respvar]/ ie[schemes[1]].oFrame[respvar]

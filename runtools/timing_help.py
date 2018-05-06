@@ -12,7 +12,7 @@ import os
 import os.path as op
 import sys
 
-import matplotlib as mpl
+#import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -31,20 +31,14 @@ myColors = [[27, 158, 119],
  [166, 118, 29],
  [102, 102, 102]]
 
+
+sty = op.join(thispath, "swept.mplstyle")
+plt.style.use(sty)
+
 hxColors = ["#{:02x}{:02x}{:02x}".format(r,g,b) for r, g, b in myColors]
 
-plt.rc('axes', prop_cycle=cycler('color', hxColors))
-    #+cycler('marker', ['D', 'o', 'h', '*', '^', 'x', 'v', '8']))
+plt.rc('axes', prop_cycle=cycler('color', hxColors) + cycler('marker', ['D', 'o', 'h', '*', '^', 'x', 'v', '8']))
 
-mpl.rcParams['lines.linewidth'] = 3
-#mpl.rcParams['lines.markersize'] = 8
-mpl.rcParams["figure.figsize"] = 14,8
-mpl.rcParams["figure.titlesize"]="x-large"
-mpl.rcParams["figure.titleweight"]="bold"
-mpl.rcParams["grid.alpha"] = 0.5
-mpl.rcParams["axes.grid"] = True
-mpl.rcParams["savefig.dpi"] = 1000
-mpl.rcParams["savefig.bbox"] = "tight"
 
 xlbl = "Grid Size"
 

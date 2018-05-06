@@ -68,7 +68,6 @@ struct states {
     REALthree Q[2]; // Full Step, Midpoint step state variables
     REAL Pr; // Pressure ratio
     // size_t tstep; // Consider this for padding.  Unfortunately, requires much refactoring.
-    // Test this equation without setting the block width.  Should be 14 blocks resulting in bank conflict.
 };
 
 std::string outVars[NVARS] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------//
@@ -316,7 +315,7 @@ __device__ __host__
 void eulerStep(states *state, const int idx, const int tstep)
 {
     REALthree tempStateLeft, tempStateRight;
-    int itx = (tstep ^ 1);
+    const int itx = (tstep ^ 1);
 
     tempStateLeft = limitor(state[idx-1].Q[itx], state[idx].Q[itx], state[idx-1].Pr);
     tempStateRight = limitor(state[idx].Q[itx], state[idx-1].Q[itx], ONE/state[idx].Pr);

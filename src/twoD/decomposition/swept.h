@@ -31,11 +31,10 @@ struct PassIndex
         std::cout << rank << " in INDEX " << pyramid[0] << std::endl;
 		for (int k=0; k<4; k++)
         {
-            
             pyr[k]  = (int *) (pyramid + nPass*k);
             brg[k]  = (int *) (bridge  + nPass*k);
         }
-        
+
         this->initialize();
     }
     ~PassIndex()
@@ -120,7 +119,7 @@ upPyramid(states *state, int ts, const int tol, const int base)
         for (ky = threadIdx.y + kt; ky<(base - kt); ky+=blockDim.y)
         {
             for(kx = threadIdx.x + kt; kx<(base - kt); kx+=blockDim.x)
-            {       
+            {
                 sid =  ky * dSweptConst.rBase  + kx;
                 stepUpdate(state, sid, ts, dSweptConst.rBase);
             }
@@ -145,7 +144,7 @@ downPyramid(states *state, int ts, const int tol, const int base)
                 sid =  ky * dSweptConst.rBase + kx;
                 stepUpdate(state, sid, ts, dSweptConst.rBase);
             }
-        }    
+        }
         __syncthreads();
         ts++;
     }
@@ -360,8 +359,7 @@ void passGPU(states *ins, states *outs, int *idxmaps, const int loca)
 
     if (TYPE)   inidx     = idxmaps[inidx]  + rawOffset + (INTERIOR)  * rOffset[loca];
     if (TYPE-1) outidx    = idxmaps[outidx] + rawOffset + (!INTERIOR) * rOffset[loca];
-    
-    
+
     outs[outidx] = ins[inidx];
 }
 
@@ -411,41 +409,37 @@ static int cnt = 0;
 template <bool OFFSET, bool INTERIOR>
 void passPanel(std::vector <Region *> &regionals, PassIndex *pidx)
 {
+	const int det = 2*OFFSET;
     static const int minLaunch = cGlob.regionSide/1024 + 1;
     // Last time I put the passing mechanisms in the class.  So... it won't work unless you do that or adjust the scheme.
     for (auto r: regionals)
     {
-        for (auto n: r->neighbors)
-        {
-            if (passMask(n->sidx + OFFSET*2)) continue;
-            if (n->sameProc) //Only occurs in gpu blocks.
-            {
-                passGPU <2, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, pidx->getPtr(INTERIOR), n->sidx);
-            }
-            else
-            {
-                if (r->self.gpu)
-                {
-                    passGPU <1, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, pidx->getPtr(INTERIOR), n->sidx);
-                    r->gpuBufCopy(1, n->sidx);
-                }
-                else
-                {
-                    passCPU <1, OFFSET, INTERIOR> (r->state, r->sendBuffer, pidx->getPtr(INTERIOR), n->sidx);
-                    r->bufMessage(1, n->sidx);
-                }
-            }
-            std::cout << "SEND rank - " << rank << " " << cnt << " | (" << r->self.globalx <<  ", " << r->self.globaly << ") -> (" << n->id.globalx << ", " << n->id.globaly << ") at - " << __LINE__ << " " << std::boolalpha << passMask(n->sidx + OFFSET*2) << " " << n->sidx + 2*OFFSET << " " << n->sidx << std::endl;
-        }
-    }
-    // RECEIVE
-    for (auto r: regionals)
-    {
-        for (auto n: r->neighbors)
-        {
-            if (passMask(n->ridx + 2*OFFSET)) continue;
+        for (auto n:r->neighbors)
+            if (passMask(n->sidx - det))
+			{
+            	if (n->sameProc) //Only occurs in gpu blocks.
+            	{
+                	passGPU <2, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, pidx->getPtr(INTERIOR), n->sidx);
+            	}
+            	else
+            	{
+                	if (r->self.gpu)
+               		{
+                    	passGPU <1, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, pidx->getPtr(INTERIOR), n->sidx);
+                    	r->gpuBufCopy(1, n->sidx);
+                	}
+                	else
+                	{
+                    	passCPU <1, OFFSET, INTERIOR> (r->state, r->sendBuffer, pidx->getPtr(INTERIOR), n->sidx);
+                    	r->bufMessage(1, n->sidx);
+					}
+				}
+			}
+			else
+			{
+
             if (!n->sameProc)
-            {   
+            {
                 std::cout << "START  RECV rank - " << rank << " " << n->id.owner << " dir " << n->sidx << " " << cnt << " | (" << r->self.globalx <<  ", " << r->self.globaly << ") <- (" << n->id.globalx << ", " << n->id.globaly << ") at - " << __LINE__ << std::endl;
                 if (r->self.gpu)
                 {
@@ -456,14 +450,11 @@ void passPanel(std::vector <Region *> &regionals, PassIndex *pidx)
                 {
                     r->bufMessage(0, n->sidx);
                     passCPU <0, OFFSET, INTERIOR> (r->recvBuffer, r->state, pidx->getPtr(INTERIOR), n->sidx);
-                } // End gpu vs cpu receiver choice. 
-                  // End mask over neighbors already swapped. 
-            std::cout << "END RECV rank - " << rank << " " << n->id.owner << " " << cnt << " | (" << r->self.globalx <<  ", " << r->self.globaly << ") <- (" << n->id.globalx << ", " << n->id.globaly << ") at - " << __LINE__ << std::endl;
-            }
-        }         // End Loop over all this region's neighbors. 
-    }             // End Loop over all regions on this process. 
-    std::cout << "Rank - " << rank << " MADE IT OUT " << cnt << std::endl;
-    cnt++;
+                } // End gpu vs cpu receiver choice.
+                  // End mask over neighbors already swapped.
+			}
+		}
+    }
 }
 
 
@@ -483,7 +474,7 @@ void sweptWrapper(std::vector <Region *> &regionals)
     const int gpuRegions = cGlob.hasGpu * regionals.size();
     states **regionSelector;
     int bigBuffer = (cGlob.regionSide * (cGlob.regionSide + 2)) / 4 + cGlob.regionBase;
-    for (auto r: regionals) r->makeBuffers(bigBuffer, 4);
+    for (auto r: regionals) r->makeBuffers(bigBuffer, 2);
     dim3 tdim(cGlob.tpbx,cGlob.tpby);
     const int minLaunch = cGlob.regionSide/1024 + 1;
     int stepNow = regionals[0]->tStep;
@@ -530,8 +521,7 @@ void sweptWrapper(std::vector <Region *> &regionals)
     // Then BRIDGES NE - .
     if (gpuRegions)     bridges <false> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
     else                bridgesCPU <false> (regionals[0]->state, stepNow);
-    
-    
+
     passPanel <false, true> (regionals, &pidx);
     std::cout << "Made it swept " << rank << " " << __LINE__ << std::endl;
 
@@ -543,7 +533,7 @@ void sweptWrapper(std::vector <Region *> &regionals)
     for (auto r: regionals) r->incrementTime(false); 
 
     while (regionals[0]->tStamp < cGlob.tf)
-    {   
+    {
         // ----- HOME SLOT (WHOLE) OCTAHEDRON -------
     std::cout << "Made it swept " << rank << " " << __LINE__ << std::endl;
 
@@ -552,7 +542,7 @@ void sweptWrapper(std::vector <Region *> &regionals)
         // Then BRIDGES SW - .
         if (gpuRegions)     bridges <true> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
         else                bridgesCPU <true> (regionals[0]->state, stepNow);
-        
+
         std::cout << "Made it swept " << rank << " " << __LINE__ << std::endl;
         passPanel<true, true> (regionals, &pidx);
 

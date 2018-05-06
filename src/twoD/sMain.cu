@@ -14,6 +14,28 @@
 ----------------------
 */
 
+writeTime(double tMeas, double tSim, std::string tpath)
+{
+
+    tMeas *= 1.e6;
+
+    double n_timesteps = tSim/cGlob.dt;
+    double per_ts = tMeas/n_timesteps;
+
+    std::cout << n_timesteps << " timesteps" << std::endl;
+    std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
+
+    // Write out performance data as csv
+    FILE * timeOut;
+    timeOut = fopen(tpath.c_str(), "a+");
+    fseek(timeOut, 0, SEEK_END);
+    int ft = ftell(timeOut);
+    if (!ft) fprintf(timeOut, "tpb,gpuA,nX,time\n");
+    fprintf(timeOut, "%d,%.4f,%d,%.8f\n", cGlob.tpb, cGlob.gpuA, cGlob.nPts, per_ts);
+    fclose(timeOut);
+
+}
+
 int main(int argc, char *argv[])
 {
     makeMPI(argc, argv);
@@ -48,13 +70,12 @@ int main(int argc, char *argv[])
     }
 
     // If you have selected scheme I, it will only initialize and output the initial values.
-
     if (scheme.compare("I"))
     {
         double timed, tfm;
-		if (rank)
+		if (!rank)
 		{
-            printf ("Scheme: %s - Grid Size: %d - Affinity: %.2f\n", scheme.c_str(), cGlob.nX, cGlob.gpuA);
+            printf ("Scheme: %s - Grid Size: %d - Affinity: %.2f\n", scheme.c_str(), cGlob.nPts, cGlob.gpuA);
             printf ("threads/blk: %d - timesteps: %.2f\n", cGlob.tpb, cGlob.tf/cGlob.dt);
 		}
 
@@ -63,11 +84,11 @@ int main(int argc, char *argv[])
 
         if (!scheme.compare("C"))
         {
-            tfm = classicWrapper(state);
+            tfm = classicWrapper(regions);
         }
         else if  (!scheme.compare("S"))
         {
-            tfm = sweptWrapper(state);
+            tfm = sweptWrapper(regions);
         }
         else
         {
@@ -75,7 +96,8 @@ int main(int argc, char *argv[])
         }
 
         MPI_Barrier(MPI_COMM_WORLD);
-        if (!ranks) timed = (MPI_Wtime() - timed);
+        if (!rank) timed = (MPI_Wtime() - timed);
+
         if (cGlob.hasGpu)  
 		{
 			cudaError_t error = cudaGetLastError();
@@ -85,38 +107,19 @@ int main(int argc, char *argv[])
             	printf("CUDA error: %s\n", cudaGetErrorString(error));
             	exit(-1);
         	}
-			
-		}
-
-        if (!rank])
-        {
-            timed *= 1.e6;
-
-            double n_timesteps = tfm/cGlob.dt;
-
-            double per_ts = timed/n_timesteps;
-
-            std::cout << n_timesteps << " timesteps" << std::endl;
-            std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
-
-            // Write out performance data as csv
-            std::string tpath = pth + "/t" + fspec + scheme + t_ext;
-            FILE * timeOut;
-            timeOut = fopen(tpath.c_str(), "a+");
-            fseek(timeOut, 0, SEEK_END);
-            int ft = ftell(timeOut);
-            if (!ft) fprintf(timeOut, "tpb,gpuA,nX,time\n");
-            fprintf(timeOut, "%d,%.4f,%d,%.8f\n", cGlob.tpb, cGlob.gpuA, cGlob.nX, per_ts);
-            fclose(timeOut);
         }
+        if (!rank) writeTime(timed, tfm, pth + "/t" + fspec + scheme + t_ext);
     }
 
-    for (auto r: regions)
-    {
-        delete[] r;
-    }
+    cudaDeviceSynchronize();
+    MPI_Barrier(MPI_COMM_WORLD);    
 
+    for (int i=0; i<regions.size(); i++)
+    {   
+        delete regions[i];        
+    }
     regions.clear();
+
     endMPI();
 
     return 0;

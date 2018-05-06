@@ -1,0 +1,17 @@
+
+lines.linewidth: 3
+lines.markersize: 8
+figure.figsize: 6, 4
+figure.titlesize: xx-large
+figure.titleweight: bold
+axes.titlesize: x-large   
+axes.labelsize: large
+xtick.major.size: 6
+xtick.labelsize: large
+ytick.labelsize: large
+ytick.major.size: 6
+grid.alpha: 0.5
+axes.grid: True
+savefig.dpi: 1000
+savefig.bbox: tight
+font.family: serif

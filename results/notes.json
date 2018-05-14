@@ -1,1 +1,20 @@
-{"ffe135db8131096430194ba3a8953290983b834e": {"date": "2017-12-04", "System": "Workstation", "np": 8, "note": "Initial experiment on workstation.  Completed ~1 month before saving in early November 2017."}, "ca58ce318b8fb42c4b817484776c70290f4351d3": {"date": "2017-12-29", "System": "Cluster", "np": 20, "note": "First time it really worked on the cluster.  Run over Christmas"}, "9d01a4d4a44183a6690fc1cc820b5962501ee594": {"date": "2018-01-08", "System": "Cluster", "np": 40, "note": "Cluster computee-2&1.  First time running across nodes.  nX ranged from 1e5 to 1e7 (roughly)"}}
+{
+    "ffe135db8131096430194ba3a8953290983b834e": {
+        "date": "2017-12-04",
+        "System": "Workstation",
+        "np": 8,
+        "note": "Initial experiment on workstation.  Completed ~1 month before saving in early November 2017."
+    },
+    "ca58ce318b8fb42c4b817484776c70290f4351d3": {
+        "date": "2017-12-29",
+        "System": "Cluster",
+        "np": 20,
+        "note": "First time it really worked on the cluster.  Run over Christmas"
+    },
+    "9d01a4d4a44183a6690fc1cc820b5962501ee594": {
+        "date": "2018-01-08",
+        "System": "Cluster",
+        "np": 40,
+        "note": "Cluster computee-2&1.  First time running across nodes.  nX ranged from 1e5 to 1e7 (roughly)"
+    }
+}

@@ -1,10 +1,10 @@
 
 lines.linewidth: 3
 lines.markersize: 8
-figure.figsize: 6, 4
+figure.figsize: 10, 8
 figure.titlesize: xx-large
 figure.titleweight: bold
-axes.titlesize: x-large   
+axes.titlesize: x-large
 axes.labelsize: large
 xtick.major.size: 6
 xtick.labelsize: large

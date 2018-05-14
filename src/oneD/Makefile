@@ -20,7 +20,7 @@ LPATHS:=$(addprefix -L, $(LPATH))
 
 DH:= $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
 
-CPREQ:=$(ODIR)/sMain.cu 
+CPREQ:=$(ODIR)/sMain.cu
 
 EQINIT:=$(wildcard $(EQPATH)/*.h)
 

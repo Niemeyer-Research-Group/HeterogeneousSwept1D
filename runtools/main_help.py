@@ -227,5 +227,5 @@ if __name__ == "__main__":
             getpath = op.abspath(sys.argv[1])
 
     rs, ty = readPath(getpath)
-    hdfpath = op.join(resultpath, "rawResults.h5")    
+    hdfpath = op.join(resultpath, "rawResults.h5")
     longTerm(rs, ty, hdfpath)

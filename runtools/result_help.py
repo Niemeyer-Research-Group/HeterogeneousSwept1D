@@ -16,12 +16,6 @@ import pandas as pd
 import subprocess as sp
 from main_help import *
 
-plt.set_cmap('viridis')
-
-mpl.rcParams["lines.linewidth"] = 3
-mpl.rcParams["grid.alpha"] = 0.5
-mpl.rcParams["axes.grid"] = True
-
 #This is unfortunately situation specific
 
 def mrgr(dBlob, dCons):

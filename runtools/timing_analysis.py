@@ -62,7 +62,7 @@ def predictNew(eq, alg, args, nprocs=8):
 # Change the source code?  Run it here to compare to the same
 # result in the old version
 def compareRuns(eq, alg, args, mClass, nprocs=8, dim=1): #)mdl=linear_model.LinearRegression()):
-    
+
     bpath = obinpath if dim == 1 else tbinpath
     tpath = otestpath if dim == 1 else ttestpath
     oldF = mostRecentResults(resultpath)
@@ -142,7 +142,9 @@ def contourRaw(df, tytle, vals='time', getfig=False):
 
 
 if __name__ == "__main__":
-        
+    '''
+        Give command line argument not 0 to show plots rather than save them
+    '''
     plotspec = 0 if len(sys.argv) < 2 else int(sys.argv[1])
 
     if plotspec:
@@ -150,7 +152,7 @@ if __name__ == "__main__":
             f = makeList(f)
             for ff in f:
                 ff.show()
-                
+
             g = input("Press Any Key: ")
 
     recentdf, detail = getRecentResults(0)

@@ -39,7 +39,6 @@ hxColors = ["#{:02x}{:02x}{:02x}".format(r,g,b) for r, g, b in myColors]
 
 plt.rc('axes', prop_cycle=cycler('color', hxColors) + cycler('marker', ['D', 'o', 'h', '*', '^', 'x', 'v', '8']))
 
-
 xlbl = "Grid Size"
 
 dftype=pd.core.frame.DataFrame #Compare types
@@ -117,7 +116,7 @@ class Perform(object):
 
         self.minmaxes['nX'] = [self.oFrame.groupby(self.xo[:2]).min()['nX'].max(), 
                                 self.oFrame.groupby(self.xo[:2]).max()['nX'].min()]
-                
+
 
     def __str__(self):
         ms = "%s \n %s \n Unique Exog: \n" % (self.title, self.oFrame.head())

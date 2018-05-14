@@ -35,7 +35,7 @@ writeTime(double tMeas, double tSim, std::string tpath)
     fclose(timeOut);
 
 }
-q
+
 int main(int argc, char *argv[])
 {
     makeMPI(argc, argv);

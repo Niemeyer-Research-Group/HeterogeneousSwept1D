@@ -6,6 +6,8 @@
 #include <helper_cuda.h>
 #include <vector>
 #include <array>
+#include <algorithm>
+#include <iterator>
 // IF assign() proves necessary #include<algorithm>
 
 struct sweptConst
@@ -16,9 +18,11 @@ struct sweptConst
 struct PassIndex
 {
     //Edges to pass;
-    typedef  std::array<std::vector<int>, 4> idxvec;
+    typedef std::vector<int> intvec;
+    typedef  std::array<intvec, 4> idxvec;
     const int side, base, gpu;
 	idxvec pyramid, bridge;
+    intvec passer;
     int nPass, sizePass;
 
     PassIndex(int side, int base, int hasG) : side(side), base(base), gpu(cGlob.hasGpu), pyramid(initialize(1)), bridge(initialize(0))
@@ -27,7 +31,7 @@ struct PassIndex
         sizePass    = 4 * nPass * sizeof(int);
     }
 
-    PassIndex(const PassIndex &pix) : side(pix.side), base(pix.base), gpu(pix.gpu), sizePass(pix.sizePass), 
+    PassIndex(const PassIndex &pix) : side(pix.side), base(pix.base), gpu(pix.gpu), sizePass(pix.sizePass),
 				nPass(pix.nPass), pyramid(pix.pyramid), bridge(pix.bridge){   }
 
 
@@ -132,7 +136,7 @@ __constant__ sweptConst dSweptConst;
 sweptConst hSweptConst;
 
 // Can it work for host too?  Yes if you guard them with preprocessor.
-__device__ int 
+__device__ int
 upPyramid(states *state, int ts, const int tol, const int base)
 {
     int sid;
@@ -255,15 +259,15 @@ bridges(states **regions, int ts)
     int sidh, sidv, dimStart;
     int kx, ky, kt;
 
-    states *horizBridge = ((states *) regions[blockIdx.x]) + hoff; 
-    states *vertBridge = ((states *) regions[blockIdx.x])  + voff; 
+    states *horizBridge = ((states *) regions[blockIdx.x]) + hoff;
+    states *vertBridge = ((states *) regions[blockIdx.x])  + voff;
 
     for (kt = rStart; kt>0; kt--)
     {
         dimStart = 1 + (rStart-kt);
         for (ky = threadIdx.y + dimStart; ky<(DCONST.regionBase - kt); ky+=blockDim.y)
         {
-            for(kx = threadIdx.x + kt; kx<(DCONST.regionSide - kt); kx+=blockDim.x) 
+            for(kx = threadIdx.x + kt; kx<(DCONST.regionSide - kt); kx+=blockDim.x)
             {
                 sidh =  ky * dSweptConst.rBase + kx;
                 stepUpdate(horizBridge, sidh, ts, dSweptConst.rBase);
@@ -341,14 +345,14 @@ void bridgesCPU(states *regions, int ts)
     int sidh, sidv, dimStart;
     int kx, ky, kt;
 
-    states *horizBridge = ((states *) regions + hoff); 
+    states *horizBridge = ((states *) regions + hoff);
     states *vertBridge  = ((states *) regions + voff);
     for (kt=rStart; kt>0; kt--)
     {
         dimStart = 1 + (rStart-kt);
         for (ky = dimStart; ky<(HCONST.regionBase - kt); ky++)
         {
-            for(kx = kt; kx<(HCONST.regionSide - kt); kx++) 
+            for(kx = kt; kx<(HCONST.regionSide - kt); kx++)
             {
                 sidh =  ky * hSweptConst.rBase + kx;
                 stepUpdate(horizBridge, sidh, ts, dSweptConst.rBase);
@@ -394,56 +398,45 @@ EAST panel, from east neighbor, west vertical bridge:
 NORTH panel, from north neighbor, south vertical bridge:
 (North idx + offset - roffset) -- INIDX
 (North idx + offset) -- OUTIDX
-*/ 
+*/
 
 template <int TYPE, bool OFFSET, bool INTERIOR>
 void PassIndex::passCPU(states *ins, states *outs, const int loca)
 {
     static const int rOffset[4]   = {HCONST.regionSide * hSweptConst.rBase, HCONST.regionSide, -HCONST.regionSide * hSweptConst.rBase,-HCONST.regionSide};
 
-    int i;
-    int workidx;
+    int i, workidx;
     const int rawOffset = OFFSET * hSweptConst.splitOffset;
     // std::cout << rank << " -BEFORE- " << " - " << TYPE << " - " << INTERIOR << " - "  << OFFSET << " - " << loca << std::endl;
 	const int roff 		= rawOffset + (INTERIOR) * rOffset[loca];
-
     if (INTERIOR)
     {
+        std::copy(bridge[loca].begin(), bridge[loca].end(), std::back_inserter(passer));
+    }
+    else
+    {
+        std::copy(pyramid[loca].begin(), pyramid[loca].end(), std::back_inserter(passer));
+    }
+
         if (TYPE)
         {
-            for (auto idx: bridge[loca])
+            for (i = 0; i<passer.size(); i++)
             {
-                workidx = idx + roff;
-                outs[i] = ins[workidx];
+                workidx         = passer[i] + roff;
+                outs[i]         = ins[workidx];
             }
         }
         else
         {
-            for (auto idx: bridge[loca])
+            for (i = 0; i<passer.size(); i++)
             {
-                workidx = idx + roff;
-                outs[workidx] 	= ins[i];
-            }
-        }
-    }    
-    else {
-        if (TYPE)
-        {
-            for (auto idx: pyramid[loca])
-            {
-                workidx = idx + roff;
-                outs[i] = ins[workidx];
-            }
-        }
-        else
-        {
-            for (auto idx: pyramid[loca])
-            {
-                workidx = idx + roff;
+                workidx         = passer[i] + roff;
                 outs[workidx] 	= ins[i];
             }
         }
     }
+
+    passer.erase();
     // std::cout << std::boolalpha << rank << " -AFTER- " << " - " << TYPE << " - " << INTERIOR << " - "  << OFFSET << " - " << workidx << " - " << loca << std::endl;
 }
 

@@ -258,12 +258,12 @@ struct Region
 
         for (int j=0; j<fullSide; j++)
         {
-            stateRows[j] = (states *) state+(j*fullSide); 
+            stateRows[j] = (states *) state+(j*fullSide);
         }
         for(int k=0; k<cGlob.regionSide+2; k++)
-        {   
+        {
             for (int i=0; i<cGlob.regionSide+2; i++)
-            {   
+            {
                 initState(&stateRows[k][i], i+xsw-1, k+ysw-1);
             }
         }

@@ -94,7 +94,7 @@ void classicStepCPU(Region *regional)
     }
 }
 
-template <int TYPE>
+template <bool TYPE>
 void cpuBufCopy(states **stRows, states *buf, const int loca)
 {
     int i;
@@ -162,7 +162,7 @@ void classicWrapper(std::vector <Region *> &regionals)
             {
                 if (n->sameProc) //Only occurs in gpu blocks.
                 {
-                    n->printer();
+                    // n->printer();
                     classicGPUSwap <2> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, n->sidx);
                 }
                 else

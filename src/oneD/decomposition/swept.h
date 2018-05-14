@@ -264,7 +264,9 @@ void passSwept(states *passer, states *getter, int tstep, int turn)
 double sweptWrapper(states **state,  int *tstep)
 {
 	if (!ranks[1]) cout << "SWEPT Decomposition " << cGlob.tpb << endl;
-
+	FILE *diagDump;
+	std::string fname = "edge/edgeWrite_" + std::to_string(ranks[1]) + ".csv";
+	diagDump = fopen(fname.c_str(), "w+");
     const int bkL = cGlob.cBks - 1;
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
@@ -509,12 +511,15 @@ double sweptWrapper(states **state,  int *tstep)
     else
     {
         const int xc = cGlob.xcpu, xcp = xc+1;
-        
+
         for (int k=0; k<cGlob.cBks; k++)
         {
             upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
         }
-  
+
+        for (int i=0; i<xcp; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+        fprintf(diagDump, "\n");
+
         passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
 
         //Split
@@ -530,6 +535,8 @@ double sweptWrapper(states **state,  int *tstep)
             }
         }
 
+        for (int i=cGlob.ht; i<xcp+cGlob.ht; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+        fprintf(diagDump, "\n");
         // -- BACK TO FRONT -- //
 
         passSwept(state[0] + xc, state[0], tmine+1, 1);
@@ -545,6 +552,9 @@ double sweptWrapper(states **state,  int *tstep)
             {
                 wholeDiamondCPU(state[0] + k*cGlob.tpb, tmine);
             }
+
+			for (int i=1; i<xcp; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+            fprintf(diagDump, "\n");
 
             passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
 
@@ -562,6 +572,9 @@ double sweptWrapper(states **state,  int *tstep)
                     wholeDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
                 }
             }
+
+			for (int i=cGlob.ht; i<xcp+cGlob.ht; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+			fprintf(diagDump, "\n");
 
             passSwept(state[0] + xc, state[0], tmine, 1);
 
@@ -624,7 +637,16 @@ double sweptWrapper(states **state,  int *tstep)
         tmine += cGlob.ht;
         t_eq = cGlob.dt * (tmine/NSTEPS);
     }
+	
+	if (!ranks[1]){
+		FILE *metaFile;
+		metaFile = fopen("edge/RunDetails.txt", "w+");
+		fprintf(metaFile, "%d,%.5f,%.5f,%.5f\n", cGlob.tpb, cGlob.lx, cGlob.dx, cGlob.dt);
+		fclose(metaFile);
+	}
 
+
+	fclose(diagDump);
     *tstep = tmine;
     //atomicWrite(timeit.typ, timeit.times);
     return t_eq;

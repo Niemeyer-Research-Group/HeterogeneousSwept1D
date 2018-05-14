@@ -47,7 +47,7 @@ struct Globalism
     double tf, freq, dt, dx, dy, lx, ly;
 
 } cGlob;
-
+// sudo sysctl -w kernel.core_pattern=/tmp/core-%e.%p.%h.%t
 struct Address
 {
     int owner, gpu, localIdx, globalx, globaly;
@@ -123,11 +123,10 @@ struct Region
                 cudaFree(dRecv);
             }
         }
-        
         delete[] stateRows;
         delete[] state;
-        
-        for (int i=0; i<3; i++)  delete neighbors[i];
+
+        for (int i=0; i<4; i++)  delete neighbors[i];
     }
 
     inline void makeBuffers(int nPts, int nSides)
@@ -160,17 +159,18 @@ struct Region
         tStamp = (double)tStep * cGlob.dt; 
 
         if (!writeNow) return;
-
+		#ifndef NOS
         if (tStamp > tWrite)
         {
             if (self.gpu) gpuCopy(true);
             solutionOutput();
             tWrite += cGlob.freq;
-        } 
+        }
+		#endif
     }
 
     void makeGPUState()
-    {   
+    {
         cudaStreamCreate(&stream);
         cudaMalloc((void **) &dState, regionAlloc);
         gpuCopy(false);
@@ -210,7 +210,7 @@ struct Region
                         neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
                         &neighbors[nIdx]->req);
 
-            MPI_Wait(&neighbors[nIdx]->req, &neighbors[nIdx]->stat);
+            if (!scheme.compare("C")) MPI_Wait(&neighbors[nIdx]->req, &neighbors[nIdx]->stat);
         }
     }
 
@@ -227,7 +227,6 @@ struct Region
         else
         {   
             bufMessage(dir, nIdx);
-            
             cudaMemcpy(dRecv+offs, recvBuffer+offs, bufAlloc, cudaMemcpyHostToDevice);
         }
     }
@@ -277,6 +276,11 @@ struct Region
 
     void solutionOutput()
     {
+        for (auto const& id : solution["Velocity"].getMemberNames()) 
+        {
+            std::cout << id << std::endl;
+        }
+        
         tstr = std::to_string(tStamp);
 
         for(int k=0; k<cGlob.regionSide; k++)
@@ -324,7 +328,12 @@ void parseArgs(int argc, char *argv[])
         for (int k=4; k<argc; k+=2)
         {
             inarg = argv[k];
-			inJ[inarg] = argv[k+1];
+            try{
+			    inJ[inarg] = atof(argv[k+1]);
+            }
+            catch(...){
+                inJ[inarg] = argv[k+1];
+            }
         }
     }
 }
@@ -418,7 +427,7 @@ void initArgs()
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
         sz -= cGlob.nGpu;
     }
-    
+
     cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
     factor(cGlob.nRegions, &dimFinder[0]);
     double tol = tolerance(inJ["Shape"].asString());
@@ -437,7 +446,7 @@ void initArgs()
         cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
         factor(cGlob.nRegions, &dimFinder[0]);
     }
-    
+
     cGlob.xRegions = dimFinder[0]; 
     cGlob.yRegions = dimFinder[1];
     

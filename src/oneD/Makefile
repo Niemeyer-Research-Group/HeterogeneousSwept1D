@@ -3,7 +3,7 @@
 # run make DEF="-DNOS"
 
 
-MAKEPATH:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+MAKEPATH:=$(SOURCEPATH)/oneD/
 
 # LPATH+=
 
@@ -20,7 +20,7 @@ LPATHS:=$(addprefix -L, $(LPATH))
 
 DH:= $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
 
-CPREQ:=$(ODIR)/sMain.cu 
+CPREQ:=$(ODIR)/sMain.cu
 
 EQINIT:=$(wildcard $(EQPATH)/*.h)
 
@@ -30,12 +30,28 @@ EQI:=$(foreach eq, $(EQS), $(basename $(notdir $(eq))))
 
 EQOBJ:=$(addsuffix .o, $(EQI))
 
-default: $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
+.PHONY: ech ia
 
-$(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*.o 
+default: ech heat.o $(BIN_DIR)/heat $(addprefix $(BIN_DIR)/, $(EQI))
+
+ech:
+	@echo $(MAKEPATH)
+	@echo $(EQ_BIN) $(EQPATH) "\n"$(BIN_DIR) $(EQI)
+	@echo $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
+
+# ia: $(BIN_DIR)/%: $(EQ_BIN)/%.o
+# 	@echo "IA" $@ $^
+
+heat.o:
+	$(NVCC) -c sMain.cu -o heat.o -DHEAT $(IFLAGS) $(CFLAGS) $(CUDAFLAGS)
+
+$(BIN_DIR)/heat:
+	$(NVCC) $(UTIL_BIN)/gpuDetector.o $(UTIL_BIN)/jsoncpp.o $(MAKEPATH)heat.o -o $(BIN_DIR)/heat $(XL) $(LPATHS) $(LIBS) $(LIBMPI)
+
+$(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*.o
 	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI)
 
 $(EQ_BIN)/%.o: $(EQPATH)/%.h $(CPREQ) $(DH)
 	$(eval IFL:=$(shell echo $(basename $(@F)) | tr '[:lower:]' '[:upper:]'))
-	$(NVCC) -c $(CPREQ) -o $@ $(IFLAGS) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS) 
+	$(NVCC) -c $(CPREQ) -o $@ $(IFLAGS) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS)
 

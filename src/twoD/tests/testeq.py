@@ -20,8 +20,8 @@ utilBin = op.join(mainBin, "util")
 utilInc = op.join(spath, "utilities")
 
 sys.path.append(pypath)
-import result_help as rh
-from main_help import *
+# import result_help as rh
+# from main_help import *
 
 def runstring(toRun):
     compstr = shlex.split(toRun)
@@ -44,9 +44,9 @@ if __name__ == "__main__":
 
     testobj = op.join(testBin, "waveTest.o")
 
-    CUDAFLAGS       =" -gencode arch=compute_35,code=sm_35 -restrict --ptxas-options=-v -I" + utilInc   
-    CFLAGS          =" --std=c++11 -w "
-    LIBFLAGS        =" -lm -lmpi "
+    CUDAFLAGS       =" -gencode arch=compute_35,code=sm_35 -DNOS -restrict --ptxas-options=-v -I" + utilInc
+    CFLAGS          =" --std=c++11 -w -I/usr/include/python2.7 "
+    LIBFLAGS        =" -g -lm -lpython2.7 -lmpi "
 
     compileit = "nvcc -c testeq.cu -o " + testobj + CFLAGS + CUDAFLAGS + LIBFLAGS
     utilObj = [op.join(utilBin, k) for k in os.listdir(utilBin)]
@@ -67,7 +67,7 @@ if __name__ == "__main__":
         print("   ---------------")
         print("Linked")
 
-    runTest = "mpiexec -np 6 -report-pid - " + execf + " C waveTest.json " + testResult + " Shape Perfect "
+    runTest = "mpiexec -np 6 -report-pid - " + execf + " S waveTest.json " + testResult + " gpuA 0.0 tf 0.1 dt 0.0005 gridSize 65336 "
     print(runTest)
     runstring(runTest)
     print("   ---------------")

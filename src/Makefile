@@ -1,7 +1,7 @@
 
 include config.mk
 
-CODES:= oneD twoD
+CODES:= oneD #twoD
 CODE_DIR:= $(addprefix $(SOURCEPATH)/, $(CODES))
 BIN_DIR:= $(SOURCEPATH)/bin
 UTIL_DIR:= $(SOURCEPATH)/utilities
@@ -32,7 +32,7 @@ $(UTIL_BIN)/%.o: $(UTIL_DIR)/%.cpp
 	g++ -c $< -o $@ $(IFLAGS) $(CFLAGS) 
 
 swepts:
-	$(MAKE) -C $(CODE_DIR)
+	$(MAKE) -B -C $(CODE_DIR)
 
 clean:
 	rm -rf $(BIN_DIR)/*

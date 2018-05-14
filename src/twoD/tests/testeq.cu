@@ -50,7 +50,6 @@ void testMidShared(double *globptr)
         k++;
         __syncthreads();
     }
-
 }
 
 int main(int argc, char *argv[])
@@ -66,6 +65,7 @@ int main(int argc, char *argv[])
 
     parseArgs(argc, argv);
     initArgs();
+    if (!rank) std::cout << inJ << std::endl;
 
     std::vector<Region *> regions;
    
@@ -81,12 +81,7 @@ int main(int argc, char *argv[])
         // for (auto n: r->neighbors) n->printer();
     }
    
-    //classicWrapper(regions);
- 
-    // for (auto const& id : solution["Velocity"].getMemberNames()) 
-    // {
-    //     std::cout << id << std::endl;
-    // }
+
 
     int np = 32;
     double hin[np];
@@ -98,13 +93,17 @@ int main(int argc, char *argv[])
     cudaMalloc((void **) &jean, alloc);
     cudaMemcpy(jean, hin, alloc, cudaMemcpyHostToDevice);
 
-    //testMidShared <<< 1, 32, salloc>>> (jean);
     cudaDeviceSynchronize();
     cudaFree(jean);
 
-    classicWrapper(regions);
-
-    // sweptWrapper(regions);
+    if (!scheme.compare("S"))
+    {
+        sweptWrapper(regions);
+    }
+    else
+    {
+        classicWrapper(regions);
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);    
 

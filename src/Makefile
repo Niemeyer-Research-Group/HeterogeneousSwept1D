@@ -32,7 +32,7 @@ $(UTIL_BIN)/%.o: $(UTIL_DIR)/%.cpp
 	g++ -c $< -o $@ $(IFLAGS) $(CFLAGS) 
 
 swepts:
-	$(MAKE) -B -C $(CODE_DIR)
+	$(MAKE) -C $(CODE_DIR)
 
 clean:
 	rm -rf $(BIN_DIR)/*

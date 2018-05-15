@@ -16,6 +16,8 @@ IFLAGS+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
 
 XL:=$(addprefix -Xlinker=-rpath, $(LPATH))
 
+XLL:=$(addprefix -Xlinker=-rpath-link, $(LPATH))
+
 LPATHS:=$(addprefix -L, $(LPATH))
 
 DH:= $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
@@ -43,10 +45,10 @@ ech:
 # 	@echo "IA" $@ $^
 
 heat.o:
-	$(NVCC) -c sMain.cu -o heat.o -DHEAT $(IFLAGS) $(CFLAGS) $(CUDAFLAGS)
+	$(NVCC) -c sMain.cu -o heat.o -DHEAT $(IFLAGS) $(CFLAGS) $(CUDAFLAGS) $(XL) $(LPATHS) $(LIBS) $(LIBMPI)
 
 $(BIN_DIR)/heat:
-	$(NVCC) $(UTIL_BIN)/gpuDetector.o $(UTIL_BIN)/jsoncpp.o $(MAKEPATH)heat.o -o $(BIN_DIR)/heat $(XL) $(LPATHS) $(LIBS) $(LIBMPI)
+	$(NVCC) $(UTIL_BIN)/gpuDetector.o $(UTIL_BIN)/jsoncpp.o $(MAKEPATH)heat.o -o $(BIN_DIR)/heat $(CFLAGS) $(CUDAFLAGS) $(LPATHS) $(LIBS) $(LIBMPI) $(XLL)
 
 $(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*.o
 	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI)

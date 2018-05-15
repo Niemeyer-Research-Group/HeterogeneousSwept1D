@@ -14,9 +14,7 @@ UTILPATH:=$(MAKEPATH)utilities
 
 IFLAGS+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
 
-XL:=$(addprefix -Xlinker=-rpath, $(LPATH))
-
-XLL:=$(addprefix -Xlinker=-rpath-link, $(LPATH))
+XL:=$(foreach lp, $(LPATH), -Xlinker=-rpath,$(lp))
 
 LPATHS:=$(addprefix -L, $(LPATH))
 
@@ -48,7 +46,7 @@ heat.o:
 	$(NVCC) -c sMain.cu -o heat.o -DHEAT $(IFLAGS) $(CFLAGS) $(CUDAFLAGS) $(XL) $(LPATHS) $(LIBS) $(LIBMPI)
 
 $(BIN_DIR)/heat:
-	$(NVCC) $(UTIL_BIN)/gpuDetector.o $(UTIL_BIN)/jsoncpp.o $(MAKEPATH)heat.o -o $(BIN_DIR)/heat $(CFLAGS) $(CUDAFLAGS) $(LPATHS) $(LIBS) $(LIBMPI) $(XLL)
+	$(NVCC) $(UTIL_BIN)/gpuDetector.o $(UTIL_BIN)/jsoncpp.o $(MAKEPATH)heat.o -o $(BIN_DIR)/heat $(CFLAGS) $(CUDAFLAGS) $(LPATHS) $(LIBS) $(LIBMPI) $(XL)
 
 $(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*.o
 	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI)

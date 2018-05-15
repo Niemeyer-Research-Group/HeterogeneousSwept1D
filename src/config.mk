@@ -1,6 +1,6 @@
 #ESSENTIAL PATHS.  Sure most are probably on your system, but let's make it official
 
-PREFIX          =$(MSCRATCH)/HeterogeneousSwept1D
+PREFIX          =$(MSCRATCH)/hSweep
 NVCC            =$(CUDAPATH)/bin/nvcc
 MPICXX          =$(MPIPATH)/bin/mpicxx)
 SOURCEPATH      =$(PREFIX)/src

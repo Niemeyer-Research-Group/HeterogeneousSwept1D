@@ -7,46 +7,35 @@ MAKEPATH:=$(SOURCEPATH)/oneD/
 
 # LPATH+=
 
-BINPATH:=$(MAKEPATH)bin
-EQPATH:=$(MAKEPATH)equations
-DECOMPPATH:=$(MAKEPATH)decomposition
-UTILPATH:=$(MAKEPATH)utilities
+BINPATH		:=$(MAKEPATH)bin
+EQPATH		:=$(MAKEPATH)equations
+DECOMPPATH	:=$(MAKEPATH)decomposition
+UTILPATH	:=$(MAKEPATH)utilities
 
-IFLAGS+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
+IFLAGS		+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
 
-XL:=$(addprefix -Xlinker=-rpath, $(LPATH))
+XL			:=$(addprefix -Xlinker=-rpath, $(LPATH))
 
-LPATHS:=$(addprefix -L, $(LPATH))
+LPATHS		:=$(addprefix -L, $(LPATH))
 
-DH:= $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
+DH			:= $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
 
-CPREQ:=$(ODIR)/sMain.cu
+CPREQ		:=$(MAKEPATH)sMain.cu
 
-EQINIT:=$(wildcard $(EQPATH)/*.h)
+EQINIT		:=$(wildcard $(EQPATH)/*.h)
 
-EQS:=$(filter-out $(DH), $(EQINIT))
+EQS			:=$(filter-out $(DH), $(EQINIT))
 
-EQI:=$(foreach eq, $(EQS), $(basename $(notdir $(eq))))
+EQI			:=$(foreach eq, $(EQS), $(basename $(notdir $(eq))))
 
-EQOBJ:=$(addsuffix .o, $(EQI))
+EQOBJ		:=$(addsuffix .o, $(EQI))
 
-.PHONY: ech ia
+.PHONY: ech
 
-default: ech heat.o $(BIN_DIR)/heat $(addprefix $(BIN_DIR)/, $(EQI))
+default: ech $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
 
 ech:
-	@echo $(MAKEPATH)
-	@echo $(EQ_BIN) $(EQPATH) "\n"$(BIN_DIR) $(EQI)
-	@echo $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
-
-# ia: $(BIN_DIR)/%: $(EQ_BIN)/%.o
-# 	@echo "IA" $@ $^
-
-heat.o:
-	$(NVCC) -c sMain.cu -o heat.o -DHEAT $(IFLAGS) $(CFLAGS) $(CUDAFLAGS)
-
-$(BIN_DIR)/heat:
-	$(NVCC) $(UTIL_BIN)/gpuDetector.o $(UTIL_BIN)/jsoncpp.o $(MAKEPATH)heat.o -o $(BIN_DIR)/heat $(XL) $(LPATHS) $(LIBS) $(LIBMPI)
+	@echo $(EQPATH) $(CPREQ) $(DH)
 
 $(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*.o
 	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI)

@@ -6,6 +6,8 @@
 #include <helper_cuda.h>
 #include <vector>
 #include <array>
+#include <algorithm>
+#include <iterator>
 // IF assign() proves necessary #include<algorithm>
 
 struct sweptConst
@@ -16,18 +18,22 @@ struct sweptConst
 struct PassIndex
 {
     //Edges to pass;
-    typedef  std::array<std::vector<int>, 4> idxvec;
+    typedef std::vector<int> intvec;
+    typedef  std::array<intvec, 4> idxvec;
     const int side, base, gpu;
 	idxvec pyramid, bridge;
+    intvec passer;
     int nPass, sizePass;
+    int cnt;
 
     PassIndex(int side, int base, int hasG) : side(side), base(base), gpu(cGlob.hasGpu), pyramid(initialize(1)), bridge(initialize(0))
     {
         nPass       = side/4 * (side + 2) + (side + 2);
         sizePass    = 4 * nPass * sizeof(int);
+        cnt = 0;
     }
 
-    PassIndex(const PassIndex &pix) : side(pix.side), base(pix.base), gpu(pix.gpu), sizePass(pix.sizePass), 
+    PassIndex(const PassIndex &pix) : side(pix.side), base(pix.base), gpu(pix.gpu), sizePass(pix.sizePass),
 				nPass(pix.nPass), pyramid(pix.pyramid), bridge(pix.bridge){   }
 
 
@@ -42,9 +48,9 @@ struct PassIndex
 		idxvec starter;
         int flatidx;
         // Pyramid Loop
-        for (int ky = begin; ky<=side; ky++)
+        for (int ky = begin; ky<=side+(1-begin); ky++)
         {
-            for (int kx = begin; kx<=side; kx++)
+            for (int kx = begin; kx<=side+(1-begin); kx++)
             {
                 flatidx = ky * base + kx;
                 if (kx <= ky){
@@ -62,7 +68,7 @@ struct PassIndex
 
     void ppass(int extent=10)
     {
-        for (int i=0; i<extent; i++) std::cout << bridge[1][i] << " ";
+        for (int i=0; i<extent; i++) std::cout << pyramid[1][i] << " ";
         std::cout << std::endl;
     }
 
@@ -78,61 +84,61 @@ struct PassIndex
     //     }
     // }
 
-    void plotPass(int eye);
+    // void plotPass(int eye);
 };
 
-#include "matplotlib-cpp/matplotlibcpp.h"
+// #include "matplotlib-cpp/matplotlibcpp.h"
 
-namespace plt = matplotlibcpp;
+// namespace plt = matplotlibcpp;
 
-void PassIndex::plotPass(int eye)
-{
-    std::vector<size_t> px, py;
-    int neweye, cnew;
-    std::string rc[] = {".r", ".b", ".g", ".k"};
-    std::string titles[] = {"South", "East", "North", "West"};
-    for (int i=0; i<4; i++)
-    {
-        cnew = 0;
-        for (int k=0; k<nPass; k++)
-        {
-            if (eye){
-                px.push_back(pyramid[i][k] % base);
-                py.push_back(pyramid[i][k] / base);
-            }
-            else{
-                px.push_back(bridge[i][k] % base);
-                py.push_back(bridge[i][k] / base);
-            }
-        }
+// void PassIndex::plotPass(int eye)
+// {
+//     std::vector<size_t> px, py;
+//     int neweye, cnew;
+//     std::string rc[] = {".r", ".b", ".g", ".k"};
+//     std::string titles[] = {"South", "East", "North", "West"};
+//     for (int i=0; i<4; i++)
+//     {
+//         cnew = 0;
+//         for (int k=0; k<nPass; k++)
+//         {
+//             if (eye){
+//                 px.push_back(pyramid[i][k] % base);
+//                 py.push_back(pyramid[i][k] / base);
+//             }
+//             else{
+//                 px.push_back(bridge[i][k] % base);
+//                 py.push_back(bridge[i][k] / base);
+//             }
+//         }
 
-        plt::named_plot( titles[i], px, py,rc[i]);
-        std::cout << "Im Plotting!" << px.size() << std::endl;
-        neweye = px.back();
-        px.pop_back();
+//         plt::named_plot( titles[i], px, py,rc[i]);
+//         std::cout << "Im Plotting!" << px.size() << std::endl;
+//         neweye = px.back();
+//         px.pop_back();
 
-        while (neweye == 0){
-            std::cout << i << " " << neweye << "   ";
-            neweye=px.back();
-            px.pop_back();
-            cnew++;
-        }
-        std::cout << "---------" << cnew << std::endl;
+//         while (neweye == 0){
+//             std::cout << i << " " << neweye << "   ";
+//             neweye=px.back();
+//             px.pop_back();
+//             cnew++;
+//         }
+//         std::cout << "---------" << cnew << std::endl;
 
-        px.clear();
-        py.clear();
-    }
-    plt::title("PyramidPass");
-    plt::legend();
-    plt::show();
-    std::cout << "Im Plotting!" << px.size() << std::endl;
-}
+//         px.clear();
+//         py.clear();
+//     }
+//     plt::title("PyramidPass");
+//     plt::legend();
+//     plt::show();
+//     std::cout << "Im Plotting!" << px.size() << std::endl;
+// }
 
 __constant__ sweptConst dSweptConst;
 sweptConst hSweptConst;
 
 // Can it work for host too?  Yes if you guard them with preprocessor.
-__device__ int 
+__device__ int
 upPyramid(states *state, int ts, const int tol, const int base)
 {
     int sid;
@@ -171,7 +177,7 @@ downPyramid(states *state, int ts, const int tol, const int base)
         __syncthreads();
         ts++;
     }
-    return ts; 
+    return ts;
 }
 
 template <bool TOGLOBAL>
@@ -255,15 +261,15 @@ bridges(states **regions, int ts)
     int sidh, sidv, dimStart;
     int kx, ky, kt;
 
-    states *horizBridge = ((states *) regions[blockIdx.x]) + hoff; 
-    states *vertBridge = ((states *) regions[blockIdx.x])  + voff; 
+    states *horizBridge = ((states *) regions[blockIdx.x]) + hoff;
+    states *vertBridge = ((states *) regions[blockIdx.x])  + voff;
 
     for (kt = rStart; kt>0; kt--)
     {
         dimStart = 1 + (rStart-kt);
         for (ky = threadIdx.y + dimStart; ky<(DCONST.regionBase - kt); ky+=blockDim.y)
         {
-            for(kx = threadIdx.x + kt; kx<(DCONST.regionSide - kt); kx+=blockDim.x) 
+            for(kx = threadIdx.x + kt; kx<(DCONST.regionSide - kt); kx+=blockDim.x)
             {
                 sidh =  ky * dSweptConst.rBase + kx;
                 stepUpdate(horizBridge, sidh, ts, dSweptConst.rBase);
@@ -341,14 +347,14 @@ void bridgesCPU(states *regions, int ts)
     int sidh, sidv, dimStart;
     int kx, ky, kt;
 
-    states *horizBridge = ((states *) regions + hoff); 
+    states *horizBridge = ((states *) regions + hoff);
     states *vertBridge  = ((states *) regions + voff);
     for (kt=rStart; kt>0; kt--)
     {
         dimStart = 1 + (rStart-kt);
         for (ky = dimStart; ky<(HCONST.regionBase - kt); ky++)
         {
-            for(kx = kt; kx<(HCONST.regionSide - kt); kx++) 
+            for(kx = kt; kx<(HCONST.regionSide - kt); kx++)
             {
                 sidh =  ky * hSweptConst.rBase + kx;
                 stepUpdate(horizBridge, sidh, ts, dSweptConst.rBase);
@@ -394,64 +400,62 @@ EAST panel, from east neighbor, west vertical bridge:
 NORTH panel, from north neighbor, south vertical bridge:
 (North idx + offset - roffset) -- INIDX
 (North idx + offset) -- OUTIDX
-*/ 
+*/
 
 template <int TYPE, bool OFFSET, bool INTERIOR>
 void PassIndex::passCPU(states *ins, states *outs, const int loca)
 {
     static const int rOffset[4]   = {HCONST.regionSide * hSweptConst.rBase, HCONST.regionSide, -HCONST.regionSide * hSweptConst.rBase,-HCONST.regionSide};
 
-    int i;
-    int workidx;
-    const int rawOffset = OFFSET * hSweptConst.splitOffset;
+    int i, workidx;
+    int rawOffset = (int)OFFSET * hSweptConst.splitOffset;
     // std::cout << rank << " -BEFORE- " << " - " << TYPE << " - " << INTERIOR << " - "  << OFFSET << " - " << loca << std::endl;
-	const int roff 		= rawOffset + (INTERIOR) * rOffset[loca];
-
+	int roff 		= rawOffset + ((int)(INTERIOR) * rOffset[loca]);
     if (INTERIOR)
     {
-        if (TYPE)
-        {
-            for (auto idx: bridge[loca])
-            {
-                workidx = idx + roff;
-                outs[i] = ins[workidx];
-            }
-        }
-        else
-        {
-            for (auto idx: bridge[loca])
-            {
-                workidx = idx + roff;
-                outs[workidx] 	= ins[i];
-            }
-        }
-    }    
-    else {
-        if (TYPE)
-        {
-            for (auto idx: pyramid[loca])
-            {
-                workidx = idx + roff;
-                outs[i] = ins[workidx];
-            }
-        }
-        else
-        {
-            for (auto idx: pyramid[loca])
-            {
-                workidx = idx + roff;
-                outs[workidx] 	= ins[i];
-            }
-        }
+        std::copy(bridge[loca].begin(), bridge[loca].end(), std::back_inserter(passer));
     }
-    // std::cout << std::boolalpha << rank << " -AFTER- " << " - " << TYPE << " - " << INTERIOR << " - "  << OFFSET << " - " << workidx << " - " << loca << std::endl;
+    else
+    {
+        std::copy(pyramid[loca].begin(), pyramid[loca].end(), std::back_inserter(passer));
+    }
+
+    if (TYPE)
+    {
+        std::cout << "INCOMING: " << rank << " " << cnt << " " << roff << " " << loca << " " << INTERIOR << " " << rawOffset << " | ";
+        for (i = 0; i<passer.size(); i++)
+        {
+            std::cout << "  " <<  pyramid[loca][i];
+            workidx         = passer[i] + roff;
+            outs[i]         = ins[workidx];
+        }
+
+    }
+    else
+    {
+        std::cout << "OUTGOING: " << rank << " " << cnt << " " << roff << " " << loca << " " << INTERIOR << " " << rawOffset << " | ";
+        for (i = 0; i<passer.size(); i++)
+        {
+            std::cout << "  " <<  pyramid[loca][i];
+            workidx         = passer[i] + roff;
+            outs[workidx] 	= ins[i];
+        }
+    
+    }
+    std::cout << std::endl;
+    passer.clear();
+    return;
 }
+
+
+    // std::cout << std::boolalpha << rank << " -AFTER- " << " - " << TYPE << " - " << INTERIOR << " - "  << OFFSET << " - " << workidx << " - " << loca << std::endl;
+
 
 inline bool passMask(int direction)
 {
     return ((direction & 3) > 1);
 }
-static int cnt = 0;
+
 // PASSING PART --
 __device__ int *dPyramid, *dBridge;
 
@@ -460,10 +464,11 @@ void PassIndex::passPanel(std::vector <Region *> &regionals)
 {
 	const int det = 2*OFFSET;
     static const int minLaunch = cGlob.regionSide/1024 + 1;
-    int *indexMap = new int[4*hSweptConst.nPass];
-    
 
     // Last time I put the passing mechanisms in the class.  So... it won't work unless you do that or adjust the scheme.
+    // std::cout << "Begin passPanel - " << cnt << " " << rank << std::endl;
+    // this->ppass(100);
+    // MPI_Barrier(MPI_COMM_WORLD);
     for (auto r: regionals)
     {
         for (auto n: r->neighbors)
@@ -474,8 +479,8 @@ void PassIndex::passPanel(std::vector <Region *> &regionals)
             	{
 					if (INTERIOR){
                 	passGPU <2, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, dBridge, n->sidx);
-					} 
-                    else 
+					}
+                    else
                     {
 					passGPU <2, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, dPyramid, n->sidx);
 					}
@@ -485,7 +490,7 @@ void PassIndex::passPanel(std::vector <Region *> &regionals)
                 	if (r->self.gpu)
                		{
                         if (INTERIOR){
-                	        passGPU <1, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, dPyramid, n->sidx);
+                	        passGPU <1, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, dBridge, n->sidx);
 					    } 
                         else 
                         {
@@ -508,7 +513,7 @@ void PassIndex::passPanel(std::vector <Region *> &regionals)
                 {
                     r->gpuBufCopy(0, n->sidx);
                         if (INTERIOR){
-                	        passGPU <0, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, dPyramid, n->sidx);
+                	        passGPU <0, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, dBridge, n->sidx);
 					    } 
                         else 
                         {
@@ -525,11 +530,13 @@ void PassIndex::passPanel(std::vector <Region *> &regionals)
 	}
     for (auto r: regionals)
     {
-        for (auto n: r->neighbors)
-        {
-            MPI_Wait(&n->req, &n->stat);
-        }
+        MPI_Waitall(r->reqvec.size(), &r->reqvec[0], &r->statvec[0]);
+		r->reqvec.clear();
+		r->statvec.clear();
     }
+    // std::cout << "END passPanel - " << cnt << " " << rank << std::endl;
+    // this->ppass(100);
+
 
     // std::cout << cnt << " Enter a Message about ska: " << std::endl;
     // std::cin >> rudy;
@@ -564,7 +571,7 @@ void sweptWrapper(std::vector <Region *> &regionals)
     dim3 tdim(cGlob.tpbx,cGlob.tpby);
     const int minLaunch = cGlob.regionSide/1024 + 1;
     int stepNow = regionals[0]->tStep;
-    if (!rank) std::cout << "Made it swept0 " << rank << " " << __LINE__ << std::endl;
+    // if (!rank) std::cout << "Made it swept0 " << rank << " " << __LINE__ << std::endl;
 
     size_t smem                 = smemsize();
     int nSmem                   = smem/sizeof(states);
@@ -578,7 +585,7 @@ void sweptWrapper(std::vector <Region *> &regionals)
     int sharedCoord             = (cGlob.regionSide - hSweptConst.sideSmem)/2;
     hSweptConst.sharedOffset    = sharedCoord * (hSweptConst.rBase + 1);
 
-    std::cout << "Made it swept1 " << rank << " " << __LINE__ << std::endl;
+    // std::cout << "Made it swept1 " << rank << " " << __LINE__ << std::endl;
     PassIndex pidx(cGlob.regionSide, hSweptConst.rBase, cGlob.hasGpu);
     hSweptConst.nPass = pidx.nPass;
     cudaMalloc((void **)& dPyramid, pidx.sizePass);
@@ -598,7 +605,7 @@ void sweptWrapper(std::vector <Region *> &regionals)
         }
     }
     stepNow = regionals[0]->tStep;
-    std::cout << "Made it swept2 " << rank << " " << __LINE__ << std::endl;
+    // std::cout << "Made it swept2 " << rank << " " << __LINE__ << std::endl;
     // -----  UP_PYRAMID -------
 
     if (gpuRegions)     wholeOctahedron <false, 1> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
@@ -614,18 +621,14 @@ void sweptWrapper(std::vector <Region *> &regionals)
     else                bridgesCPU <false> (regionals[0]->state, stepNow);
 
     pidx.passPanel <false, true> (regionals);
-    std::cout << "Made it swept " << rank << " " << __LINE__ << std::endl;
+    // std::cout << "Made it swept " << rank << " " << __LINE__ << std::endl;
 
     if (gpuRegions)     wholeOctahedron <true, 2> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
     else                wholeOctahedronCPU <true, 2> (regionals[0]->state, stepNow);
-    std::cout << "Made it swept " << rank << " " << __LINE__ << std::endl;
+    // std::cout << "Made it swept " << rank << " " << __LINE__ << std::endl;
     cudaKernelCheck(cGlob.hasGpu);
 
-
-    std::cout << rank << " Number2 " << regionals[0]->tStamp;
-    pidx.ppass();
-
-    for (auto r: regionals) r->incrementTime(false); 
+    for (auto r: regionals) r->incrementTime(false);
 
     while (regionals[0]->tStamp < cGlob.tf)
     {
@@ -638,20 +641,14 @@ void sweptWrapper(std::vector <Region *> &regionals)
         if (gpuRegions)     bridges <true> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
         else                bridgesCPU <true> (regionals[0]->state, stepNow);
 
-    // bs = pidx.pyramid;
-        if(regionals[0]->tStamp < .5)
-        {
-            std::cout << rank << " Number5 " << regionals[0]->tStamp;
-            pidx.ppass();
-        }
 	    pidx.passPanel<true, true> (regionals);
 
         if (gpuRegions)     wholeOctahedron <false, 2> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
         else                wholeOctahedronCPU <false, 2> (regionals[0]->state, stepNow);
 
-        for (auto r: regionals) r->incrementTime(false); 
+        for (auto r: regionals) r->incrementTime(false);
         // ----- OFFSET (SPLIT) OCTAHEDRON -------
-        
+
         pidx.passPanel <false, false> (regionals);
     
         // Then BRIDGES NE - .
@@ -663,7 +660,7 @@ void sweptWrapper(std::vector <Region *> &regionals)
         if (gpuRegions)     wholeOctahedron <true, 2> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
         else                wholeOctahedronCPU <true, 2> (regionals[0]->state, stepNow);
 
-        for (auto r: regionals) r->incrementTime(); 
+        for (auto r: regionals) r->incrementTime();
 
     } // End Loop over all timesteps.
 
@@ -680,7 +677,6 @@ void sweptWrapper(std::vector <Region *> &regionals)
 
 
     std::cout << "ITS OVER ---- TIME: " <<  regionals[0]->tStamp << " RANK: " << rank << " " << __LINE__ << std::endl;
-    pidx.ppass();
     for (auto r: regionals) r->incrementTime(false); 
 
     if (gpuRegions) cudaFree(regionSelector);

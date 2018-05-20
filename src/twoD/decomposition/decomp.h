@@ -58,8 +58,6 @@ struct Neighbor
     const Address id;
     const short sidx, ridx;
     const bool sameProc;
-    MPI_Request req;
-    MPI_Status stat;
     Neighbor(Address addr, short sidx): id(addr), sidx(sidx), ridx((sidx + 2) % 4), sameProc(rank == id.owner) {}
     void printer()
     {   
@@ -86,6 +84,10 @@ struct Region
     states *dState;
     states *sendBuffer, *recvBuffer, *dSend, *dRecv;
     cudaStream_t stream;
+	MPI_Request req[4];
+	MPI_Status stat[4];
+	std::vector<MPI_Request> reqvec;
+	std::vector<MPI_Status> statvec;
 
     Region(Address stencil[5])
     : self(stencil[0]), neighbors(meetNeighbors(&stencil[1])), tStep(0), tStamp(0.0), tWrite(cGlob.freq)
@@ -196,22 +198,24 @@ struct Region
         int offs = nIdx*bufAmt;
         int tagg;
 
-        if (dir) 
+        if (dir)
         {
             tagg = self.owner + self.localIdx + neighbors[nIdx]->id.localIdx + 5;
             MPI_Isend(sendBuffer+offs, bufAmt, struct_type, 
                         neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
-                        &neighbors[nIdx]->req);
+                        &req[nIdx]);
         }
         else
-        {   
+        {
             tagg = neighbors[nIdx]->id.owner + neighbors[nIdx]->id.localIdx + self.localIdx + 5;
             MPI_Irecv(recvBuffer+offs, bufAmt, struct_type, 
                         neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
-                        &neighbors[nIdx]->req);
+                        &req[nIdx]);
 
-            if (!scheme.compare("C")) MPI_Wait(&neighbors[nIdx]->req, &neighbors[nIdx]->stat);
+            if (!scheme.compare("C")) MPI_Wait(&req[nIdx], &stat[nIdx]);
         }
+	reqvec.push_back(req[nIdx]);
+	statvec.push_back(stat[nIdx]);
     }
 
     inline void gpuBufCopy(int dir, int nIdx)
@@ -461,9 +465,12 @@ void initArgs()
     cGlob.xPoints = cGlob.regionSide * cGlob.xRegions;
     cGlob.yPoints = cGlob.regionSide * cGlob.yRegions;
     
-    inJ["nPts"] = cGlob.nPoints;
-    inJ["nX"]   = cGlob.xPoints;
-    inJ["nY"]   = cGlob.yPoints;
+    inJ["nPts"]     = cGlob.nPoints;
+    inJ["nX"]       = cGlob.xPoints;
+    inJ["nY"]       = cGlob.yPoints;
+    inJ["rSide"]    = cGlob.regionSide;
+    inJ["rBase"]    = cGlob.regionBase;
+
 
     cGlob.ht    = cGlob.regionSide/2;
     cGlob.htm   = cGlob.ht-1;

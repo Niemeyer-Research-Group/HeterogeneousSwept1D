@@ -1,15 +1,15 @@
 
 include config.mk
 
-CODES:= oneD #twoD
-CODE_DIR:= $(addprefix $(SOURCEPATH)/, $(CODES))
-BIN_DIR:= $(SOURCEPATH)/bin
-UTIL_DIR:= $(SOURCEPATH)/utilities
-UTIL_BIN:= $(BIN_DIR)/util
-EQ_BIN:= $(BIN_DIR)/eqobj
-BINS:= $(UTIL_BIN) $(EQ_BIN)
-IFLAGS:=$(addprefix -I, $(IPATH))
-IFLAGS+= -I$(CC_ICUDAPATH) -I$(CC_IMPIPATH)
+CODES		:=oneD #twoD
+CODE_DIR	:=$(addprefix $(SOURCEPATH)/, $(CODES))
+BIN_DIR		:=$(SOURCEPATH)/bin
+UTIL_DIR	:=$(SOURCEPATH)/utilities
+UTIL_BIN	:=$(BIN_DIR)/util
+EQ_BIN		:=$(BIN_DIR)/eqobj
+BINS		:=$(UTIL_BIN) $(EQ_BIN)
+IFLAGS		:=$(addprefix -I, $(IPATH))
+IFLAGS		+= -I$(CC_ICUDAPATH) -I$(CC_IMPIPATH)
 
 DEF=
 
@@ -32,7 +32,7 @@ $(UTIL_BIN)/%.o: $(UTIL_DIR)/%.cpp
 	g++ -c $< -o $@ $(IFLAGS) $(CFLAGS) 
 
 swepts:
-	$(MAKE) -B -C $(CODE_DIR)
+	$(MAKE) -C $(CODE_DIR)
 
 clean:
 	rm -rf $(BIN_DIR)/*

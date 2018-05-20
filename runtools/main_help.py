@@ -5,6 +5,7 @@
 
 import os
 import os.path as op
+import sys
 import matplotlib.pyplot as plt
 
 import pandas as pd
@@ -31,6 +32,8 @@ ttestpath = op.join(twopath, "tests")
 schemes = {"C": "Classic", "S": "Swept"}
 
 todaytoday = str(datetime.date(datetime.today()).isoformat().replace("-", "_"))
+
+plt.style.use(op.join(thispath, "swept.mplstyle"))
 
 def numerica(df):
     df.columns = pd.to_numeric(df.columns.values)
@@ -170,13 +173,14 @@ def readPath(fpth):
 
     res = []
     ti = []
+    
     for tf in tfiles:
         pth = op.join(fpth, tf) 
         opt = re.findall('[A-Z][^A-Z]*', tf)
         ti.append(opt[0]+schemes[opt[1][0]])
         res.append(parseCsv(pth))
-
-    return dict(zip(ti, res))
+    print(tfiles)
+    return res, ti
 
 # Takes list of dfs? title of each df, longterm hd5, option to overwrite
 # incase you write wrong.  Use carefully!
@@ -185,6 +189,7 @@ def longTerm(dfs, titles, fhdf, overwrite=False):
     repo = git.Repo(search_parent_directories=True)
     sha = repo.head.object.hexsha
     nList = []
+    print(dfs)
     for d, t in zip(dfs, titles):
         d["eqs"] = [t]*len(d)
         nList.append(d.set_index("eqs"))
@@ -209,7 +214,7 @@ def longTerm(dfs, titles, fhdf, overwrite=False):
     dnote[sha]["note"] = input("Write a note for this data save: ")
 
     with open(fnote, "w") as fj:
-        json.dump(dnote, fj)
+        j.dump(dnote, fj)
 
     opStore[sha] = dfcat
     opStore.close()
@@ -226,6 +231,6 @@ if __name__ == "__main__":
         else:
             getpath = op.abspath(sys.argv[1])
 
-    rs, ty = readPath(getpath)
+    df, ty = readPath(getpath)
     hdfpath = op.join(resultpath, "rawResults.h5")
-    longTerm(rs, ty, hdfpath)
+    longTerm(df, ty, hdfpath)

@@ -27,15 +27,17 @@ for kType, iFrame in timeFrame.items():
     thisdf = ta.RawInterp(iFrame, kType)
     
     keepdf = thisdf.interpit()
-    dfT, figt, axT = ta.contourRaw(keepdf, kType, getfig=True)
+    dfT, figt, axT = ta.contourRaw(keepdf, kType, getfig=True, supt=False)
     mnT = ta.plotmins(dfT, axT)
     figt = th.formatSubplot(figt)
     
     keepEfficiency = thisdf.efficient(keepdf)
-    _, fige, _ = ta.contourRaw(keepEfficiency, kType, vals="efficiency", getfig=True)
+    _, fige, axc = ta.contourRaw(keepEfficiency, kType, vals="efficiency", getfig=True, supt=False)
     fige = th.formatSubplot(fige)
     
     bestCollect[kType] = mnT
+    for axx, mn in zip(axc, mnT):
+        axx.plot(mn[0], mn[1], '.r', markersize=20)
     
     plotname = op.join(pltpth, "RawContour" + kType + "Time" + ".pdf")
     figt.savefig(plotname, bbox_inches='tight')

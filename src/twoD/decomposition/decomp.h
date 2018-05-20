@@ -329,6 +329,9 @@ void parseArgs(int argc, char *argv[])
     }
 }
 
+
+// Started May 12.  gpuDetect contained errors and heat failed though not Euler.  Problem fixed and Heat run complete May 20
+
 void setRegion(std::vector <Region *> &regionals)
 {
     int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
@@ -338,7 +341,6 @@ void setRegion(std::vector <Region *> &regionals)
     Address gridLook[cGlob.yRegions][cGlob.xRegions];
     int k, i;
     int xLoc, yLoc;
-
     for (k = 0; k<nprocs; k++)
     {
         for (i = 0; i<regionMap[k]; i++)

@@ -187,7 +187,7 @@ if __name__ == "__main__":
 
     axdct = dict(zip(eqs, axio.ravel()))
 
-    for ke, ie in collInst.items():
+    for ke, ie in sorted(collInst.items(), reverse=True):
         fraw, axraw = plt.subplots(1,1)
         fspeed, axspeed = plt.subplots(1,1)
         feff, axeff = plt.subplots(1,1)
@@ -225,7 +225,10 @@ if __name__ == "__main__":
             collBestIG[ke][ks] = dfBIG
             collBest[ke][ks] = dfBF
 
-            dfSpeed["NoGPU"][ke+ks] = dfBIG['time', 0.0]/dfBF['time']
+            try:
+                dfSpeed["NoGPU"][ke+ks] = dfBIG['time', 0.0]/dfBF['time']
+            except:
+                pass
             dfBF.plot(y=respvar, ax=axn, marker="", loglog=True, legend=False)
             iss.oFrame.plot(x='nX', y=respvar, ax=axn, c='gpuA', kind='scatter',  legend=False, loglog=True)
             axn.set_title(ke+ks)

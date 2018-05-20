@@ -16,5 +16,11 @@
         "System": "Cluster",
         "np": 40,
         "note": "Cluster computee-2&1.  First time running across nodes.  nX ranged from 1e5 to 1e7 (roughly)"
+    },
+    "0c4ae85df83106809adb2c8f3f99f4b89dfd9dfd": {
+        "date": "2018_05_20",
+        "System": "Cluster",
+        "np": 40,
+        "note": "Started May 12.  gpuDetect contained errors and heat failed though not Euler.  Problem fixed and Heat run complete May 20"
     }
 }

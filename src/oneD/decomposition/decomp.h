@@ -67,6 +67,7 @@ void parseArgs(int argc, char *argv[])
         std::string inarg;
         for (int k=4; k<argc; k+=2)
         {
+			// if (!ranks[1]) std::cout << "CL Arg " << ranks[1] << " " << argv[k] << " " << argv[k+1] << std::endl;
             inarg = argv[k];
 			inJ[inarg] = atof(argv[k+1]);
         }

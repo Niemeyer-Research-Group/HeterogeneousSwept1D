@@ -5,7 +5,7 @@
 #include "gpuDetector.h"
 
 #include <cstring>
-#include <iostream>  
+#include <iostream>
 #include <sstream>
 #include <string>
 
@@ -18,7 +18,7 @@ int getHost(hvec &ids, hname *newHost)
 {
     char machineName[RLEN];
     int rb = RLEN;
-    int nGo;
+    int nGo = 0;
     cudaGetDeviceCount(&nGo);
     MPI_Get_processor_name(&machineName[0],  &rb);
     for (int i=0; i<ids.size(); i++)
@@ -50,7 +50,7 @@ int detector(const int ranko, const int sz, const int startpos)
 
     for (int k=0; k<sz; k++)
     {
-        if(ranko == k)
+        if (ranko == k)
         {
             machineID = getHost(ledger, &hBuf);
         }
@@ -107,7 +107,6 @@ int detector(const int ranko, const int sz, const int startpos)
     for (int i = startpos; i<machineSize; i++)
     {
         if ((nGo - nset) == 0)  break;
-        
         if (i == machineRank)
         {
             bufs << std::hex << pcivec[3*nset] << ":" <<  pcivec[3*nset+1] << ":" <<  pcivec[3*nset+2];
@@ -119,11 +118,10 @@ int detector(const int ranko, const int sz, const int startpos)
             {
                 cudaSetDevice(dev);
                 hasG = 1;
-                std::cout << "Process " << ranko << " Has GPU -- " << dev << ": " << props.name << std::endl;
+                std::cout << std::dec << "Process " << ranko << " Machine " << machineID << " Has GPU -- " << dev << " of " << nGo << "/" << nset << ": " << props.name << std::endl;
             }
-            
             nset++;
-        }
+		}
         MPI_Bcast(&nset, 1, MPI_INT, i, machineComm);
         MPI_Barrier(machineComm);
     }

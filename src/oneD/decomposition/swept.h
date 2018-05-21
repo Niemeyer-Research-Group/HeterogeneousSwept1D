@@ -517,8 +517,8 @@ double sweptWrapper(states **state,  int *tstep)
             upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
         }
 
-        for (int i=0; i<xcp; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
-        fprintf(diagDump, "\n");
+        // for (int i=0; i<xcp; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+        // fprintf(diagDump, "\n");
 
         passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
 
@@ -535,8 +535,8 @@ double sweptWrapper(states **state,  int *tstep)
             }
         }
 
-        for (int i=cGlob.ht; i<xcp+cGlob.ht; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
-        fprintf(diagDump, "\n");
+        // for (int i=cGlob.ht; i<xcp+cGlob.ht; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+        // fprintf(diagDump, "\n");
         // -- BACK TO FRONT -- //
 
         passSwept(state[0] + xc, state[0], tmine+1, 1);
@@ -553,8 +553,8 @@ double sweptWrapper(states **state,  int *tstep)
                 wholeDiamondCPU(state[0] + k*cGlob.tpb, tmine);
             }
 
-			for (int i=1; i<xcp; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
-            fprintf(diagDump, "\n");
+			// for (int i=1; i<xcp; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+            // fprintf(diagDump, "\n");
 
             passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
 
@@ -573,8 +573,8 @@ double sweptWrapper(states **state,  int *tstep)
                 }
             }
 
-			for (int i=cGlob.ht; i<xcp+cGlob.ht; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
-			fprintf(diagDump, "\n");
+			// for (int i=cGlob.ht; i<xcp+cGlob.ht; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+			// fprintf(diagDump, "\n");
 
             passSwept(state[0] + xc, state[0], tmine, 1);
 
@@ -638,15 +638,15 @@ double sweptWrapper(states **state,  int *tstep)
         t_eq = cGlob.dt * (tmine/NSTEPS);
     }
 	
-	if (!ranks[1]){
-		FILE *metaFile;
-		metaFile = fopen("edge/RunDetails.txt", "w+");
-		fprintf(metaFile, "%d,%.5f,%.5f,%.5f\n", cGlob.tpb, cGlob.lx, cGlob.dx, cGlob.dt);
-		fclose(metaFile);
-	}
+	// if (!ranks[1]){
+	// 	FILE *metaFile;
+	// 	metaFile = fopen("edge/RunDetails.txt", "w+");
+	// 	fprintf(metaFile, "%d,%.5f,%.5f,%.5f\n", cGlob.tpb, cGlob.lx, cGlob.dx, cGlob.dt);
+	// 	fclose(metaFile);
+	// }
 
 
-	fclose(diagDump);
+	// fclose(diagDump);
     *tstep = tmine;
     //atomicWrite(timeit.typ, timeit.times);
     return t_eq;

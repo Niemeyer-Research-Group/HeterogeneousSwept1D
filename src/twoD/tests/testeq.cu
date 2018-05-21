@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
         classicWrapper(regions);
     }
 
-    MPI_Barrier(MPI_COMM_WORLD); 
+    MPI_Barrier(MPI_COMM_WORLD);    
 
     for (int i=0; i<regions.size(); i++)
     {   

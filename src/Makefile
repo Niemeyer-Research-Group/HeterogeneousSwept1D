@@ -26,6 +26,9 @@ default: $(BINS) $(addprefix $(UTIL_BIN)/, $(COBJ)) swepts
 $(BINS):
 	mkdir -p $(BINS)
 
+dry:
+	@echo $(COBJ)
+
 $(UTIL_BIN)/%.o: $(UTIL_DIR)/%.cpp
 	g++ -c $< -o $@ $(IFLAGS) $(CFLAGS)
 

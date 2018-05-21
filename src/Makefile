@@ -1,16 +1,15 @@
 
 include config.mk
 
-CODES		:= oneD #twoD
-CODE_DIR	:= $(addprefix $(SOURCEPATH)/, $(CODES))
-BIN_DIR		:= $(SOURCEPATH)/bin
-UTIL_DIR	:= $(SOURCEPATH)/utilities
-UTIL_BIN	:= $(BIN_DIR)/util
-EQ_BIN		:= $(BIN_DIR)/eqobj
-BINS		:= $(UTIL_BIN) $(EQ_BIN)
+CODES		:=oneD #twoD
+CODE_DIR	:=$(addprefix $(SOURCEPATH)/, $(CODES))
+BIN_DIR		:=$(SOURCEPATH)/bin
+UTIL_DIR	:=$(SOURCEPATH)/utilities
+UTIL_BIN	:=$(BIN_DIR)/util
+EQ_BIN		:=$(BIN_DIR)/eqobj
+BINS		:=$(UTIL_BIN) $(EQ_BIN)
 IFLAGS		:=$(addprefix -I, $(IPATH))
-IFLAGS		+= $(addprefix -I, $(CC_ICUDAPATH)) 
-IFLAGS		+= $(addprefix -I, $(CC_IMPIPATH))
+IFLAGS		+= -I$(CC_ICUDAPATH) -I$(CC_IMPIPATH)
 
 DEF=
 

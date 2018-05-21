@@ -97,6 +97,8 @@ struct constWave
 		nx = inJ["nX"].asInt();
 		dx = inJ["dx"].asDouble();
 		dy = inJ["dy"].asDouble();
+		regionSide = inJ["rSide"].asInt();
+		regionBase = inJ["rBase"].asInt();
 		// xBlock = inJ["blockSide"].asDouble();
 		// yBlock = xBlock; 
 		

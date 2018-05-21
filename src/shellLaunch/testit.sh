@@ -8,15 +8,17 @@
 #$ -R y
 #$ -l h='compute-e-[1-2]
 
-hostname
-
+hname=`hostname` 
 eq=$1
-
 sch=$2
+dims=$3
+MPIPATH=/usr/local
+NSLOTS=$4
+ex=$5
+HOSTH=`echo $hname | grep hpc`
+if [[ -n $HOSTH ]]; then 
+    machinef="-machinefile $TMPDIR/machines"
+fi
 
-ex=$3
-
-echo $ex
-
-$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ../bin/$eq $sch ../tests/"$eq"Test.json ../rslts $ex
+$MPIPATH/bin/mpirun -np $NSLOTS $machinef ./bin/$eq $sch $dims/tests/"$eq"Test.json $dims/rslts $ex
 

@@ -15,167 +15,194 @@
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
 
-#ifdef GTIME
-#define TIMEIN  timeit.tinit()
-#define TIMEOUT timeit.tfinal()
-#define WATOM atomicWrite(timeit.typ, timeit.times)
-#else
-#define TIMEIN  
-#define TIMEOUT 
-#define WATOM
-#endif
 
-using namespace std;
+// KERNELS //
+#include <algorithm>
 
-
-
-__global__ void classicStep(states *state, const int ts)
+__global__ void 
+classicStep(states **regions, const int ts)
 {
-    int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
-    stepUpdate(state, gid, ts);
-}
-
-void classicStepCPU(states *state, const int numx, const int tstep)
-{
-    for (int k=1; k<numx; k++)
+    int ky, kx;
+    int sid;
+    
+    //Launch 1D grid of 2d Blocks
+    states *blkState = (states *) regions[blockIdx.x]; 
+    
+    for (ky = threadIdx.y + 1; ky<=A.regionSide; ky+=blockDim.y)
     {
-        stepUpdate(state, k, tstep);
+        for(kx = threadIdx.x + 1; kx<=A.regionSide; kx+=blockDim.x) 
+        {
+            sid =  ky * A.regionBase + kx;
+            stepUpdate(blkState, sid, ts, A.regionBase);
+        }
     }
 }
 
-void classicPass(states *putSt, states *getSt, int tstep)
+// For two gpu regions, swaps one way, swaps the other way on the neighbor's turn.
+template <int TYPE> 
+__global__ void 
+classicGPUSwap(states *ins, states *outs, const int loca)
 {
-    int t0 = TAGS(tstep), t1 = TAGS(tstep + 100);
-    int rnk;
+    const int gid = 1 + threadIdx.x + blockDim.x * blockIdx.x;
 
-    MPI_Isend(putSt, 1, struct_type, ranks[0], t0, MPI_COMM_WORLD, &req[0]);
+    if (gid>A.regionSide) return;
 
-    MPI_Isend(putSt + 1, 1, struct_type, ranks[2], t1, MPI_COMM_WORLD, &req[1]);
+    int inidx   = (gid-1) + (loca*A.regionSide);
+    int outidx  = (gid-1) + (loca*A.regionSide);
 
-    MPI_Recv(getSt + 1, 1, struct_type, ranks[2], t0, MPI_COMM_WORLD, &stat[0]);
-
-    MPI_Recv(getSt, 1, struct_type, ranks[0], t1, MPI_COMM_WORLD, &stat[1]);
-
-    MPI_Wait(&req[0], &stat[0]);
-    MPI_Wait(&req[1], &stat[1]);
-
+    // if both (2) it's device to device
+    if (TYPE) //Device to Host (1)
+    {
+        if (loca & 1) // If odd its on the veritcal edge (1, 3)
+        {
+            if (loca >> 1)  inidx = ((gid + 1) * A.regionBase) - 2; //(3)
+            else            inidx = (gid * A.regionBase) + 1; //(1)
+        }
+        else // It's even, its horizontal.
+        {
+            if (loca >> 1)  inidx = gid + (A.regionSide * A.regionBase); //(2)
+            else            inidx = gid + A.regionBase; //(0)
+        }
+    }
+    if (TYPE-1) //Host to Device (0)
+    {
+        if (loca & 1) // (1 , 3)
+        {
+            if (loca >> 1)  outidx = (gid * A.regionBase);
+            else            outidx = ((gid + 1)  * A.regionBase) - 1;
+        }
+        else    // (2, 4)
+        {
+            if (loca >> 1)  outidx = gid;
+            else            outidx = gid + ((A.regionSide + 1) * A.regionBase);
+        }
+    }
+    outs[outidx] = ins[inidx];
 }
 
-// Classic Discretization wrapper.
-double classicWrapper(states **state, int *tstep)
+void classicStepCPU(Region *regional)
 {
-    int tmine = *tstep;
-
-    double t_eq = 0.0;
-    double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    // Must be declared global in equation specific header.
-    stPass = 2;
-    numPass = NSTATES * stPass;
-
-    states putSt[stPass];
-    states getSt[stPass];
-
-    int t0, t1;
-
-    if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
+    int ky, kx;
+    int sid;
+    for (ky = 1; ky<=A.regionSide; ky++)
     {
-        cout << "Classic Decomposition GPU" << endl;
-        cudaTime timeit;
-        const int xc = cGlob.xcpu/2;
-        int xcp = xc+1;
-        const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
-        const int gpusize =  cGlob.szState * xgpp;
-
-        states *dState;
-
-        cudaMalloc((void **)&dState, gpusize);
-        // Copy the initial conditions to the device array.
-        // This is ok, the whole array has been malloced.
-        cudaMemcpy(dState, state[1], gpusize, cudaMemcpyHostToDevice);
-
-        // Four streams for four transfers to and from cpu.
-        cudaStream_t st1, st2, st3, st4;
-        cudaStreamCreate(&st1);
-        cudaStreamCreate(&st2);
-        cudaStreamCreate(&st3);
-        cudaStreamCreate(&st4);
-
-        cout << "Entering Loop" << endl;
-
-        while (t_eq < cGlob.tf)
+        for(kx = 1; kx<=A.regionSide; kx++) 
         {
-            //TIMEIN;
-            classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
-            //TIMEOUT;
-            classicStepCPU(state[0], xcp, tmine);
-            classicStepCPU(state[2], xcp, tmine);
-
-            cudaMemcpyAsync(dState, state[0] + xc, cGlob.szState, cudaMemcpyHostToDevice, st1);
-            cudaMemcpyAsync(dState + xgp, state[2] + 1, cGlob.szState, cudaMemcpyHostToDevice, st2);
-            cudaMemcpyAsync(state[0] + xcp, dState + 1, cGlob.szState, cudaMemcpyDeviceToHost, st3);
-            cudaMemcpyAsync(state[2], dState + cGlob.xg, cGlob.szState, cudaMemcpyDeviceToHost, st4);
-
-            putSt[0] = state[0][1];
-            putSt[1] = state[2][xc];
-            classicPass(&putSt[0], &getSt[0], tmine);
-
-            if (cGlob.bCond[0]) state[0][0] = getSt[0];
-            if (cGlob.bCond[1]) state[2][xcp] = getSt[1];
-
-            // Increment Counter and timestep
-            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
-            tmine++;
-
-            // OUTPUT
-            if (t_eq > twrite)
-            {
-                writeOut(state, t_eq);
-                twrite += cGlob.freq;
-            }
+            sid =  ky * A.regionBase + kx;
+            stepUpdate(regional->state, sid, regional->tStep, A.regionBase);
         }
+    }
+}
 
-        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
-        // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
-        //WATOM;
+template <bool TYPE>
+void cpuBufCopy(states **stRows, states *buf, const int loca)
+{
+    int i;
+    const int offs  = cGlob.regionSide * loca;
 
-        cudaStreamDestroy(st1);
-        cudaStreamDestroy(st2);
-        cudaStreamDestroy(st3);
-        cudaStreamDestroy(st4);
-
-        cudaFree(dState);
+    if (TYPE)
+    {
+        switch(loca)
+        {
+            case 0: for (i=0; i<cGlob.regionSide; i++) 
+                buf[i+offs] = stRows[1][i+1];
+            case 1: for(i=0; i<cGlob.regionSide; i++)
+                buf[i+offs] = stRows[1+i][1];
+            case 2: for(i=0; i<cGlob.regionSide; i++)
+                buf[i+offs] = stRows[cGlob.regionSide][i+1];
+            case 3: for(i=0; i<cGlob.regionSide; i++) 
+                buf[i+offs] = stRows[i+1][cGlob.regionSide];
+        }
     }
     else
     {
-        int xcp = cGlob.xcpu + 1;
-        mpiTime timeit;
-        while (t_eq < cGlob.tf)
+        switch(loca)
         {
-            //TIMEIN;
-            classicStepCPU(state[0], xcp, tmine);
-            //TIMEOUT;
+            case 0: for(i=0; i<cGlob.regionSide; i++) 
+                stRows[0][i+1] = buf[i+offs];
+            case 1: for(i=0; i<cGlob.regionSide; i++) 
+                stRows[i+1][0] = buf[i+offs];
+            case 2: for(i=0; i<cGlob.regionSide; i++) 
+                stRows[cGlob.regionSide+1][i+1] = buf[i+offs];
+            case 3: for(i=0; i<cGlob.regionSide; i++) 
+                stRows[i+1][cGlob.regionSide+1] = buf[i+offs];
+        }
+    }
+}
 
-            putSt[0] = state[0][1];
-            putSt[1] = state[0][cGlob.xcpu];
-            classicPass(&putSt[0], &getSt[0], tmine);
+// Classic Discretization wrapper.
+void classicWrapper(std::vector <Region *> &regionals)
+{
+    if (!rank) std::cout << " - CLASSIC Decomposition - " << nprocs << std::endl;
+    const int gpuRegions = cGlob.hasGpu * regionals.size();
+    states **regionSelector;
+    if (gpuRegions) 
+    {
+        cudaMalloc((void **) &regionSelector, sizeof(states *) * gpuRegions);
+        for (int i=0; i<gpuRegions; i++)
+        {
+            setgpuRegion <<< 1, 1 >>> (regionSelector, regionals[i]->dState, i);
+         }
+    }
 
-            if (cGlob.bCond[0]) state[0][0] = getSt[0];
-            if (cGlob.bCond[1]) state[0][xcp] = getSt[1];
+    for (auto r: regionals) r->makeBuffers(cGlob.regionSide, 4);
+    dim3 tdim(cGlob.tpbx, cGlob.tpby);
+    const int minLaunch = cGlob.regionSide/1024 + 1;
+    int stepNow;
 
-            // Increment Counter and timestep
-            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
-            tmine++;            
+    while (regionals[0]->tStamp < cGlob.tf)
+    {   
+        stepNow = regionals[0]->tStep;
+        if (gpuRegions)     classicStep <<< gpuRegions, tdim >>>(regionSelector, stepNow);
+        else                classicStepCPU(regionals[0]);
 
-            if (t_eq > twrite)
+        for (auto r: regionals)
+        {
+            for (auto n: r->neighbors)
             {
-                writeOut(state, t_eq);
-                twrite += cGlob.freq;
+                if (n->sameProc) //Only occurs in gpu blocks.
+                {
+                    // n->printer();
+                    classicGPUSwap <2> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, n->sidx);
+                }
+                else
+                {
+                    if (gpuRegions)
+                    {
+                        classicGPUSwap <1> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, n->sidx);
+                        r->gpuBufCopy(1, n->sidx);
+                    }
+                    else
+                    {
+                        cpuBufCopy <1> (r->stateRows, r->sendBuffer, n->sidx);
+                        r->bufMessage(1, n->sidx);
+                    }
+                }
             }
         }
-        // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
-        //WATOM;
-    }
-    *tstep = tmine;
-
-    return t_eq;
+        // RECEIVE
+        for (auto r: regionals)
+        {
+            r->incrementTime(); //Any Write out occurs within the swapping procedure.
+            for (auto n: r->neighbors)
+            {
+                if(!n->sameProc)
+                {
+                    if (gpuRegions)
+                    {
+                        r->gpuBufCopy(0, n->sidx);
+                        classicGPUSwap <0> <<< minLaunch, cGlob.regionSide >>> ( r->dRecv, r->dState, n->sidx);
+                    }
+                    else
+                    {
+        
+                        r->bufMessage(0, n->sidx);
+                        cpuBufCopy <0> (r->stateRows, r->recvBuffer, n->sidx);
+                    } // End gpu vs cpu receiver choice. 
+                }     // End mask over neighbors already swapped. 
+            }         // End Loop over all this region's neighbors. 
+        }             // End Loop over all regions on this process. 
+    }                 // End while loop over all timesteps
+    cudaFree(regionSelector);
 }
+

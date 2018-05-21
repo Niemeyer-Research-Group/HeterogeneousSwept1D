@@ -1,637 +1,683 @@
-
 /*
 ---------------------------
     SWEPT CORE
 ---------------------------
 */
+#include <helper_cuda.h>
+#include <vector>
+#include <array>
+#include <algorithm>
+#include <iterator>
+// IF assign() proves necessary #include<algorithm>
 
-using namespace std;
-
-typedef std::vector<int> ivec;
-
-states ssLeft[3];
-states ssRight[3];
-
-__global__ void upTriangle(states *state, int tstep)
+struct sweptConst
 {
-	extern __shared__ states temper[];
+    int sideSmem, rBase, hBridgeOffset, vBridgeOffset, sharedOffset, splitOffset, nPass;
+};
 
-	int gid = blockDim.x * blockIdx.x + threadIdx.x; //Global Thread ID
-	int tidx = threadIdx.x; //Block Thread ID
-    int mid = blockDim.x >> 1;
-
-    // Using tidx as tid is kind of confusing for reader but looks valid.
-
-	temper[tidx] = state[gid + 1];
-
-    __syncthreads();
-
-	for (int k=1; k<mid; k++)
-	{
-		if (tidx < (blockDim.x-k) && tidx >= k)
-		{
-            stepUpdate(temper, tidx, tstep + k);
-		}
-		__syncthreads();
-	}
-    state[gid + 1] = temper[tidx];
-}
-
-/**
-    Builds an inverted triangle using the swept rule.
-
-    Inverted triangle using the swept rule.  downTriangle is only called at the end when data is passed left.  It's never split.  Sides have already been passed between nodes, but will be swapped and parsed by readIn function.
-
-    @param IC Full solution at some timestep.
-    @param inRight Array of right edges seeding solution vector.
-*/
-__global__
-void
-downTriangle(states *state, const int tstep, const int offset)
+struct PassIndex
 {
-	extern __shared__ states temper[];
+    //Edges to pass;
+    typedef std::vector<int> intvec;
+    typedef  std::array<intvec, 4> idxvec;
+    const int side, base, gpu;
+	idxvec pyramid, bridge;
+    intvec passer;
+    int nPass, sizePass;
+    int cnt;
 
-    int tid = threadIdx.x; // Thread index
-    int mid = blockDim.x >> 1; // Half of block size
-    int base = blockDim.x + 2;
-    int gid = blockDim.x * blockIdx.x + tid + offset;
-    int tidx = tid + 1;
-
-    int tnow = tstep; // read tstep into register.
-
-    if (tid<2) temper[tid] = state[gid];
-    __syncthreads();
-    temper[tid+2] = state[gid+2];
-    __syncthreads();
-
-	for (int k=mid; k>0; k--)
-	{
-		if (tidx < (base-k) && tidx >= k)
-		{
-	    	stepUpdate(temper, tidx, tnow);
-		}
-		tnow++;
-		__syncthreads();
-	}
-    state[gid] = temper[tidx];
-}
-
-// __global__
-// void
-// printgpu(states *state, int n, int on)
-// {
-//     printf("%i\n", on);
-//     for (int k=0; k<n; k++) printf("%i %.2f\n", k, state[k].T[on]);
-// }
-
-/**
-    Builds an diamond using the swept rule after a left pass.
-
-    Unsplit diamond using the swept rule.  wholeDiamond must apply boundary conditions only at it's center.
-
-    @param state The working array of structures states.
-    @param tstep The count of the first timestep.
-*/
-__global__
-void
-wholeDiamond(states *state, const int tstep, const int offset)
-{
-	extern __shared__ states temper[];
-
-    int tidx = threadIdx.x + 1; // Thread index
-    int mid = (blockDim.x >> 1); // Half of block size
-    int base = blockDim.x + 2;
-    int gid = blockDim.x * blockIdx.x + threadIdx.x + offset;
-
-    int tnow = tstep;
-	int k;
-    if (threadIdx.x<2) temper[threadIdx.x] = state[gid];
-    __syncthreads();
-    temper[tidx+1] = state[gid + 2];
-
-    __syncthreads();
-
-	for (k=mid; k>0; k--)
-	{
-		if (tidx < (base-k) && tidx >= k)
-		{
-        	stepUpdate(temper, tidx, tnow);
-		}
-		tnow++;
-		__syncthreads();
-	}
-
-
-	for (k=2; k<=mid; k++)
-	{
-		if (tidx < (base-k) && tidx >= k)
-		{
-            stepUpdate(temper, tidx, tnow);
-		}
-		tnow++;
-		__syncthreads();
+    PassIndex(int side, int base, int hasG) : side(side), base(base), gpu(cGlob.hasGpu), pyramid(initialize(1)), bridge(initialize(0))
+    {
+        nPass       = side/4 * (side + 2) + (side + 2);
+        sizePass    = 4 * nPass * sizeof(int);
+        cnt = 0;
     }
 
-    state[gid + 1] = temper[tidx];
+    PassIndex(const PassIndex &pix) : side(pix.side), base(pix.base), gpu(pix.gpu), sizePass(pix.sizePass),
+				nPass(pix.nPass), pyramid(pix.pyramid), bridge(pix.bridge){   }
+
+
+	template <int TYPE, bool OFFSET, bool INTERIOR>
+	void passCPU(states *ins, states *outs, const int loca);
+
+	template <bool OFFSET, bool INTERIOR>
+    void passPanel(std::vector <Region *> &regionals);
+
+    idxvec initialize(int begin)
+    {
+		idxvec starter;
+        int flatidx;
+        // Pyramid Loop
+        for (int ky = begin; ky<=side+(1-begin); ky++)
+        {
+            for (int kx = begin; kx<=side+(1-begin); kx++)
+            {
+                flatidx = ky * base + kx;
+                if (kx <= ky){
+                    if (kx+ky <= side+1) starter[0].push_back(flatidx);
+                    if (kx+ky >= side+1) starter[3].push_back(flatidx);
+                }
+                if (kx >= ky){
+                    if (kx+ky <= side+1) starter[1].push_back(flatidx);
+                    if (kx+ky >= side+1) starter[2].push_back(flatidx);
+                }
+            }
+       	}
+		return starter;
+    }
+
+    void ppass(int extent=10)
+    {
+        for (int i=0; i<extent; i++) std::cout << pyramid[1][i] << " ";
+        std::cout << std::endl;
+    }
+
+    // int *getPtr(const bool INTERIOR)
+    // {
+    //     if (gpu) {
+    //         if (INTERIOR) return dBridge;
+    //         else          return dPyramid;
+    //     }
+    //     else {
+    //         if (INTERIOR) return bridge;
+    //         else          return pyramid;
+    //     }
+    // }
+
+    // void plotPass(int eye);
+};
+
+// #include "matplotlib-cpp/matplotlibcpp.h"
+
+// namespace plt = matplotlibcpp;
+
+// void PassIndex::plotPass(int eye)
+// {
+//     std::vector<size_t> px, py;
+//     int neweye, cnew;
+//     std::string rc[] = {".r", ".b", ".g", ".k"};
+//     std::string titles[] = {"South", "East", "North", "West"};
+//     for (int i=0; i<4; i++)
+//     {
+//         cnew = 0;
+//         for (int k=0; k<nPass; k++)
+//         {
+//             if (eye){
+//                 px.push_back(pyramid[i][k] % base);
+//                 py.push_back(pyramid[i][k] / base);
+//             }
+//             else{
+//                 px.push_back(bridge[i][k] % base);
+//                 py.push_back(bridge[i][k] / base);
+//             }
+//         }
+
+//         plt::named_plot( titles[i], px, py,rc[i]);
+//         std::cout << "Im Plotting!" << px.size() << std::endl;
+//         neweye = px.back();
+//         px.pop_back();
+
+//         while (neweye == 0){
+//             std::cout << i << " " << neweye << "   ";
+//             neweye=px.back();
+//             px.pop_back();
+//             cnew++;
+//         }
+//         std::cout << "---------" << cnew << std::endl;
+
+//         px.clear();
+//         py.clear();
+//     }
+//     plt::title("PyramidPass");
+//     plt::legend();
+//     plt::show();
+//     std::cout << "Im Plotting!" << px.size() << std::endl;
+// }
+
+__constant__ sweptConst dSweptConst;
+sweptConst hSweptConst;
+
+// Can it work for host too?  Yes if you guard them with preprocessor.
+__device__ int
+upPyramid(states *state, int ts, const int tol, const int base)
+{
+    int sid;
+    int kx, ky, kt;
+    for (kt = 2; kt<=tol; kt++)
+    {
+        for (ky = threadIdx.y + kt; ky<(base - kt); ky+=blockDim.y)
+        {
+            for(kx = threadIdx.x + kt; kx<(base - kt); kx+=blockDim.x)
+            {
+                sid =  ky * dSweptConst.rBase  + kx;
+                stepUpdate(state, sid, ts, dSweptConst.rBase);
+            }
+        }
+        __syncthreads();
+        ts++;
+    }
+    return ts;
+}
+
+__device__ int
+downPyramid(states *state, int ts, const int tol, const int base)
+{
+    int sid;
+    int kx, ky, kt;
+    for (kt=tol; kt>0; kt--)
+    {
+        for (ky = threadIdx.y + kt; ky<(base - kt); ky+=blockDim.y)
+        {
+            for(kx = threadIdx.x + kt; kx<(base - kt); kx+=blockDim.x) 
+            {
+                sid =  ky * dSweptConst.rBase + kx;
+                stepUpdate(state, sid, ts, dSweptConst.rBase);
+            }
+        }
+        __syncthreads();
+        ts++;
+    }
+    return ts;
+}
+
+template <bool TOGLOBAL>
+__device__ void
+swapMem(states *toState, states *fromState)
+{
+    int tid, fid, tbase, fbase, toff, foff, kx, ky;
+    if (TOGLOBAL)
+    {
+        fbase   = dSweptConst.sideSmem;
+        tbase   = dSweptConst.rBase;
+        toff    = dSweptConst.sharedOffset;
+        foff    = 0;
+    }
+    else
+    {
+        fbase   = dSweptConst.rBase;
+        tbase   = dSweptConst.sideSmem;
+        toff    = 0;
+        foff    = dSweptConst.sharedOffset;
+    }
+
+    for (ky = threadIdx.y; ky<=dSweptConst.sideSmem; ky+=blockDim.y)
+    {
+        for (kx = threadIdx.x; kx<=dSweptConst.sideSmem; kx+=blockDim.x)
+        {
+            fid             = ky * fbase + kx + foff;
+            tid             = ky * tbase + kx + toff;
+            toState[tid]    = fromState[fid];
+        }
+    }
+    __syncthreads();
+}
+
+// Int not const because needs to be handled between calls.  Return with device function.
+// Type 0 for downPyramid, 1 for upPyramid, 2 for wholeOcto 
+// Calculate global offset as linear index as constant mem?  or 
+template <bool SPLIT, int TYPE>
+__global__ void
+wholeOctahedron(states **regions, int ts)
+{
+    //Launch 1D grid of 2d Blocks
+    states *blkState = ((states *) regions[blockIdx.x]) + SPLIT * dSweptConst.splitOffset;
+    extern __shared__ states sharedState[];
+
+    // Down pyr shared -> global.
+    if (TYPE-1)
+    {
+        swapMem <false> (sharedState, blkState);
+        ts = downPyramid(sharedState, ts, dSweptConst.sideSmem/2, dSweptConst.sideSmem);
+        swapMem <true> (blkState, sharedState);
+        ts = downPyramid(blkState, ts, dSweptConst.sharedOffset, dSweptConst.rBase);
+    }
+    if (TYPE)
+    {
+        ts = upPyramid(blkState, ts, dSweptConst.sharedOffset, dSweptConst.rBase);
+        swapMem <false> (sharedState, blkState);
+        ts = upPyramid(sharedState, ts, dSweptConst.sideSmem/2, dSweptConst.sideSmem);
+        swapMem <true> (blkState, sharedState);
+    }
+}
+//Launch 1D grid of 2d Blocks
+// It probably needs another parameter for the offset case
+template <bool OFFSET>
+__global__ void
+bridges(states **regions, int ts)
+{
+    const int rStart = ((DCONST.regionSide - 2) >> 1);
+    int hoff, voff;
+    if (OFFSET)
+    {
+        hoff = dSweptConst.hBridgeOffset;
+        voff = dSweptConst.vBridgeOffset;
+    }
+    else
+    {
+        hoff = dSweptConst.vBridgeOffset;
+        voff = dSweptConst.hBridgeOffset;
+    }
+
+    int sidh, sidv, dimStart;
+    int kx, ky, kt;
+
+    states *horizBridge = ((states *) regions[blockIdx.x]) + hoff;
+    states *vertBridge = ((states *) regions[blockIdx.x])  + voff;
+
+    for (kt = rStart; kt>0; kt--)
+    {
+        dimStart = 1 + (rStart-kt);
+        for (ky = threadIdx.y + dimStart; ky<(DCONST.regionBase - kt); ky+=blockDim.y)
+        {
+            for(kx = threadIdx.x + kt; kx<(DCONST.regionSide - kt); kx+=blockDim.x)
+            {
+                sidh =  ky * dSweptConst.rBase + kx;
+                stepUpdate(horizBridge, sidh, ts, dSweptConst.rBase);
+                sidv =  kx * dSweptConst.rBase + ky;
+                stepUpdate(vertBridge, sidv, ts, dSweptConst.rBase);
+            }
+        }
+        ts++;
+        __syncthreads();
+    }
 }
 
 /*
     MARK : HOST SWEPT ROUTINES
 */
-
-void upTriangleCPU(states *state, int tstep)
+// USE SPLIT FLAG AND OFFSET OR APPLY OFFSET IN MAIN?
+template <bool SPLIT, int TYPE>
+void wholeOctahedronCPU(states *state, int tnow)
 {
-    int tnow=tstep;
-    for (int k=2; k<cGlob.htp; k++)
+    states *cornerState = state + SPLIT * hSweptConst.splitOffset;
+
+    int h, x, y;
+    int sid;
+    int fromEnd;
+    if (TYPE-1)
     {
-        for (int n=k; n<(cGlob.base-k); n++)
+        for (h=cGlob.ht; h>0; h--)
         {
-            stepUpdate(state, n, tnow);
+            fromEnd = cGlob.regionBase-h;
+            for (y=h; y<fromEnd; y++)
+            {
+                for (x=h; x<fromEnd; x++)
+                {
+                    sid = y * hSweptConst.rBase + x;
+                    stepUpdate(cornerState, sid, tnow, hSweptConst.rBase);
+                }
+            }
+            tnow++;
         }
-    tnow++;
+    }
+    if (TYPE)
+    {
+        for (h=1; h<cGlob.ht; h++)
+        {
+            fromEnd=cGlob.regionBase-h;
+            for (y=h; y<fromEnd; y++)
+            {
+                for (x=h; x<fromEnd; x++)
+                {
+                    sid = y * hSweptConst.rBase + x;
+                    stepUpdate(cornerState, sid, tnow, hSweptConst.rBase);
+                }
+            }
+            tnow++;
+        }
     }
 }
 
-void downTriangleCPU(states *state, int tstep)
+template <bool OFFSET>
+void bridgesCPU(states *regions, int ts)
 {
-    int tnow=tstep;
-    for (int k=cGlob.ht; k>0; k--)
+    static const int rStart = (HCONST.regionSide - 2)/2;
+    int hoff, voff;
+    if (OFFSET)
     {
-        for (int n=k; n<(cGlob.base-k); n++)
-        {
-            stepUpdate(state, n, tnow);
-        }
-	tnow++;
-    }
-}
-
-void wholeDiamondCPU(states *state, int tnow)
-{
-    for (int k=cGlob.ht; k>0; k--)
-    {
-        for (int n=k; n<(cGlob.base-k); n++)
-        {
-            stepUpdate(state, n, tnow);
-        }
-	tnow++;
-    }
-
-    for (int k=2; k<cGlob.htp; k++)
-    {
-        for (int n=k; n<(cGlob.base-k); n++)
-        {
-            stepUpdate(state, n, tnow);
-        }
-    tnow++;
-    }
-}
-
-void splitDiamondCPU(states *state, int tnow)
-{
-    ssLeft[2] = bound[1];
-    ssRight[0] = bound[0];
-    for (int k=cGlob.ht; k>0; k--)
-    {
-        for (int n=k; n<(cGlob.base-k); n++)
-        {
-            if (n == cGlob.ht)
-            {
-                ssLeft[0] = state[n-1], ssLeft[1] = state[n];
-                stepUpdate(&ssLeft[0], 1, tnow);
-                state[n] = ssLeft[1];
-            }
-            else if (n == cGlob.htp)
-            {
-                ssRight[1] = state[n], ssRight[2] = state[n+1];
-                stepUpdate(&ssRight[0], 1, tnow);
-                state[n] = ssRight[1];
-            }
-            else
-            {
-                stepUpdate(state, n, tnow);
-            }
-        }
-        tnow++;
-    }
-
-    for (int k=2; k<cGlob.htp; k++)
-    {
-        for (int n=k; n<(cGlob.base-k); n++)
-        {
-            if (n == cGlob.ht)
-            {
-                ssLeft[0] = state[n-1], ssLeft[1] = state[n];
-                stepUpdate(&ssLeft[0], 1, tnow);
-                state[n] = ssLeft[1];
-            }
-            else if (n == cGlob.htp)
-            {
-                ssRight[1] = state[n], ssRight[2] = state[n+1];
-                stepUpdate(&ssRight[0], 1, tnow);
-                state[n] = ssRight[1];
-            }
-            else
-            {
-                stepUpdate(state, n, tnow);
-            }
-        }
-	tnow++;
-    }
-}
-
-void passSwept(states *passer, states *getter, int tstep, int turn)
-{
-    int rx = turn^1;
-
-    MPI_Isend(passer, cGlob.htp, struct_type, ranks[2*turn], TAGS(tstep),
-            MPI_COMM_WORLD, &req[0]);
-
-    MPI_Recv(getter, cGlob.htp, struct_type, ranks[2*rx], TAGS(tstep),
-            MPI_COMM_WORLD, &stat[0]);
-
-    MPI_Wait(&req[0], &stat[0]);
-}
-
-// void applyBC(states *state, int ty, int pt)
-// {
-//     // Like if-dirichilet
-//     // Works for whole
-//     state[ty*pt] = sBound[ty];
-//     // If reflective
-//     // state[ty*pt] = state[pt-2] or state[pt+2]
-// }
-
-
-// Now we need to put the last value in a bucket, and append that to the start of the next array.
-double sweptWrapper(states **state,  int *tstep)
-{
-	if (!ranks[1]) cout << "SWEPT Decomposition " << cGlob.tpb << endl;
-
-    const int bkL = cGlob.cBks - 1;
-    double t_eq = 0.0;
-    double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    int tmine = *tstep;
-
-    // Must be declared global in equation specific header.
-
-    int tou = 2000;
-
-    if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
-    {
-        cout << ranks[1] << " hasGpu" << endl;
-        const int xc = cGlob.xcpu/2, xcp=xc+1;
-        const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
-        const int cmid = cGlob.cBks/2;
-        int bx, ix;
-
-        const size_t gpusize = cGlob.szState * (xgpp + cGlob.ht);
-        const size_t ptsize = cGlob.szState * xgpp;
-        const size_t passsize =  cGlob.szState * cGlob.htp;
-        const size_t smem = cGlob.szState * cGlob.base;
-
-        int gpupts = gpusize/cGlob.szState;
-
-        cudaStream_t st1, st2;
-        cudaStreamCreate(&st1);
-        cudaStreamCreate(&st2);
-
-        states *dState;
-
-        cudaMalloc((void **)&dState, gpusize);
-        cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
-
-        /*
-        -- DOWN MUST FOLLOW A SPLIT AND UP CANNOT BE IN WHILE LOOP SO DO UP AND FIRST SPLIT OUTSIDE OF LOOP THEN LOOP CAN BE WITH WHOLE - DIAMOND - CHECK DOWN.
-        */
-        // ------------ Step Forward ------------ //
-        // ------------ UP ------------ //
-
-        upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
-
-        for (int k=0; k<cGlob.cBks; k++)
-        {
-            bx = (k/cmid);
-            ix = 2*bx;
-            upTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-        }
-
-        // ------------ Pass Edges ------------ //
-        // -- FRONT TO BACK -- //
-
-        cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
-        cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
-
-        passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
-
-        // ------------ Step Forward ------------ //
-        // ------------ SPLIT ------------ //
-
-        wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
-
-        for (int k=0; k<(cGlob.cBks); k++)
-        {
-            bx = (k/cmid);
-            ix = 2*bx;
-            if ((ranks[1] == lastproc) && (k == bkL))
-            {
-                splitDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-            }
-            else
-            {
-                wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-            }
-        }
-
-        // ------------ Pass Edges ------------ //
-        // -- BACK TO FRONT -- //
-
-        cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
-        cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-
-        passSwept(state[2] + xc, state[0], tmine+1, 1);
-
-        // Increment Counter and timestep
-        tmine += cGlob.ht;
-        t_eq = cGlob.dt * (tmine/NSTEPS);
-
-        if (!ranks[1]) state[0][0] = bound[0];
-        if (ranks[1]==lastproc) state[2][xcp] = bound[1];
- 
-        while(t_eq < cGlob.tf)
-        {
-            // ------------ Step Forward ------------ //
-            // ------------ WHOLE ------------ //
-
-            wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
-
-            for (int k=0; k<cGlob.cBks; k++)
-            {
-                bx = (k/cmid);
-                ix = 2*(k/cmid);
-                wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-            }
-
-            // ------------ Pass Edges ------------ //
-
-            cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
-            cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
-
-            // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
-            // unstructify(&putSt[0], &putRe[0]);
-
-            // passSwept(&putRe[0], &getRe[0], tmine, 0);
-            passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
-
-            // restructify(&getSt[0], &getRe[0]);
-            // for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
-
-            // Increment Counter and timestep
-            tmine += cGlob.ht;
-            t_eq = cGlob.dt * (tmine/NSTEPS);
-
-            // ------------ Step Forward ------------ //
-            // ------------ SPLIT ------------ //
-
-            wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
-
-            for (int k=0; k<(cGlob.cBks); k++)
-            {
-                bx = (k/cmid);
-                ix = 2*bx;
-                if ((ranks[1] == lastproc) && (k == bkL))
-                {
-                    splitDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-                }
-                else
-                {
-                    wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-                }
-            }
-
-            // ------------ Pass Edges ------------ //
-            // -- BACK TO FRONT -- //
-
-            cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
-            cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-
-
-            passSwept(state[2] + xc, state[0], tmine, 1);
-
-            // Increment Counter and timestep
-            tmine += cGlob.ht;
-            t_eq = cGlob.dt * (tmine/NSTEPS);
-
-            if (!ranks[1]) state[0][0] = bound[0];
-            if (ranks[1]==lastproc) state[2][xcp] = bound[1];
-
-            if (t_eq > twrite)
-            {
-                downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
-
-                for (int k=0; k<cGlob.cBks; k++)
-                {
-                    bx = (k/cmid);
-                    ix = 2*bx;
-                    downTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-                }
-
-                // Increment Counter and timestep
-                tmine += cGlob.ht;
-                t_eq = cGlob.dt * (tmine/NSTEPS);
-
-                cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
-
-                writeOut(state, t_eq);
-                
-                upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
-
-                for (int k=0; k<cGlob.cBks; k++)
-                {
-                    bx = (k/cmid);
-                    ix = 2*bx;
-                    upTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-                }
-
-                cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
-                cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
-
-                passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
-
-
-                // ------------ Step Forward ------------ //
-                // ------------ SPLIT ------------ //
-
-                wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
-
-                for (int k=0; k<(cGlob.cBks); k++)
-                {
-                    bx = (k/cmid);
-                    ix = 2*bx;
-                    if ((ranks[1] == lastproc) && (k ==bkL))
-                    {
-                        splitDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-                    }
-                    else
-                    {
-                        wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-                    }
-                }
-
-                // ------------ Pass Edges ------------ //
-                // -- BACK TO FRONT -- //
-                cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
-                cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-
-                passSwept(state[2] + xc, state[0], tmine+1, 1);
-
-                tmine += cGlob.ht;
-                t_eq = cGlob.dt * (tmine/NSTEPS);
-                twrite += cGlob.freq;
-                if (!ranks[1]) state[0][0] = bound[0];
-                if (ranks[1]==lastproc) state[2][xcp] = bound[1];
-            }
-
-        }
-
-        downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
-
-        for (int k=0; k<cGlob.cBks; k++)
-        {
-            bx = (k/cmid);
-            ix = 2*bx;
-            downTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-        }
-
-        // Increment Counter and timestep
-        tmine += cGlob.ht;
-        t_eq = cGlob.dt * (tmine/NSTEPS);
-
-        cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
-
-        cudaFree(dState);
-        cudaStreamDestroy(st1);
-        cudaStreamDestroy(st2);
+        hoff = hSweptConst.hBridgeOffset;
+        voff = hSweptConst.vBridgeOffset;
     }
     else
     {
-        const int xc = cGlob.xcpu, xcp = xc+1;
-        
-        for (int k=0; k<cGlob.cBks; k++)
+        hoff = hSweptConst.vBridgeOffset;
+        voff = hSweptConst.hBridgeOffset;
+    }
+
+    int sidh, sidv, dimStart;
+    int kx, ky, kt;
+
+    states *horizBridge = ((states *) regions + hoff);
+    states *vertBridge  = ((states *) regions + voff);
+    for (kt=rStart; kt>0; kt--)
+    {
+        dimStart = 1 + (rStart-kt);
+        for (ky = dimStart; ky<(HCONST.regionBase - kt); ky++)
         {
-            upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
+            for(kx = kt; kx<(HCONST.regionSide - kt); kx++)
+            {
+                sidh =  ky * hSweptConst.rBase + kx;
+                stepUpdate(horizBridge, sidh, ts, dSweptConst.rBase);
+                sidv =  kx * hSweptConst.rBase + ky;
+                stepUpdate(vertBridge, sidv, ts, dSweptConst.rBase);
+            }
         }
-  
-        passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
+        ts++;
+    }
+}
 
-        //Split
-        for (int k=0; k<cGlob.cBks; k++)
+/*
+    MARK : PASSING ROUTINES
+*/
+
+
+// TYPE
+// Device to Device (2) | Device to Host (1) | Host to Device (0) 
+template <int TYPE, bool OFFSET, bool INTERIOR> 
+__global__
+void passGPU(states *ins, states *outs, const int *idxmaps, const int loca)
+{
+    const int gid          = threadIdx.x + blockDim.x * blockIdx.x; 
+    const int rOffset[4]   = {DCONST.regionSide * dSweptConst.rBase, DCONST.regionSide, -DCONST.regionSide * dSweptConst.rBase,-DCONST.regionSide};
+    const int rawOffset    = OFFSET * dSweptConst.splitOffset;
+
+    if (gid > dSweptConst.nPass) return;
+
+    int inidx           = gid + (loca*dSweptConst.nPass);
+    int outidx          = gid + (loca*dSweptConst.nPass);
+
+    if (TYPE)   inidx     = idxmaps[inidx]  + rawOffset + (INTERIOR)  * rOffset[loca];
+    if (TYPE-1) outidx    = idxmaps[outidx] + rawOffset + (!INTERIOR) * rOffset[loca];
+
+    outs[outidx] = ins[inidx];
+}
+
+/*
+InteriorPass --
+EAST panel, from east neighbor, west vertical bridge:
+(East idx + offset - roffset) -- INIDX
+(East idx + offset) -- OUTIDX
+NORTH panel, from north neighbor, south vertical bridge:
+(North idx + offset - roffset) -- INIDX
+(North idx + offset) -- OUTIDX
+*/
+
+template <int TYPE, bool OFFSET, bool INTERIOR>
+void PassIndex::passCPU(states *ins, states *outs, const int loca)
+{
+    static const int rOffset[4]   = {HCONST.regionSide * hSweptConst.rBase, HCONST.regionSide, -HCONST.regionSide * hSweptConst.rBase,-HCONST.regionSide};
+
+    int i, workidx;
+    int rawOffset = (int)OFFSET * hSweptConst.splitOffset;
+    // std::cout << rank << " -BEFORE- " << " - " << TYPE << " - " << INTERIOR << " - "  << OFFSET << " - " << loca << std::endl;
+	int roff 		= rawOffset + ((int)(INTERIOR) * rOffset[loca]);
+    if (INTERIOR)
+    {
+        std::copy(bridge[loca].begin(), bridge[loca].end(), std::back_inserter(passer));
+    }
+    else
+    {
+        std::copy(pyramid[loca].begin(), pyramid[loca].end(), std::back_inserter(passer));
+    }
+
+    if (TYPE)
+    {
+        std::cout << "INCOMING: " << rank << " " << cnt << " " << roff << " " << loca << " " << INTERIOR << " " << rawOffset << " | ";
+        for (i = 0; i<passer.size(); i++)
         {
-            if ((ranks[1] == lastproc) && (k == bkL))
-            {
-                splitDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
-            }
-            else
-            {
-                wholeDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
-            }
+            std::cout << "  " <<  pyramid[loca][i];
+            workidx         = passer[i] + roff;
+            outs[i]         = ins[workidx];
         }
 
-        // -- BACK TO FRONT -- //
-
-        passSwept(state[0] + xc, state[0], tmine+1, 1);
-
-        tmine += cGlob.ht;
-        t_eq = cGlob.dt * (tmine/NSTEPS);
-        if (!ranks[1]) state[0][0] = bound[0];
-        if (ranks[1]==lastproc) state[0][xcp] = bound[1];
-
-        while (t_eq < cGlob.tf)
+    }
+    else
+    {
+        std::cout << "OUTGOING: " << rank << " " << cnt << " " << roff << " " << loca << " " << INTERIOR << " " << rawOffset << " | ";
+        for (i = 0; i<passer.size(); i++)
         {
-            for (int k=0; k<cGlob.cBks; k++)
-            {
-                wholeDiamondCPU(state[0] + k*cGlob.tpb, tmine);
-            }
+            std::cout << "  " <<  pyramid[loca][i];
+            workidx         = passer[i] + roff;
+            outs[workidx] 	= ins[i];
+        }
+    
+    }
+    std::cout << std::endl;
+    passer.clear();
+    return;
+}
 
-            passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
 
-            tmine += cGlob.ht;
-            t_eq = cGlob.dt * (tmine/NSTEPS);
+    // std::cout << std::boolalpha << rank << " -AFTER- " << " - " << TYPE << " - " << INTERIOR << " - "  << OFFSET << " - " << workidx << " - " << loca << std::endl;
 
-            for (int k=0; k<(cGlob.cBks); k++)
-            {
-                if ((ranks[1] == lastproc) && (k == bkL))
+
+inline bool passMask(int direction)
+{
+    return ((direction & 3) > 1);
+}
+
+// PASSING PART --
+__device__ int *dPyramid, *dBridge;
+
+template <bool OFFSET, bool INTERIOR>
+void PassIndex::passPanel(std::vector <Region *> &regionals)
+{
+	const int det = 2*OFFSET;
+    static const int minLaunch = cGlob.regionSide/1024 + 1;
+
+    // Last time I put the passing mechanisms in the class.  So... it won't work unless you do that or adjust the scheme.
+    // std::cout << "Begin passPanel - " << cnt << " " << rank << std::endl;
+    // this->ppass(100);
+    // MPI_Barrier(MPI_COMM_WORLD);
+    for (auto r: regionals)
+    {
+        for (auto n: r->neighbors)
+        {
+            if (passMask(n->sidx + det))
+			{
+            	if (n->sameProc) //Only occurs in gpu blocks.
+            	{
+					if (INTERIOR){
+                	passGPU <2, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, dBridge, n->sidx);
+					}
+                    else
+                    {
+					passGPU <2, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, dPyramid, n->sidx);
+					}
+            	}
+            	else
+            	{
+                	if (r->self.gpu)
+               		{
+                        if (INTERIOR){
+                	        passGPU <1, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, dBridge, n->sidx);
+					    } 
+                        else 
+                        {
+					        passGPU <1, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, dPyramid, n->sidx);
+					    }
+                    	passGPU <1, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, dPyramid, n->sidx);
+                    	r->gpuBufCopy(1, n->sidx);
+                	}
+                	else
+                	{
+                    	passCPU <1, OFFSET, INTERIOR> (r->state, r->sendBuffer, n->sidx);
+                    	r->bufMessage(1, n->sidx);
+					}
+				}
+			}
+			else
+			{
+                // std::cout << "START  RECV rank - " << rank << " " << n->id.owner << " dir " << n->sidx << " " << cnt << " | (" << r->self.globalx <<  ", " << r->self.globaly << ") <- (" << n->id.globalx << ", " << n->id.globaly << ") at - " << __LINE__ << std::endl;
+                if (r->self.gpu)
                 {
-                    splitDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
+                    r->gpuBufCopy(0, n->sidx);
+                        if (INTERIOR){
+                	        passGPU <0, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, dBridge, n->sidx);
+					    } 
+                        else 
+                        {
+					        passGPU <0, OFFSET, INTERIOR> <<< minLaunch, cGlob.regionSide >>> (r->dState, r->dSend, dPyramid, n->sidx);
+					    }
                 }
                 else
                 {
-                    wholeDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
-                }
-            }
-
-            passSwept(state[0] + xc, state[0], tmine, 1);
-
-            tmine += cGlob.ht;
-            t_eq = cGlob.dt * (tmine/NSTEPS);
-            if (!ranks[1]) state[0][0] = bound[0];
-            if (ranks[1]==lastproc) state[0][xcp] = bound[1];
-
-            if (t_eq > twrite)
-            {
-                for (int k=0; k<cGlob.cBks; k++)
-                {
-                    downTriangleCPU(state[0] + k*cGlob.tpb, tmine);
-                }
-
-                // Increment Counter and timestep
-                tmine += cGlob.ht;
-                t_eq = cGlob.dt * (tmine/NSTEPS);
-
-                writeOut(state, t_eq);
-
-                for (int k=0; k<cGlob.cBks; k++)
-                {
-                    upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
-                }
-
-                passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
-
-                // ------------ Step Forward ------------ //
-                // ------------ SPLIT ------------ //
-
-                for (int k=0; k<(cGlob.cBks); k++)
-                {
-                    if ((ranks[1] == lastproc) && (k == bkL))
-                    {
-                        splitDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
-                    }
-                    else
-                    {
-                        wholeDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
-                    }
-                }
-
-                // passSwept(&putRe[0], &getRe[0], tmine+1, 1);
-                passSwept(state[0] + xc, state[0], tmine+1, 1);
-
-                // Increment Counter and timestep
-                tmine += cGlob.ht;
-                t_eq = cGlob.dt * (tmine/NSTEPS);
-                twrite += cGlob.freq;
-                if (!ranks[1]) state[0][0] = bound[0];
-                if (ranks[1]==lastproc) state[0][xcp] = bound[1];
-            }
-        }
-        for (int k=0; k<cGlob.cBks; k++)
-        {
-            downTriangleCPU(state[0] + k*cGlob.tpb, tmine);
-        }
-        // Increment Counter and timestep
-        tmine += cGlob.ht;
-        t_eq = cGlob.dt * (tmine/NSTEPS);
+                    r->bufMessage(0, n->sidx);
+                    passCPU <0, OFFSET, INTERIOR> (r->recvBuffer, r->state, n->sidx);
+                } // End gpu vs cpu receiver choice.
+            }     // End mask over neighbors already swapped.
+		}
+	}
+    for (auto r: regionals)
+    {
+        MPI_Waitall(r->reqvec.size(), &r->reqvec[0], &r->statvec[0]);
+		r->reqvec.clear();
+		r->statvec.clear();
     }
+    // std::cout << "END passPanel - " << cnt << " " << rank << std::endl;
+    // this->ppass(100);
 
-    *tstep = tmine;
-    //atomicWrite(timeit.typ, timeit.times);
-    return t_eq;
+
+    // std::cout << cnt << " Enter a Message about ska: " << std::endl;
+    // std::cin >> rudy;
+
+    // MPI_Barrier(MPI_COMM_WORLD);
+    // if (!rudy) {
+    //     endMPI();
+    //     exit(0);
+    // }
+
+    cnt++;
+}
+
+
+int smemsize()
+{
+    int dev;
+    cudaGetDevice(&dev);
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, dev);
+    return deviceProp.sharedMemPerBlock;
+}
+
+void sweptWrapper(std::vector <Region *> &regionals)
+{
+    if (!rank) std::cout << std::boolalpha << " - SWEPT Decomposition - " << nprocs << std::endl;
+
+    const int gpuRegions = cGlob.hasGpu * regionals.size();
+    states **regionSelector;
+    int bigBuffer = (cGlob.regionSide * (cGlob.regionSide + 2)) / 4 + cGlob.regionBase;
+    for (auto r: regionals) r->makeBuffers(bigBuffer, 2);
+    dim3 tdim(cGlob.tpbx,cGlob.tpby);
+    const int minLaunch = cGlob.regionSide/1024 + 1;
+    int stepNow = regionals[0]->tStep;
+    // if (!rank) std::cout << "Made it swept0 " << rank << " " << __LINE__ << std::endl;
+
+    size_t smem                 = smemsize();
+    int nSmem                   = smem/sizeof(states);
+    hSweptConst.rBase           = regionals[0]->fullSide;
+    hSweptConst.sideSmem        = (std::sqrt(nSmem)/2) * 2;
+	int shareCoord				= (cGlob.regionBase - hSweptConst.sideSmem)/2;
+    smem                        = hSweptConst.sideSmem * hSweptConst.sideSmem * sizeof(states);
+    hSweptConst.splitOffset     = cGlob.ht * (hSweptConst.rBase + 1);
+    hSweptConst.vBridgeOffset   = hSweptConst.rBase * cGlob.htp + 1;
+    hSweptConst.hBridgeOffset   = hSweptConst.rBase + cGlob.htp;
+    int sharedCoord             = (cGlob.regionSide - hSweptConst.sideSmem)/2;
+    hSweptConst.sharedOffset    = sharedCoord * (hSweptConst.rBase + 1);
+
+    // std::cout << "Made it swept1 " << rank << " " << __LINE__ << std::endl;
+    PassIndex pidx(cGlob.regionSide, hSweptConst.rBase, cGlob.hasGpu);
+    hSweptConst.nPass = pidx.nPass;
+    cudaMalloc((void **)& dPyramid, pidx.sizePass);
+    cudaMalloc((void **)& dBridge, pidx.sizePass);
+    cudaMemcpy(dPyramid, &pidx.pyramid, pidx.sizePass, cudaMemcpyHostToDevice);
+    cudaMemcpy(dBridge, &pidx.bridge, pidx.sizePass, cudaMemcpyHostToDevice);
+    //if(rank==1) pidx.plotPass();
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (gpuRegions)
+    {
+        cudaMemcpyToSymbol(dSweptConst, &hSweptConst, sizeof(sweptConst));
+        cudaMalloc((void **) &regionSelector, sizeof(states *) * gpuRegions);
+        for (int i=0; i<gpuRegions; i++)
+        {
+            setgpuRegion <<< 1, 1 >>> (regionSelector, regionals[i]->dState, i);
+        }
+    }
+    stepNow = regionals[0]->tStep;
+    // std::cout << "Made it swept2 " << rank << " " << __LINE__ << std::endl;
+    // -----  UP_PYRAMID -------
+
+    if (gpuRegions)     wholeOctahedron <false, 1> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
+    else                wholeOctahedronCPU <false, 1> (regionals[0]->state, stepNow);
+    cudaKernelCheck(cGlob.hasGpu);
+
+    // ----- OFFSET (SPLIT) OCTAHEDRON -------
+    MPI_Barrier(MPI_COMM_WORLD);
+    pidx.passPanel <false, false> (regionals);
+
+    // Then BRIDGES NE - .
+    if (gpuRegions)     bridges <false> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
+    else                bridgesCPU <false> (regionals[0]->state, stepNow);
+
+    pidx.passPanel <false, true> (regionals);
+    // std::cout << "Made it swept " << rank << " " << __LINE__ << std::endl;
+
+    if (gpuRegions)     wholeOctahedron <true, 2> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
+    else                wholeOctahedronCPU <true, 2> (regionals[0]->state, stepNow);
+    // std::cout << "Made it swept " << rank << " " << __LINE__ << std::endl;
+    cudaKernelCheck(cGlob.hasGpu);
+
+    for (auto r: regionals) r->incrementTime(false);
+
+    while (regionals[0]->tStamp < cGlob.tf)
+    {
+        // ----- HOME SLOT (WHOLE) OCTAHEDRON -------
+        // std::cout << "TIME: " <<  regionals[0]->tStamp << " RANK: " << rank << " " << __LINE__ << std::endl;
+
+        pidx.passPanel<true, false> (regionals);
+
+        // Then BRIDGES SW - .
+        if (gpuRegions)     bridges <true> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
+        else                bridgesCPU <true> (regionals[0]->state, stepNow);
+
+	    pidx.passPanel<true, true> (regionals);
+
+        if (gpuRegions)     wholeOctahedron <false, 2> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
+        else                wholeOctahedronCPU <false, 2> (regionals[0]->state, stepNow);
+
+        for (auto r: regionals) r->incrementTime(false);
+        // ----- OFFSET (SPLIT) OCTAHEDRON -------
+
+        pidx.passPanel <false, false> (regionals);
+    
+        // Then BRIDGES NE - .
+        if (gpuRegions)     bridges <false> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
+        else                bridgesCPU <false> (regionals[0]->state, stepNow);
+
+        pidx.passPanel <false, true> (regionals);
+
+        if (gpuRegions)     wholeOctahedron <true, 2> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
+        else                wholeOctahedronCPU <true, 2> (regionals[0]->state, stepNow);
+
+        for (auto r: regionals) r->incrementTime();
+
+    } // End Loop over all timesteps.
+
+    // -- DOWN PYRAMID --
+    pidx.passPanel <true, false> (regionals);
+
+    if (gpuRegions)     bridges <true> <<< gpuRegions, tdim, smem >>> (regionSelector, stepNow);
+    else                bridgesCPU <true> (regionals[0]->state, stepNow);
+    
+    pidx.passPanel <true, true> (regionals);
+
+    if (gpuRegions)     wholeOctahedron <false, 1> <<< gpuRegions, tdim, smem >>>(regionSelector, stepNow);
+    else                wholeOctahedronCPU <false, 1> (regionals[0]->state, stepNow);
+
+
+    std::cout << "ITS OVER ---- TIME: " <<  regionals[0]->tStamp << " RANK: " << rank << " " << __LINE__ << std::endl;
+    for (auto r: regionals) r->incrementTime(false); 
+
+    if (gpuRegions) cudaFree(regionSelector);
 }

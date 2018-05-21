@@ -1,61 +1,322 @@
-/*
----------------------------
-    DECOMP CORE
----------------------------
+/**
+    DECOMP CORE And other things.
 */
 
 #include <numeric>
+#include <array>
+#include <cuda.h>
+#include <cuda_runtime.h>
 #include "gpuDetector.h"
-
-#define TAGS(x) x & 32767
 
 /*
     Globals needed to execute simulation.  Nothing here is specific to an individual equation
 */
 
+__global__ void
+setgpuRegion(states **rdouble, states *rmember, int i)
+{
+    const int gid = blockDim.x * blockIdx.x + threadIdx.x; 
+    if (gid>1) return;
+
+    rdouble[i] = (states *)(&rmember[0]);
+}
+
+void endMPI();
+
 // MPI process properties
 MPI_Datatype struct_type;
-MPI_Request req[2];
-MPI_Status stat[2];
-int lastproc, nprocs, ranks[3];
+int lastproc, nprocs, rank;
 
-struct globalism {
-// Topology
-    int nGpu, nX;
-    int xg, xcpu;
-    int xStart;
-    int nWrite;
-    int hasGpu;
-    double gpuA;
+struct Globalism
+{
+    // Topology || Affinity is int now.
+    int nGpu, nWrite, hasGpu, procRegions, gpuA;
+    std::string shapeRequest;
 
-// Geometry
-	int szState;
-    int tpb, tpbp, base;
-    int cBks, gBks;
+    // Geometry-No second word is in overall grid.
+    //How Many Regions Per
+    int tpbx, tpby;
+    int nRegions, xRegions, yRegions;
+    // How many points per
+    int nPoints, xPoints, yPoints;
+    int regionPoints, regionSide, regionBase;
     int ht, htm, htp;
+    int szState;
 
-// Iterator
-    double tf, freq, dt, dx, lx;
-    bool bCond[2] = {true, true};
+    // Iterator
+    double tf, freq, dt, dx, dy, lx, ly;
+
+} cGlob;
+// sudo sysctl -w kernel.core_pattern=/tmp/core-%e.%p.%h.%t
+struct Address
+{
+    int owner, gpu, localIdx, globalx, globaly;
 };
 
-std::string fname = "GranularTime.csv";
+struct Neighbor
+{
+    const Address id;
+    const short sidx, ridx;
+    const bool sameProc;
+    Neighbor(Address addr, short sidx): id(addr), sidx(sidx), ridx((sidx + 2) % 4), sameProc(rank == id.owner) {}
+    void printer()
+    {   
+        std::string dir[] = {"SOUTH", "WEST", "NORTH", "EAST"};
+        printf("%d, %d, %d, %d, %d, %s\n", id.owner, id.localIdx, id.gpu, id.globalx, id.globaly, dir[sidx].c_str());
+    }
+};
 
-globalism cGlob;
-jsons inJ;
+typedef std::array <Neighbor *, 4> stencil;
 jsons solution;
+struct Region
+{
+    const Address self;
+    const stencil neighbors;
+    int xsw, ysw;
+    int regionAlloc, fullSide, copyBytes, bufAlloc, bufAmt;
+    int tStep, stepsPerCycle;
+    double tStamp, tWrite;
+    std::string xstr, ystr, tstr, spath, scheme;
 
-//Always prepared for periodic boundary conditions.
+    states *state;
+    states **stateRows; // Convenience accessor.
+    // GPU STUFF
+    states *dState;
+    states *sendBuffer, *recvBuffer, *dSend, *dRecv;
+    cudaStream_t stream;
+	MPI_Request req[4];
+	MPI_Status stat[4];
+	std::vector<MPI_Request> reqvec;
+	std::vector<MPI_Status> statvec;
+
+    Region(Address stencil[5])
+    : self(stencil[0]), neighbors(meetNeighbors(&stencil[1])), tStep(0), tStamp(0.0), tWrite(cGlob.freq)
+    {
+        xsw         = cGlob.regionSide * self.globalx;
+        ysw         = cGlob.regionSide * self.globaly;
+        sendBuffer  = nullptr;
+        recvBuffer  = nullptr;
+        dState      = nullptr;
+        dSend       = nullptr;
+        dRecv       = nullptr;
+    }
+
+    ~Region()
+    {
+        #ifndef NOS
+            if(self.gpu) gpuCopy(true);
+            solutionOutput();
+            writeSolution();
+        #endif
+
+        if (self.gpu)
+        {
+            cudaStreamDestroy(stream);
+            cudaFree(dState);
+        }
+        if (sendBuffer)
+        {
+            delete[] sendBuffer;
+            delete[] recvBuffer;
+
+            if (self.gpu)
+            {
+                cudaFree(dSend);
+                cudaFree(dRecv);
+            }
+        }
+        delete[] stateRows;
+        delete[] state;
+
+        for (int i=0; i<4; i++)  delete neighbors[i];
+    }
+
+    inline void makeBuffers(int nPts, int nSides)
+    {
+        bufAmt = nPts; // For MPI_send-recv.
+        bufAlloc = nPts*cGlob.szState;
+        sendBuffer = new states[nSides*nPts];
+        recvBuffer = new states[nSides*nPts];
+
+        if (self.gpu)
+        {
+            cudaMalloc((void **) &dSend, nSides * bufAlloc);
+            cudaMalloc((void **) &dRecv, nSides * bufAlloc);
+        }
+    }
+
+    stencil meetNeighbors(Address *addr)
+    {
+        stencil n;
+        for(int k=0; k<4; k++)
+        {
+            n[k] = new Neighbor(addr[k], k);
+        }
+        return n;
+    }
+
+    inline void incrementTime(bool writeNow=true)
+    {
+        tStep += stepsPerCycle; 
+        tStamp = (double)tStep * cGlob.dt; 
+
+        if (!writeNow) return;
+		#ifndef NOS
+        if (tStamp > tWrite)
+        {
+            if (self.gpu) gpuCopy(true);
+            solutionOutput();
+            tWrite += cGlob.freq;
+        }
+		#endif
+    }
+
+    void makeGPUState()
+    {
+        cudaStreamCreate(&stream);
+        cudaMalloc((void **) &dState, regionAlloc);
+        gpuCopy(false);
+    }
+
+    // True is Down to Host.  False is Up to Device.
+    inline void gpuCopy(int dir)
+    {   
+        if (!self.gpu) return; //Guards against unauthorized access. 
+
+        if (dir)
+        {
+            cudaMemcpyAsync(state, dState, regionAlloc, cudaMemcpyDeviceToHost, stream);
+        }
+        else
+        {
+            cudaMemcpyAsync(dState, state, regionAlloc, cudaMemcpyHostToDevice, stream);
+        }
+    }
+
+    inline void bufMessage(int dir, int nIdx)
+    {
+        int offs = nIdx*bufAmt;
+        int tagg;
+
+        if (dir)
+        {
+            tagg = self.owner + self.localIdx + neighbors[nIdx]->id.localIdx + 5;
+            MPI_Isend(sendBuffer+offs, bufAmt, struct_type, 
+                        neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
+                        &req[nIdx]);
+        }
+        else
+        {
+            tagg = neighbors[nIdx]->id.owner + neighbors[nIdx]->id.localIdx + self.localIdx + 5;
+            MPI_Irecv(recvBuffer+offs, bufAmt, struct_type, 
+                        neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
+                        &req[nIdx]);
+
+            if (!scheme.compare("C")) MPI_Wait(&req[nIdx], &stat[nIdx]);
+        }
+	reqvec.push_back(req[nIdx]);
+	statvec.push_back(stat[nIdx]);
+    }
+
+    inline void gpuBufCopy(int dir, int nIdx)
+    {
+        if (!self.gpu) return; //Guards against unauthorized access. 
+        int offs = nIdx*bufAmt;
+
+        if (dir) 
+        {
+            cudaMemcpy(sendBuffer+offs, dSend+offs, bufAlloc, cudaMemcpyDeviceToHost);
+            bufMessage(dir, nIdx);
+        }
+        else
+        {   
+            bufMessage(dir, nIdx);
+            cudaMemcpy(dRecv+offs, recvBuffer+offs, bufAlloc, cudaMemcpyHostToDevice);
+        }
+    }
+
+    void initializeState(std::string algo, std::string pth)
+    {
+        spath = pth + "/s" + fspec + "_" + std::to_string(rank) + ".json";
+        scheme = algo;
+        std::cout << rank << " "+scheme << std::endl;
+
+        if (!scheme.compare("S"))
+        {
+            fullSide        = (3 * cGlob.regionBase)/2 - 1;
+            stepsPerCycle   = cGlob.ht/NSTEPS;
+        }
+        else
+        {
+            fullSide        = cGlob.regionBase;
+            stepsPerCycle   = 1;
+        }
+
+        regionAlloc = fullSide * fullSide * cGlob.szState;
+        copyBytes   = cGlob.regionPoints * cGlob.szState;
+
+        stateRows   = new states*[fullSide];
+        state       = new states [fullSide*fullSide];
+
+        if (self.gpu)   makeGPUState();
+
+        for (int j=0; j<fullSide; j++)
+        {
+            stateRows[j] = (states *) state+(j*fullSide); 
+        }
+        for(int k=0; k<cGlob.regionSide+2; k++)
+        {   
+            for (int i=0; i<cGlob.regionSide+2; i++)
+            {   
+                initState(&stateRows[k][i], i+xsw-1, k+ysw-1);
+            }
+        }
+
+        solutionOutput();
+
+        tStep   += 2;
+        tStamp  = (double)tStep * cGlob.dt;
+    }
+
+    void solutionOutput()
+    {
+        
+        tstr = std::to_string(tStamp);
+
+        for(int k=0; k<cGlob.regionSide; k++)
+        {   
+            ystr = std::to_string(cGlob.dy * (k+ysw));
+
+            for (int i=0; i<cGlob.regionSide; i++)
+            {   
+                xstr = std::to_string(cGlob.dx * (i+xsw)); 
+
+                for (int j=0; j<NVARS; j++)
+                {
+                    solution[outVars[j]][tstr][ystr][xstr] = printout(&stateRows[k][i], j);
+                }
+            }
+        }
+    }
+
+    void writeSolution()
+    {
+        std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
+        //if (!rank) solution["meta"] = inJ;
+        soljson << solution;
+        soljson.close();
+    }
+};
+
+jsons inJ;
+
 void makeMPI(int argc, char** argv)
 {
     MPI_Init(&argc, &argv);
     mpi_type(&struct_type);
-	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
-	cGlob.tpb = 128;
-    ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
-    ranks[2] = (ranks[1]+1) % nprocs;
 }
 
 // I think this needs a try except for string inputs.
@@ -67,209 +328,161 @@ void parseArgs(int argc, char *argv[])
         for (int k=4; k<argc; k+=2)
         {
             inarg = argv[k];
-			inJ[inarg] = atof(argv[k+1]);
+            try{
+			    inJ[inarg] = atof(argv[k+1]);
+            }
+            catch(...){
+                inJ[inarg] = argv[k+1];
+            }
         }
     }
 }
 
-// gpuA = gBks/cBks
+void setRegion(std::vector <Region *> &regionals)
+{
+    int localRegions = 1 + cGlob.hasGpu*(cGlob.gpuA - 1);
+    int regionMap[nprocs];
+    MPI_Allgather(&localRegions, 1, MPI_INT, &regionMap[0], 1, MPI_INT, MPI_COMM_WORLD);
+    int tregion = 0;
+    Address gridLook[cGlob.yRegions][cGlob.xRegions];
+    int k, i;
+    int xLoc, yLoc;
+
+    for (k = 0; k<nprocs; k++)
+    {
+        for (i = 0; i<regionMap[k]; i++)
+        {
+            xLoc = tregion%cGlob.xRegions;
+            yLoc = tregion/cGlob.xRegions;
+
+            gridLook[yLoc][xLoc] = {k, cGlob.hasGpu, i, xLoc, yLoc};
+            tregion++;
+        }
+    }
+
+    int ii, kk;
+    Address addr[5];
+    for (k = 0; k<cGlob.yRegions; k++)
+    {
+        for (i = 0; i<cGlob.xRegions; i++)
+        {
+            if (gridLook[k][i].owner == rank)
+            {
+                ii = i - 1 + cGlob.xRegions; //MODULO IN OTHER LANGUAGES IS SENSIBLE. 
+                kk = k - 1 + cGlob.yRegions; 
+                addr[0] = gridLook[k][i];
+                addr[1] = gridLook[kk%cGlob.yRegions][i];
+                addr[2] = gridLook[k][ii%cGlob.xRegions];
+                addr[3] = gridLook[(k+1)%cGlob.yRegions][i];
+                addr[4] = gridLook[k][(i+1)%cGlob.xRegions];
+                regionals.push_back(new Region(addr));
+            }  
+                
+        }
+    }
+}
+
+double tolerance(std::string shape)
+{
+    if      (shape == "Perfect")    return 1.05;
+    else if (shape == "Strict")     return 1.5;
+    else if (shape == "Moderate")   return 4.0;
+    else if (shape == "Loose")      return 20.0;
+    else                            return 1.5;
+}
 
 void initArgs()
 {
-	cGlob.gpuA = inJ["gpuA"].asDouble();
-	int ranker = ranks[1];
-	int sz = nprocs;
-	if(!ranks[1]) t0 = MPI_Wtime();
-	if (!cGlob.gpuA)
-    {
-        cGlob.hasGpu = 0;
-        cGlob.nGpu = 0;
-    }
-    else
-    {
-        cGlob.hasGpu = detector(ranker, sz);
-        MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    }
-	if(!ranks[1])
-	{
-		tSelect = MPI_Wtime()-t0;
-		cout << "GPU section time (s): " << tSelect << endl;
-	}
+    int dimFinder[2];
 
-    cGlob.lx = inJ["lx"].asDouble();
-    cGlob.szState = sizeof(states);
-    cGlob.tpb = inJ["tpb"].asInt();
-
-    cGlob.dt = inJ["dt"].asDouble();
-    cGlob.tf = inJ["tf"].asDouble();
-    cGlob.freq = inJ["freq"].asDouble();
+    //VALUES THAT NEED NO INTROSPECTION
+    cGlob.dt        = inJ["dt"].asDouble();
+    cGlob.tf        = inJ["tf"].asDouble();
+    cGlob.freq      = inJ["freq"].asDouble();
+    cGlob.lx        = inJ["lx"].asDouble();
+    cGlob.ly        = inJ["ly"].asDouble();
+    cGlob.szState   = sizeof(states);
+    cGlob.nPoints   = inJ["nPts"].asInt();
 
     if (!cGlob.freq) cGlob.freq = cGlob.tf*2.0;
 
-    if (inJ["nX"].asInt() == 0)
+    // IF TPB IS NOT DIVISIBLE BY 32 PICK CLOSEST VALUE THAT IS.
+    int tpbReq = inJ["tpb"].asInt();    
+    cGlob.tpbx = 32;
+    cGlob.tpby = tpbReq/cGlob.tpbx;
+
+    // FIND NUMBER OF GPUS AVAILABLE.
+	cGlob.gpuA  = inJ["gpuA"].asInt(); // AFFINITY
+	int ranker  = rank;
+	int sz      = nprocs;
+
+	if (!cGlob.gpuA)
     {
-        if (inJ["cBks"].asInt() == 0)
-        {
-            cGlob.gBks = inJ["gBks"].asInt();
-            cGlob.cBks = cGlob.gBks/cGlob.gpuA;
-        }
-        else
-        {
-            cGlob.cBks = inJ["cBks"].asInt();
-            cGlob.gBks = cGlob.cBks*cGlob.gpuA;
-        }
-        if (cGlob.cBks<2) cGlob.cBks = 2; // Floor for cpu blocks per proc.
-        if (cGlob.cBks & 1) cGlob.cBks++;
+        cGlob.hasGpu = 0;
+        cGlob.nGpu   = 0;
     }
     else
     {
-        cGlob.nX = inJ["nX"].asInt();
-        cGlob.cBks = round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
-        if (cGlob.cBks & 1) cGlob.cBks++;
-        cGlob.gBks = cGlob.gpuA*cGlob.cBks;
+        cGlob.hasGpu = detector(ranker, sz, 0);
+        MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+        sz -= cGlob.nGpu;
     }
-    // Need to reset this after figuring out partitions.
 
-    cGlob.nX = cGlob.tpb * (nprocs * cGlob.cBks + cGlob.nGpu * cGlob.gBks);
+    cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
+    factor(cGlob.nRegions, &dimFinder[0]);
+    double tol = tolerance(inJ["Shape"].asString());
+    // How Similar should the dimensions be?
 
-    cGlob.base = cGlob.tpb+2;
-    cGlob.tpbp = cGlob.tpb+1;
-    cGlob.ht = cGlob.tpb/2;
-    cGlob.htm = cGlob.ht-1;
-    cGlob.htp = cGlob.ht+1;
+    while (((double)dimFinder[1])/dimFinder[0] > tol)
+    {
+        if (!cGlob.nGpu && dimFinder[0] == 1)
+        {
+            std::cout << "You provided a prime number of processes and no GPU capability. That's just silly and you absolutely cannot do it because we must be able to form a rectangle from the number of processes on each device.  Retry!" << std::endl;
+            endMPI();
+            exit(1);
+        }
+
+        cGlob.gpuA++;
+        cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
+        factor(cGlob.nRegions, &dimFinder[0]);
+    }
+
+    cGlob.xRegions = dimFinder[0]; 
+    cGlob.yRegions = dimFinder[1];
+    
+    // Regions must be square because they are the units the pyramids and bridges are built on.
+    cGlob.regionPoints  = cGlob.nPoints/cGlob.nRegions;
+    cGlob.regionSide    = std::sqrt(cGlob.regionPoints);
+    cGlob.regionSide    = 32 * (cGlob.regionSide / 32 + 1); 
+    cGlob.regionPoints  = cGlob.regionSide * cGlob.regionSide;
+    cGlob.regionBase    = cGlob.regionSide + 2;
+
+    cGlob.nPoints = cGlob.regionPoints * cGlob.nRegions;
+    cGlob.xPoints = cGlob.regionSide * cGlob.xRegions;
+    cGlob.yPoints = cGlob.regionSide * cGlob.yRegions;
+    
+    inJ["nPts"]     = cGlob.nPoints;
+    inJ["nX"]       = cGlob.xPoints;
+    inJ["nY"]       = cGlob.yPoints;
+    inJ["rSide"]    = cGlob.regionSide;
+    inJ["rBase"]    = cGlob.regionBase;
+
+
+    cGlob.ht    = cGlob.regionSide/2;
+    cGlob.htm   = cGlob.ht-1;
+    cGlob.htp   = cGlob.ht+1;
+
     // Derived quantities
-    cGlob.xcpu = cGlob.cBks * cGlob.tpb;
-    cGlob.xg = cGlob.gBks * cGlob.tpb;
 
-    // inJ["gpuAA"] = (double)cGlob.gBks/(double)cGlob.cBks; // Adjusted gpuA.
-    inJ["cBks"] = cGlob.cBks;
-    inJ["gBks"] = cGlob.gBks;
-    inJ["nX"] = cGlob.nX;
-    inJ["xGpu"] = cGlob.xg;
-    inJ["xCpu"] = cGlob.xcpu;
-
-    // Different schemes!
-    cGlob.dx = cGlob.lx/(double)cGlob.nX; // Spatial step
-    cGlob.nWrite = cGlob.tf/cGlob.freq + 2;
-    inJ["dx"] = cGlob.dx; // To send back to equation folder.  It may need it, it may not.
-
-    equationSpecificArgs(inJ);
-
-    // Swept Always Passes!
-
-    // If BCTYPE == "Dirichlet"
-    if (ranks[1] == 0) cGlob.bCond[0] = false;
-    if (ranks[1] == lastproc) cGlob.bCond[1] = false;
-    // If BCTYPE == "Periodic"
-        // Don't do anything.
-    if (!ranks[1])  cout << "Initialized Arguments" << endl;
-
-}
-
-void solutionOutput(states *outState, double tstamp, int idx, int strt)
-{
-    std::string tsts = std::to_string(tstamp);
-    double xpt = indexer(cGlob.dx, idx, strt);
-    std::string xpts = std::to_string(xpt);
-    for (int k=0; k<NVARS; k++)
-    {
-        solution[outVars[k]][tsts][xpts] = printout(outState + idx, k);
-    }
-}
-
-void writeOut(states **outState, double tstamp)
-{
-    #ifdef NOS
-        return; // Prevents write out in performance experiments so they don't take all day.
-    #endif
-    static const int ax[2] = {cGlob.xcpu/2, cGlob.xg};
-    static const int bx[3] = {cGlob.xStart, cGlob.xStart+ax[0], cGlob.xStart+ax[0]+ax[1]};
-    int k;
-
-    if (cGlob.hasGpu)
-    {
-        for (int i=0; i<3; i++)
-        {
-            for(k=1; k<=ax[i&1]; k++)
-            {
-                solutionOutput(outState[i], tstamp, k, bx[i]);
-            }
-        }
-    }
-    else
-    {
-        for(k=1; k<=cGlob.xcpu; k++)
-        {
-            solutionOutput(outState[0], tstamp, k, cGlob.xStart);
-        }
-    }
-}
-
-
-struct cudaTime
-{
-    std::vector<double> times;
-    cudaEvent_t start, stop;
-	float ti;
-    std::string typ = "GPU";
-
-    cudaTime() {
-        cudaEventCreate( &start );
-	    cudaEventCreate( &stop );
-    }
-    ~cudaTime()
-    {
-        cudaEventDestroy( start );
-	    cudaEventDestroy( stop );
-    }
-
-    void tinit(){ cudaEventRecord( start, 0); }
-
-    void tfinal() { 
-        cudaEventRecord(stop, 0);
-	    cudaEventSynchronize(stop);
-	    cudaEventElapsedTime( &ti, start, stop);
-        times.push_back(ti); }
-
-    int avgt() { 
-        return std::accumulate(times.begin(), times.end(), 0)/ times.size();
-        }
-};
-
-struct mpiTime
-{
-    std::vector<double> times;
-    double ti;
-    std::string typ = "CPU";
-
-    void tinit(){ ti = MPI_Wtime(); }
-
-    void tfinal() { times.push_back((MPI_Wtime()-ti)*1000.0); }
-
-    int avgt() { 
-        return std::accumulate(times.begin(), times.end(), 0)/ (float)times.size();
-        }
-};
-
-void atomicWrite(std::string st, std::vector<double> t)
-{
-    FILE *tTemp;
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    for (int k=0; k<nprocs; k++)
-    {
-        if (ranks[1] == k)
-        {
-            tTemp = fopen(fname.c_str(), "a+");
-            fseek(tTemp, 0, SEEK_END);
-            fprintf(tTemp, "\n%d,%s", ranks[1], st.c_str());
-            for (auto i = t.begin(); i != t.end(); ++i)
-            {
-                fprintf(tTemp, ",%4f", *i);
-            }
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
+    cGlob.dx        = ((double) cGlob.lx)/cGlob.xPoints; // Spatial step
+    cGlob.dy        = ((double) cGlob.ly)/cGlob.yPoints; // Spatial step
+    cGlob.nWrite    = cGlob.tf/cGlob.freq + 2;
+    inJ["dx"]       = cGlob.dx; // To send back to equation folder. 
+    inJ["dy"]       = cGlob.dy;
+    
+    HCONST.init(inJ);
+    cudaMemcpyToSymbol(DCONST, &HCONST, sizeof(HCONST));
+    if (!rank)  std::cout << rank <<  " - Initialized Arguments - " << cGlob.nRegions << std::endl;
 }
 
 void endMPI()

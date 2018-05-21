@@ -5,7 +5,9 @@
 */
 
 #include <numeric>
+#include <mpi.h>
 #include "gpuDetector.h"
+#include "json/json.h"
 
 #define TAGS(x) x & 32767
 
@@ -19,7 +21,7 @@ MPI_Request req[2];
 MPI_Status stat[2];
 int lastproc, nprocs, ranks[3];
 
-struct globalism {
+struct Globalism {
 // Topology
     int nGpu, nX;
     int xg, xcpu;
@@ -41,11 +43,11 @@ struct globalism {
 
 std::string fname = "GranularTime.csv";
 
-globalism cGlob;
+Globalism cGlob;
 jsons inJ;
 jsons solution;
 
-//Always prepared for periodic boundary conditions.
+// Always prepared for periodic boundary conditions.
 void makeMPI(int argc, char** argv)
 {
     MPI_Init(&argc, &argv);
@@ -53,7 +55,6 @@ void makeMPI(int argc, char** argv)
 	MPI_Comm_rank(MPI_COMM_WORLD, &ranks[1]);
 	MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     lastproc = nprocs-1;
-	cGlob.tpb = 128;
     ranks[0] = ((ranks[1])>0) ? (ranks[1]-1) : (nprocs-1);
     ranks[2] = (ranks[1]+1) % nprocs;
 }
@@ -66,6 +67,7 @@ void parseArgs(int argc, char *argv[])
         std::string inarg;
         for (int k=4; k<argc; k+=2)
         {
+			// if (!ranks[1]) std::cout << "CL Arg " << ranks[1] << " " << argv[k] << " " << argv[k+1] << std::endl;
             inarg = argv[k];
 			inJ[inarg] = atof(argv[k+1]);
         }
@@ -87,10 +89,9 @@ void initArgs()
     }
     else
     {
-        cGlob.hasGpu = detector(ranker, sz);
+        cGlob.hasGpu = detector(ranker, sz, 1);
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     }
-
 
     cGlob.lx = inJ["lx"].asDouble();
     cGlob.szState = sizeof(states);
@@ -120,7 +121,7 @@ void initArgs()
     else
     {
         cGlob.nX = inJ["nX"].asInt();
-        cGlob.cBks = round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
+        cGlob.cBks = std::round(cGlob.nX/(cGlob.tpb*(nprocs + cGlob.nGpu * cGlob.gpuA)));
         if (cGlob.cBks & 1) cGlob.cBks++;
         cGlob.gBks = cGlob.gpuA*cGlob.cBks;
     }
@@ -158,7 +159,7 @@ void initArgs()
     if (ranks[1] == lastproc) cGlob.bCond[1] = false;
     // If BCTYPE == "Periodic"
         // Don't do anything.
-    if (!ranks[1])  cout << "Initialized Arguments" << endl;
+    if (!ranks[1])  std::cout << "Initialized Arguments" << std::endl << "-------------" << std::endl;
 
 }
 
@@ -201,76 +202,9 @@ void writeOut(states **outState, double tstamp)
     }
 }
 
-
-struct cudaTime
-{
-    std::vector<double> times;
-    cudaEvent_t start, stop;
-	float ti;
-    std::string typ = "GPU";
-
-    cudaTime() {
-        cudaEventCreate( &start );
-	    cudaEventCreate( &stop );
-    }
-    ~cudaTime()
-    {
-        cudaEventDestroy( start );
-	    cudaEventDestroy( stop );
-    }
-
-    void tinit(){ cudaEventRecord( start, 0); }
-
-    void tfinal() { 
-        cudaEventRecord(stop, 0);
-	    cudaEventSynchronize(stop);
-	    cudaEventElapsedTime( &ti, start, stop);
-        times.push_back(ti); }
-
-    int avgt() { 
-        return std::accumulate(times.begin(), times.end(), 0)/ times.size();
-        }
-};
-
-struct mpiTime
-{
-    std::vector<double> times;
-    double ti;
-    std::string typ = "CPU";
-
-    void tinit(){ ti = MPI_Wtime(); }
-
-    void tfinal() { times.push_back((MPI_Wtime()-ti)*1000.0); }
-
-    int avgt() { 
-        return std::accumulate(times.begin(), times.end(), 0)/ (float)times.size();
-        }
-};
-
-void atomicWrite(std::string st, std::vector<double> t)
-{
-    FILE *tTemp;
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    for (int k=0; k<nprocs; k++)
-    {
-        if (ranks[1] == k)
-        {
-            tTemp = fopen(fname.c_str(), "a+");
-            fseek(tTemp, 0, SEEK_END);
-            fprintf(tTemp, "\n%d,%s", ranks[1], st.c_str());
-            for (auto i = t.begin(); i != t.end(); ++i)
-            {
-                fprintf(tTemp, ",%4f", *i);
-            }
-        }
-        MPI_Barrier(MPI_COMM_WORLD);
-    }
-}
-
 void endMPI()
 {
-	MPI_Barrier(MPI_COMM_WORLD);
     MPI_Type_free(&struct_type);
+	MPI_Barrier(MPI_COMM_WORLD);
 	MPI_Finalize();
 }

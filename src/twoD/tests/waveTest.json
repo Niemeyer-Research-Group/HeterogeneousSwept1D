@@ -1,0 +1,14 @@
+{
+    "nPts"  : 5000,
+    "tpb"   : 256,
+    "freq"  : 5,
+    "gpuA"  : 2,
+    "dt"    : 0.01,
+    "lx"    : 1.0,
+    "ly"    : 1.0,
+    "tf"    : 50.0,
+    "cfl"   : 0.5,
+    "IC"    : "GAUSSIAN",
+    "BC"    : "PERIODIC",
+    "Shape" : "Loose"
+}

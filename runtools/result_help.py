@@ -13,11 +13,10 @@ import matplotlib as mpl
 from cycler import cycler
 import json as j
 import pandas as pd
-import palettable.colorbrewer as pal
 import subprocess as sp
 from main_help import *
 
-plt.rc("axes", prop_cycle=cycler("color", pal.qualitative.Dark2_8.mpl_colors))
+plt.set_cmap('viridis')
 
 mpl.rcParams["lines.linewidth"] = 3
 mpl.rcParams["grid.alpha"] = 0.5

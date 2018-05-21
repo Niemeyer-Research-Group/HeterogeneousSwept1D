@@ -12,7 +12,7 @@ typedef std::vector<int> ivec;
 states ssLeft[3];
 states ssRight[3];
 
-__global__ void upTriangle(states *state, int tstep)
+__global__ void upTriangle(states *state, const int tstep)
 {
 	extern __shared__ states sharedstate[];
 
@@ -121,7 +121,6 @@ wholeDiamond(states *state, const int tstep, const int offset)
 		__syncthreads();
 	}
 
-
 	for (k=2; k<=mid; k++)
 	{
 		if (tidx < (base-k) && tidx >= k)
@@ -131,7 +130,6 @@ wholeDiamond(states *state, const int tstep, const int offset)
 		tnow++;
 		__syncthreads();
     }
-
     state[gid + 1] = sharedstate[tidx];
 }
 
@@ -266,7 +264,9 @@ void passSwept(states *passer, states *getter, int tstep, int turn)
 double sweptWrapper(states **state,  int *tstep)
 {
 	if (!ranks[1]) cout << "SWEPT Decomposition " << cGlob.tpb << endl;
-
+	FILE *diagDump;
+	std::string fname = "edge/edgeWrite_" + std::to_string(ranks[1]) + ".csv";
+	diagDump = fopen(fname.c_str(), "w+");
     const int bkL = cGlob.cBks - 1;
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
@@ -300,9 +300,13 @@ double sweptWrapper(states **state,  int *tstep)
         cudaMalloc((void **)&dState, gpusize);
         cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
 
-        /*
-        -- DOWN MUST FOLLOW A SPLIT AND UP CANNOT BE IN WHILE LOOP SO DO UP AND FIRST SPLIT OUTSIDE OF LOOP THEN LOOP CAN BE WITH WHOLE - DIAMOND - CHECK DOWN.
+        /* RULES
+        -- DOWN MUST FOLLOW A SPLIT 
+        -- UP CANNOT BE IN WHILE LOOP 
+        -||- ACTION: DO UP AND FIRST SPLIT OUTSIDE OF LOOP 
+        -||- THEN LOOP CAN BEGIN WITH WHOLE DIAMOND.
         */
+
         // ------------ Step Forward ------------ //
         // ------------ UP ------------ //
 
@@ -376,14 +380,8 @@ double sweptWrapper(states **state,  int *tstep)
             cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
             cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
 
-            // for (int k=0; k<cGlob.htp; k++) putSt[k] = state[0][k+1];
-            // unstructify(&putSt[0], &putRe[0]);
-
-            // passSwept(&putRe[0], &getRe[0], tmine, 0);
             passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
 
-            // restructify(&getSt[0], &getRe[0]);
-            // for (int k=0; k<cGlob.htp; k++) state[2][k+xcp] = getSt[k];
 
             // Increment Counter and timestep
             tmine += cGlob.ht;
@@ -410,10 +408,8 @@ double sweptWrapper(states **state,  int *tstep)
 
             // ------------ Pass Edges ------------ //
             // -- BACK TO FRONT -- //
-
             cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
             cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-
 
             passSwept(state[2] + xc, state[0], tmine, 1);
 
@@ -515,12 +511,14 @@ double sweptWrapper(states **state,  int *tstep)
     else
     {
         const int xc = cGlob.xcpu, xcp = xc+1;
-        
         for (int k=0; k<cGlob.cBks; k++)
         {
             upTriangleCPU(state[0] + k*cGlob.tpb, tmine);
         }
-  
+
+        // for (int i=0; i<xcp; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+        // fprintf(diagDump, "\n");
+
         passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
 
         //Split
@@ -536,6 +534,8 @@ double sweptWrapper(states **state,  int *tstep)
             }
         }
 
+        // for (int i=cGlob.ht; i<xcp+cGlob.ht; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+        // fprintf(diagDump, "\n");
         // -- BACK TO FRONT -- //
 
         passSwept(state[0] + xc, state[0], tmine+1, 1);
@@ -551,6 +551,9 @@ double sweptWrapper(states **state,  int *tstep)
             {
                 wholeDiamondCPU(state[0] + k*cGlob.tpb, tmine);
             }
+
+			// for (int i=1; i<xcp; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+            // fprintf(diagDump, "\n");
 
             passSwept(state[0] + 1, state[0] + xcp, tmine, 0);
 
@@ -568,6 +571,9 @@ double sweptWrapper(states **state,  int *tstep)
                     wholeDiamondCPU(state[0] + cGlob.ht + k*cGlob.tpb, tmine);
                 }
             }
+
+			// for (int i=cGlob.ht; i<xcp+cGlob.ht; i++) fprintf(diagDump,"%.5f:%.5f,", state[0][i].T[0], state[0][i].T[1]);
+			// fprintf(diagDump, "\n");
 
             passSwept(state[0] + xc, state[0], tmine, 1);
 
@@ -630,7 +636,16 @@ double sweptWrapper(states **state,  int *tstep)
         tmine += cGlob.ht;
         t_eq = cGlob.dt * (tmine/NSTEPS);
     }
+	
+	// if (!ranks[1]){
+	// 	FILE *metaFile;
+	// 	metaFile = fopen("edge/RunDetails.txt", "w+");
+	// 	fprintf(metaFile, "%d,%.5f,%.5f,%.5f\n", cGlob.tpb, cGlob.lx, cGlob.dx, cGlob.dt);
+	// 	fclose(metaFile);
+	// }
 
+
+	// fclose(diagDump);
     *tstep = tmine;
     //atomicWrite(timeit.typ, timeit.times);
     return t_eq;

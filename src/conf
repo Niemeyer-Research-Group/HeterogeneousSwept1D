@@ -1,6 +1,0 @@
-NVCC:=$(CUDAPATH)/bin/nvcc
-CUDAFLAGS:=-gencode arch=compute_35,code=sm_35 -restrict -w --ptxas-options=-v
-CFLAGS:=-O3 --std=c++11
-IPATH:=-I$(MPIPATH)/include -I$(CUDAPATH)/include 
-LPATH:=$(MPIPATH)/lib $(INTELLIB) $(CUDAPATH)/lib64
-LIBS=-lm -lmpich -lopa -lmpl -lrt -lpthread

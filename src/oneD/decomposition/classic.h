@@ -158,7 +158,7 @@ double classicWrapper(states **state, int *tstep)
 
             // Increment Counter and timestep
             if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
-            tmine++;            
+            tmine++;
 
             if (t_eq > twrite)
             {
@@ -170,6 +170,7 @@ double classicWrapper(states **state, int *tstep)
         //WATOM;
     }
     *tstep = tmine;
+	std::cout << ranks[1] << " " << printout(state[0], 0) << std::endl;
 
     return t_eq;
 }

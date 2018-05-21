@@ -126,7 +126,8 @@ void initState(states *state, const int x, const int y)
 {
 	double dxx = (x-A.nx/2) * A.dx;
 	double dyy = (y-A.ny/2) * A.dy;
-	double fillVal = std::exp(-50.0 * std::sqrt(dxx*dxx + dyy*dyy));
+	double normy = std::sqrt((dxx*dxx) + (dyy*dyy)) + 1.0e-6;
+	double fillVal = std::sin(normy)/normy;
 
 	for (int k=0; k<2; k++) state->u[k] = fillVal;
 };

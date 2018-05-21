@@ -162,7 +162,7 @@ void classicWrapper(std::vector <Region *> &regionals)
             {
                 if (n->sameProc) //Only occurs in gpu blocks.
                 {
-                    n->printer();
+                    // n->printer();
                     classicGPUSwap <2> <<< minLaunch, cGlob.regionSide >>> (r->dState, regionals[n->id.localIdx]->dState, n->sidx);
                 }
                 else

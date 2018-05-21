@@ -47,7 +47,7 @@ struct Globalism
     double tf, freq, dt, dx, dy, lx, ly;
 
 } cGlob;
-
+// sudo sysctl -w kernel.core_pattern=/tmp/core-%e.%p.%h.%t
 struct Address
 {
     int owner, gpu, localIdx, globalx, globaly;
@@ -58,8 +58,6 @@ struct Neighbor
     const Address id;
     const short sidx, ridx;
     const bool sameProc;
-    MPI_Request req;
-    MPI_Status stat;
     Neighbor(Address addr, short sidx): id(addr), sidx(sidx), ridx((sidx + 2) % 4), sameProc(rank == id.owner) {}
     void printer()
     {   
@@ -86,6 +84,10 @@ struct Region
     states *dState;
     states *sendBuffer, *recvBuffer, *dSend, *dRecv;
     cudaStream_t stream;
+	MPI_Request req[4];
+	MPI_Status stat[4];
+	std::vector<MPI_Request> reqvec;
+	std::vector<MPI_Status> statvec;
 
     Region(Address stencil[5])
     : self(stencil[0]), neighbors(meetNeighbors(&stencil[1])), tStep(0), tStamp(0.0), tWrite(cGlob.freq)
@@ -123,11 +125,10 @@ struct Region
                 cudaFree(dRecv);
             }
         }
-        
         delete[] stateRows;
         delete[] state;
-        
-        for (int i=0; i<3; i++)  delete neighbors[i];
+
+        for (int i=0; i<4; i++)  delete neighbors[i];
     }
 
     inline void makeBuffers(int nPts, int nSides)
@@ -160,17 +161,18 @@ struct Region
         tStamp = (double)tStep * cGlob.dt; 
 
         if (!writeNow) return;
-
+		#ifndef NOS
         if (tStamp > tWrite)
         {
             if (self.gpu) gpuCopy(true);
             solutionOutput();
             tWrite += cGlob.freq;
-        } 
+        }
+		#endif
     }
 
     void makeGPUState()
-    {   
+    {
         cudaStreamCreate(&stream);
         cudaMalloc((void **) &dState, regionAlloc);
         gpuCopy(false);
@@ -196,22 +198,24 @@ struct Region
         int offs = nIdx*bufAmt;
         int tagg;
 
-        if (dir) 
+        if (dir)
         {
             tagg = self.owner + self.localIdx + neighbors[nIdx]->id.localIdx + 5;
             MPI_Isend(sendBuffer+offs, bufAmt, struct_type, 
                         neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
-                        &neighbors[nIdx]->req);
+                        &req[nIdx]);
         }
         else
-        {   
+        {
             tagg = neighbors[nIdx]->id.owner + neighbors[nIdx]->id.localIdx + self.localIdx + 5;
             MPI_Irecv(recvBuffer+offs, bufAmt, struct_type, 
                         neighbors[nIdx]->id.owner, tagg, MPI_COMM_WORLD,
-                        &neighbors[nIdx]->req);
+                        &req[nIdx]);
 
-            MPI_Wait(&neighbors[nIdx]->req, &neighbors[nIdx]->stat);
+            if (!scheme.compare("C")) MPI_Wait(&req[nIdx], &stat[nIdx]);
         }
+        reqvec.push_back(req[nIdx]);
+        statvec.push_back(stat[nIdx]);
     }
 
     inline void gpuBufCopy(int dir, int nIdx)
@@ -227,7 +231,6 @@ struct Region
         else
         {   
             bufMessage(dir, nIdx);
-            
             cudaMemcpy(dRecv+offs, recvBuffer+offs, bufAlloc, cudaMemcpyHostToDevice);
         }
     }
@@ -276,7 +279,7 @@ struct Region
     }
 
     void solutionOutput()
-    {
+    {        
         tstr = std::to_string(tStamp);
 
         for(int k=0; k<cGlob.regionSide; k++)
@@ -316,21 +319,23 @@ void makeMPI(int argc, char** argv)
 }
 
 // I think this needs a try except for string inputs.
+// No because string inputs don't fail.  They just go to 0.
+// And Json is incompetent for handling strings. And just barely too complex to modify.
 void parseArgs(int argc, char *argv[])
 {
     if (argc>4)
     {
-        std::string inarg;
+        std::string inarg; 
+        // std::string oarg;
         for (int k=4; k<argc; k+=2)
         {
             inarg = argv[k];
-			inJ[inarg] = argv[k+1];
+            
+            inJ[inarg] = atof(argv[k+1]); 
+            // if (!rank) std::cout << "Args " << inarg << argv[k+1]<< std::endl;
         }
     }
 }
-
-
-// Started May 12.  gpuDetect contained errors and heat failed though not Euler.  Problem fixed and Heat run complete May 20
 
 void setRegion(std::vector <Region *> &regionals)
 {
@@ -341,6 +346,7 @@ void setRegion(std::vector <Region *> &regionals)
     Address gridLook[cGlob.yRegions][cGlob.xRegions];
     int k, i;
     int xLoc, yLoc;
+
     for (k = 0; k<nprocs; k++)
     {
         for (i = 0; i<regionMap[k]; i++)
@@ -405,7 +411,9 @@ void initArgs()
     cGlob.tpby = tpbReq/cGlob.tpbx;
 
     // FIND NUMBER OF GPUS AVAILABLE.
-	cGlob.gpuA  = inJ["gpuA"].asInt(); // AFFINITY
+	cGlob.gpuA  =  inJ["gpuA"].asInt(); // AFFINITY 
+    if (!rank) std::cout << cGlob.gpuA << " " << inJ["gpuA"] << std::endl;
+
 	int ranker  = rank;
 	int sz      = nprocs;
 
@@ -420,12 +428,12 @@ void initArgs()
         MPI_Allreduce(&cGlob.hasGpu, &cGlob.nGpu, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
         sz -= cGlob.nGpu;
     }
-    
+
     cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
     factor(cGlob.nRegions, &dimFinder[0]);
     double tol = tolerance(inJ["Shape"].asString());
     // How Similar should the dimensions be?
-
+    if (!rank) std::cout << tol << " " << cGlob.nRegions << " " << cGlob.gpuA << inJ["Shape"].asString() << std::endl;
     while (((double)dimFinder[1])/dimFinder[0] > tol)
     {
         if (!cGlob.nGpu && dimFinder[0] == 1)
@@ -438,8 +446,9 @@ void initArgs()
         cGlob.gpuA++;
         cGlob.nRegions = sz + (cGlob.nGpu * cGlob.gpuA);
         factor(cGlob.nRegions, &dimFinder[0]);
+        if (!rank) std::cout << tol << " " << cGlob.nRegions << " " << cGlob.gpuA << std::endl;
     }
-    
+
     cGlob.xRegions = dimFinder[0]; 
     cGlob.yRegions = dimFinder[1];
     
@@ -454,9 +463,12 @@ void initArgs()
     cGlob.xPoints = cGlob.regionSide * cGlob.xRegions;
     cGlob.yPoints = cGlob.regionSide * cGlob.yRegions;
     
-    inJ["nPts"] = cGlob.nPoints;
-    inJ["nX"]   = cGlob.xPoints;
-    inJ["nY"]   = cGlob.yPoints;
+    inJ["nPts"]     = cGlob.nPoints;
+    inJ["nX"]       = cGlob.xPoints;
+    inJ["nY"]       = cGlob.yPoints;
+    inJ["rSide"]    = cGlob.regionSide;
+    inJ["rBase"]    = cGlob.regionBase;
+
 
     cGlob.ht    = cGlob.regionSide/2;
     cGlob.htm   = cGlob.ht-1;
@@ -472,7 +484,7 @@ void initArgs()
     
     HCONST.init(inJ);
     cudaMemcpyToSymbol(DCONST, &HCONST, sizeof(HCONST));
-    if (!rank)  std::cout << rank <<  " - Initialized Arguments - " << cGlob.nRegions << std::endl;
+    if (!rank)  std::cout << rank <<  " - Initialized Arguments - \n# Regions: " << cGlob.nRegions << " x: " << cGlob.xRegions << ", y: " << cGlob.yRegions << std::endl;
 }
 
 void endMPI()

@@ -3,39 +3,44 @@
 # run make DEF="-DNOS"
 
 
-MAKEPATH:=$(dir $(realpath $(firstword $(MAKEFILE_LIST))))
+MAKEPATH	:=$(SOURCEPATH)/oneD/
 
 # LPATH+=
 
-BINPATH:=$(MAKEPATH)bin
-EQPATH:=$(MAKEPATH)equations
-DECOMPPATH:=$(MAKEPATH)decomposition
-UTILPATH:=$(MAKEPATH)utilities
+BINPATH		:=$(MAKEPATH)bin
+EQPATH		:=$(MAKEPATH)equations
+DECOMPPATH	:=$(MAKEPATH)decomposition
+UTILPATH	:=$(MAKEPATH)utilities
 
-IFLAGS+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
+IFLAGS		+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
 
-XL:=$(addprefix -Xlinker=-rpath, $(LPATH))
+XL			:=$(addprefix -Xlinker=-rpath, $(LPATH))
 
-LPATHS:=$(addprefix -L, $(LPATH))
+LPATHS		:=$(addprefix -L, $(LPATH))
 
-DH:= $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
+DH			:= $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
 
-CPREQ:=$(ODIR)/sMain.cu
+CPREQ		:=$(MAKEPATH)sMain.cu
 
-EQINIT:=$(wildcard $(EQPATH)/*.h)
+EQINIT		:=$(wildcard $(EQPATH)/*.h)
 
-EQS:=$(filter-out $(DH), $(EQINIT))
+EQS			:=$(filter-out $(DH), $(EQINIT))
 
-EQI:=$(foreach eq, $(EQS), $(basename $(notdir $(eq))))
+EQI			:=$(foreach eq, $(EQS), $(basename $(notdir $(eq))))
 
-EQOBJ:=$(addsuffix .o, $(EQI))
+EQOBJ		:=$(addsuffix .o, $(EQI))
 
-default: $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
+.PHONY: ech
 
-$(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*.o 
+default: ech $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
+
+ech:
+	@echo $(EQPATH) $(CPREQ) $(DH)
+
+$(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*.o
 	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI)
 
 $(EQ_BIN)/%.o: $(EQPATH)/%.h $(CPREQ) $(DH)
 	$(eval IFL:=$(shell echo $(basename $(@F)) | tr '[:lower:]' '[:upper:]'))
-	$(NVCC) -c $(CPREQ) -o $@ $(IFLAGS) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS) 
+	$(NVCC) -c $(CPREQ) -o $@ $(IFLAGS) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS)
 

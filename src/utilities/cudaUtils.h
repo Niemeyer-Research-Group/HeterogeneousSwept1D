@@ -73,6 +73,7 @@ void factor(int n, int* factors)
         sq--;
         outf=n/sq;
     }
+    
     factors[0] = sq;
     factors[1] = outf;
 }

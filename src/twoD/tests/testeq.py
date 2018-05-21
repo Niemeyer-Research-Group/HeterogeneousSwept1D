@@ -67,7 +67,7 @@ if __name__ == "__main__":
         print("   ---------------")
         print("Linked")
 
-    runTest = "mpiexec -np 6 -report-pid - " + execf + " C waveTest.json " + testResult + " Shape Perfect "
+    runTest = "mpiexec -np 6 -report-pid - " + execf + " C waveTest.json " + testResult + " gpuA 2 "
     print(runTest)
     runstring(runTest)
     print("   ---------------")

@@ -168,7 +168,7 @@ if __name__ == "__main__":
         collFrame[opt[0]][opt[1]] = inst.interpit()
 
             
-    speedtypes = ["Raw", "Interpolated", "Best", "NoGPU"]
+    speedtypes = ["Raw", "Interpolated", "Best"] # "NoGPU"]
     dfSpeed={k: pd.DataFrame() for k in speedtypes}
     collBestI = collections.defaultdict(dict)
     collBestIG = collections.defaultdict(dict)
@@ -206,7 +206,7 @@ if __name__ == "__main__":
            
             if not plotspec:
                 [plt.close(kk) for i in fRawS.values() for k in i.values() for kk in k]
-                
+            
             dfBI = iss.getBest('tpb', respvar)
             dfBIG = iss.getBest('gpuA', respvar)
             totalgpu[ke+ks] = dfBI['gpuA'].apply(pd.value_counts).fillna(0)
@@ -223,7 +223,7 @@ if __name__ == "__main__":
             collBestIG[ke][ks] = dfBIG
             collBest[ke][ks] = dfBF
 
-            dfSpeed["NoGPU"][ke+ks] = dfBIG['time', 0.0]/dfBF['time']
+            #dfSpeed["NoGPU"][ke+ks] = dfBIG['time', 0.0]/dfBF['time']
             dfBF.plot(y=respvar, ax=axn, marker="", loglog=True, legend=False)
             iss.oFrame.plot(x='nX', y=respvar, ax=axn, c='gpuA', kind='scatter',  legend=False, loglog=True)
             axn.set_title(ke+ks)
@@ -291,15 +291,17 @@ if __name__ == "__main__":
 
     plt.close('all')
 
-    fngpu, angpu = plt.subplots(1, 1)
-    fngpu.suptitle("Speedup from GPU")
-    for k, it in dfSpeed['NoGPU'].items():
-        it.plot(ax=angpu, logx=True, label=k)
+    #VS MPI ONLY.
 
-    angpu.legend()
-    formatSubplot(fngpu)
-    angpu.set_ylabel(meas["spdg"])
-    saveplot(fngpu, "Performance", plotDir, "HybridvsGPUonly")
+    # fngpu, angpu = plt.subplots(1, 1)
+    # fngpu.suptitle("Speedup from GPU")
+    # for k, it in dfSpeed['NoGPU'].items():
+    #     it.plot(ax=angpu, logx=True, label=k)
+
+    # angpu.legend()
+    # formatSubplot(fngpu)
+    # angpu.set_ylabel(meas["spdg"])
+    # saveplot(fngpu, "Performance", plotDir, "HybridvsGPUonly")
 
     bestGpuTotal=pd.DataFrame(index=iss.iFrame['gpuA'].unique())
     bestTpbTotal=pd.DataFrame(index=iss.iFrame['gpuA'].unique())

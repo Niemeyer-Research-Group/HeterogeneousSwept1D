@@ -39,7 +39,6 @@ hxColors = ["#{:02x}{:02x}{:02x}".format(r,g,b) for r, g, b in myColors]
 
 plt.rc('axes', prop_cycle=cycler('color', hxColors) + cycler('marker', ['D', 'o', 'h', '*', '^', 'x', 'v', '8']))
 
-
 xlbl = "Grid Size"
 
 dftype=pd.core.frame.DataFrame #Compare types
@@ -57,7 +56,7 @@ def rowSelect(df, n):
 
 def formatSubplot(f):
     nsub = len(f.axes)
-    if nsub ==4 :
+    if nsub == 4:
         f.tight_layout(pad=0.2, w_pad=0.75, h_pad=0.75)
         f.subplots_adjust(top=0.9, bottom=0.08, right=0.85, hspace=0.3, wspace=0.3)
     if nsub > 4:

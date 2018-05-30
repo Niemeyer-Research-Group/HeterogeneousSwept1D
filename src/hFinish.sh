@@ -31,11 +31,11 @@ rm $tfile || true
 
 MPIEX=$MPIPATH/bin/mpirun
 
-eqs=(euler)
-tfs=(0.04)
+eqs=(euler heat)
+tfs=(0.06 1.2)
 nxStart=(5 7.5 10 25 50 75 100)
 
-for ix in $(seq 1)
+for ix in $(seq 2)
 do
 	eq=$eqs[$ix]
 	tf=$tfs[$ix]

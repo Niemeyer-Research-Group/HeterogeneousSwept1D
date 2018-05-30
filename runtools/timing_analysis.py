@@ -10,9 +10,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import math
+import scipy.stats
 
 from timing_help import *
 
+boxfigsize = (11,9)
 class RawInterp(Perform):
     def interpit(self, *args):
         self.nxi = self.oFrame.groupby(self.xo[:2])
@@ -104,48 +106,65 @@ def plotRaws(iobj, subax, respvar, nstep):
 
     return figC
 
-def plotmins(df, axi, stacker=['nX', 'gpuA']):
+def plotmins(df, axi, sidx, stacker=['nX', 'gpuA']):
     dff = df.stack(stacker[0])
     dfff = dff.unstack(stacker[1])
     mnplace = dfff.idxmin(axis=1)
-    for a, m in zip(axi, mnplace):
-        a.plot(m[0], m[1], 'r.', markersize=20)
+    for a, si in zip(axi, sidx):
+        a.plot(mnplace[si][0], mnplace[si][1], 'r.', markersize=20)
         
     return mnplace
 
-def contourRaw(df, tytle, vals='time', getfig=False):
+def contourRaw(df, typs, tytle=None, vals='time', getfig=False):
     anno = {'ti':'10000' , 'yl': 'GPU Affinity', 'xl': 'threads per block'}
     dfCont = pd.pivot_table(df, values=vals, index='gpuA', columns=['nX', 'tpb'])
-    fCont, axCont = plt.subplots(2, 2)
+    fCont, axCont = plt.subplots(2, 2, figsize=boxfigsize)
     axc = axCont.ravel()
 
     subidx = dfCont.columns.get_level_values('nX').unique()
     stp = math.ceil(len(subidx)/4)
     subidx = subidx[::stp]
     for axi, nx in zip(axc, subidx):
-        anno['ti'] = "GridSize: {:.2e}".format(nx) 
+        anno['ti'] = "GridSize: {:.0e}".format(nx) 
         cs = plotContour(dfCont[nx], axi, anno)
         fCont.colorbar(cs, ax=axi, shrink=0.8)
 
-    fCont.suptitle(tytle + " -- " + meas[vals]) 
+    if tytle: fCont.suptitle(tytle + " -- " + meas[vals]) 
     
     if getfig:
         return dfCont, fCont, axc
     
-    mns = plotmins(dfCont, axc)
+    mns = plotmins(dfCont, axc, subidx)
     formatSubplot(fCont)
 
-    saveplot(fCont, "Performance", plotDir, "RawContour"+tytle+vals)
+    saveplot(fCont, "Performance", plotDir, "RawContour"+typs+vals)
     plt.close(fCont)
     
     return mns
 
+def getFitRs(dfp):
+    dfp.astype(float, inplace=True)
+    dfc = dfp.columns
+    dfa = np.log(dfp)
+    dfa.index = np.log(dfa.index.values)
+    spcol = pd.DataFrame()
+    for s in dfc:
+        print(s)
+        sp, inter, r2, p, std_err = scipy.stats.linregress(np.array(dfa.index), dfa[s])
+        inter = np.exp(inter)
+        spcol[s] = [sp, inter, r2]
+    spcol.index = ["A", "b", "r2"]
+    return spcol
 
 if __name__ == "__main__":
-        
-    plotspec = 0 if len(sys.argv) < 2 else int(sys.argv[1])
 
-    if plotspec:
+    # Flags
+    titles = False
+    saves = True
+    finalDir = True # Final Plots for the Figure
+    howFarBack = 0 # How many saves ago to look
+
+    if not saves:
         def saveplot(f, *args):
             f = makeList(f)
             for ff in f:
@@ -153,12 +172,14 @@ if __name__ == "__main__":
                 
             g = input("Press Any Key: ")
 
-    recentdf, detail = getRecentResults(0)
+    recentdf, detail = getRecentResults(howFarBack)
+    recentdf.sort_index(inplace=True)
     eqs = recentdf.index.unique()
     collInst = collections.defaultdict(dict)
     collFrame = collections.defaultdict(dict)
 
-    plotDir="_".join([str(k) for k in [detail["System"], detail["np"], detail["date"]]]) 
+    plotDir = "FinalResultPlots" if finalDir else "_".join([str(k) for k in [detail["System"], detail["np"], detail["date"]]]) 
+    dfBESTALL = pd.DataFrame()
 
     for ty in eqs:
         df = recentdf.xs(ty).reset_index(drop=True) 
@@ -179,8 +200,10 @@ if __name__ == "__main__":
     tt = [(k, kk) for k in inst.uniques['tpb'] for kk in inst.uniques['gpuA']]
 
     fgt, axgt = plt.subplots(2, 1, sharex=True)
-    fio, axio = plt.subplots(2, 2, figsize=(11,9))
-    fio.suptitle("Best interpolated run vs observation")
+    fio, axio = plt.subplots(2, 2, figsize=boxfigsize)
+    if titles: fio.suptitle("Best interpolated run vs observation")
+    perfPath = op.join(resultpath,"Performance")
+
     mnCoords = pd.DataFrame()
 
     axdct = dict(zip(eqs, axio.ravel()))
@@ -192,19 +215,20 @@ if __name__ == "__main__":
    
         for ks, iss in ie.items():
             typ = ke+ks
+            tytles = typ if titles else None
             axn = axdct[ke + ks]
 
             ists = iss.iFrame.set_index('nX')
             iss.efficient()
 
-            mnCoords[typ] = contourRaw(iss.iFrame, typ)
+            mnCoords[typ] = contourRaw(iss.iFrame, typ, tytles)
 
             fRawS = plotRaws(iss, 'tpb', ['time', 'efficiency'], 2)
             for rsub, it in fRawS.items():
                 for rleg, itt in it.items():
                     saveplot(itt, "Performance", plotDir, "Raw"+rleg+"By"+rsub+typ)
            
-            if not plotspec:
+            if saves:
                 [plt.close(kk) for i in fRawS.values() for k in i.values() for kk in k]
             
             dfBI = iss.getBest('tpb', respvar)
@@ -216,9 +240,13 @@ if __name__ == "__main__":
             dfBF['tpb'].plot(ax=axgt[0], logx=True, label=ke+ks) 
             dfBF['gpuA'].plot(ax=axgt[1], logx=True, legend=False) 
         
+            if titles:
+                dfBF[respvar].plot(ax=axraw, loglog=True, label=ks, title=ke+" Best Runs")
+                dfBF['efficiency'].plot(ax=axeff, logx=True, label=ks, title=ke+" Best Run Efficiency") 
+            else:
+                dfBF[respvar].plot(ax=axraw, loglog=True, label=ks)
+                dfBF['efficiency'].plot(ax=axeff, logx=True, label=ks)
 
-            dfBF[respvar].plot(ax=axraw, loglog=True, label=ks, title=ke+" Best Runs")
-            dfBF['efficiency'].plot(ax=axeff, logx=True, label=ks, title=ke+" Best Run Efficiency")           
             collBestI[ke][ks] = dfBI
             collBestIG[ke][ks] = dfBIG
             collBest[ke][ks] = dfBF
@@ -226,15 +254,21 @@ if __name__ == "__main__":
             #dfSpeed["NoGPU"][ke+ks] = dfBIG['time', 0.0]/dfBF['time']
             dfBF.plot(y=respvar, ax=axn, marker="", loglog=True, legend=False)
             iss.oFrame.plot(x='nX', y=respvar, ax=axn, c='gpuA', kind='scatter',  legend=False, loglog=True)
-            axn.set_title(ke+ks)
+            axn.set_title(typ)
             axn.set_xlabel(xlbl)
             axn.set_ylabel("Time per timestep (us)")
             print(typ)
+            dfBESTALL[typ] = dfBF["time"]
         
         dfSpeed["Raw"][ke] = ie[schemes[0]].oFrame[respvar]/ ie[schemes[1]].oFrame[respvar]
         dfSpeed["Interpolated"][ke] =  ie[schemes[0]].iFrame[respvar]/ie[schemes[1]].iFrame[respvar]
         dfSpeed["Best"][ke] = collBest[ke][schemes[0]][respvar]/collBest[ke][schemes[1]][respvar]
-        dfSpeed['Best'][ke].plot(ax=axspeed, logx=True, title=ke+" Speedup")
+
+        if titles:
+            dfSpeed['Best'][ke].plot(ax=axspeed, logx=True, title=ke+" Speedup")
+        else: 
+            dfSpeed['Best'][ke].plot(ax=axspeed, logx=True)
+
         axraw.legend()
         axeff.legend()
         formatSubplot(fraw)
@@ -251,13 +285,19 @@ if __name__ == "__main__":
         saveplot(fspeed, "Performance", plotDir, "BestSpeedup" + ke)
         saveplot(feff, "Performance", plotDir, "BestRun" + "Efficiency" + ke)
 
-    axgt[0].set_title('Best tpb')
-    axgt[1].set_title('Best Affinity')    
+    dfBESTALL.to_csv(op.join(op.join(perfPath, plotDir), 'BestTiming.csv'))
+    dfbaa = getFitRs(dfBESTALL)
+    sys.exit(-1)
+    if titles:
+        axgt[0].set_title('Best tpb')
+        axgt[1].set_title('Best Affinity')    
+        fgt.suptitle("Best Characteristics")  
+
     axgt[1].set_xlabel(xlbl)  
     
     hgo, lbo = axgt[0].get_legend_handles_labels()
     axgt[0].legend().remove()
-    fgt.suptitle("Best Characteristics")    
+      
     fgt.legend(hgo, lbo, 'upper right')
     saveplot(fgt, "Performance", plotDir, "BestRunCharacteristics")
 
@@ -265,20 +305,23 @@ if __name__ == "__main__":
     saveplot(fio, "Performance", plotDir, "BestLineAndAllLines")
     plt.close('all')
     
-    fitpb, axitpb = plt.subplots(2, 2)
-    figpu, axigpu = plt.subplots(2, 2)
-    fitpb.suptitle('Threads per block at best Affinity')
-    figpu.suptitle('Affinity at best threads per block')
+    fitpb, axitpb = plt.subplots(2, 2, figsize=boxfigsize)
+    figpu, axigpu = plt.subplots(2, 2, figsize=boxfigsize)
+    if titles:
+        fitpb.suptitle('Threads per block at best Affinity')
+        figpu.suptitle('Affinity at best threads per block')
+
     axT = dict(zip(eqs, axitpb.ravel()))
     axG = dict(zip(eqs, axigpu.ravel()))
 
     for ke in collBestIG.keys():
         for ks in collBestIG[ke].keys():
             k = ke + ks
+            tytles = k if titles else None
             bygpu = rowSelect(collBestIG[ke][ks], 5)
             bytpb = rowSelect(collBestI[ke][ks], 5)
-            bygpu[respvar].T.plot(ax=axG[k], logy=True, title=k)
-            bytpb[respvar].T.plot(ax=axT[k], logy=True, legend=False, title=k)
+            bygpu[respvar].T.plot(ax=axG[k], logy=True, title=tytles)
+            bytpb[respvar].T.plot(ax=axT[k], logy=True, legend=False, title=tytles)
             hd, lb = axG[k].get_legend_handles_labels()
             axG[k].legend().remove()
 

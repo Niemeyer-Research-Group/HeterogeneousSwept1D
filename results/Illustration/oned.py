@@ -1,6 +1,8 @@
 
 from iglob import *
 
+plt.style.use(style)
+
 aniname = "single"
 ext = ".pdf"
 

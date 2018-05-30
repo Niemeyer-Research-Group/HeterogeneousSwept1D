@@ -14,3 +14,4 @@ pypath = op.join(toppath, "runtools")
 impath = op.join(thispath, "images")
 
 style = op.join(pypath, "swept.mplstyle")
+

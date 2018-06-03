@@ -153,6 +153,7 @@ def getFitRs(dfp):
         sp, inter, r2, p, std_err = scipy.stats.linregress(np.array(dfa.index), dfa[s])
         inter = np.exp(inter)
         spcol[s] = [sp, inter, r2]
+        
     spcol.index = ["A", "b", "r2"]
     return spcol
 

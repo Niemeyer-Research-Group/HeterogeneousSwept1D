@@ -142,6 +142,7 @@ def contourRaw(df, typs, tytle=None, vals='time', getfig=False):
     
     return mns
 
+#Fit DataFrame with powerfit.
 def getFitRs(dfp):
     dfp.astype(float, inplace=True)
     dfc = dfp.columns
@@ -156,6 +157,8 @@ def getFitRs(dfp):
         
     spcol.index = ["A", "b", "r2"]
     return spcol
+
+
 
 if __name__ == "__main__":
 

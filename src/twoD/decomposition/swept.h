@@ -18,15 +18,14 @@ struct sweptConst
 struct PassIndex
 {
     //Edges to pass;
-    typedef std::vector<int> intvec;
-    typedef  std::array<intvec, 4> idxvec;
+    typedef std::vector<int> idxvec;
     const int side, base, gpu;
-	idxvec pyramid, bridge;
+	idxvec triangles;
     intvec passer;
     int nPass, sizePass;
     int cnt;
 
-    PassIndex(int side, int base, int hasG) : side(side), base(base), gpu(cGlob.hasGpu), pyramid(initialize(1)), bridge(initialize(0))
+    PassIndex(int side, int base, int hasG) : side(side), base(base), gpu(cGlob.hasGpu), triangles(initialize())
     {
         nPass       = side/4 * (side + 2) + (side + 2);
         sizePass    = 4 * nPass * sizeof(int);
@@ -43,27 +42,25 @@ struct PassIndex
 	template <bool OFFSET, bool INTERIOR>
     void passPanel(std::vector <Region *> &regionals);
 
-    idxvec initialize(int begin)
+    idxvec initialize()
     {
 		idxvec starter;
         int flatidx;
         // Pyramid Loop
-        for (int ky = begin; ky<=side+(1-begin); ky++)
+        for (int ky = 0; ky<side+2; ky++)
         {
-            for (int kx = begin; kx<=side+(1-begin); kx++)
-            {
-                flatidx = ky * base + kx;
-                if (kx <= ky){
-                    if (kx+ky <= side+1) starter[0].push_back(flatidx);
-                    if (kx+ky >= side+1) starter[3].push_back(flatidx);
-                }
-                if (kx >= ky){
-                    if (kx+ky <= side+1) starter[1].push_back(flatidx);
-                    if (kx+ky >= side+1) starter[2].push_back(flatidx);
-                }
+            for (int kx = ky; kx<(side-ky+2); kx++)
+            { 
+                flatidx = ky * base + kx
+                starter.push_back(flatidx);
             }
        	}
 		return starter;
+    }
+
+    int getRot(int dir, int idxx)
+    {
+        pass; // Something something
     }
 
     void ppass(int extent=10)

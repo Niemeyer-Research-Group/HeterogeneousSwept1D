@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1291212.svg)](https://doi.org/10.5281/zenodo.1291212)
+
 # hSweep
 
 [The swept rule](https://www.sciencedirect.com/science/article/pii/S0021999117309221?via%3Dihub) ([free](https://arxiv.org/abs/1705.03162)) is a communication avoiding algorithm for accelerating explicit solutions of time-dependent PDEs in parallel.

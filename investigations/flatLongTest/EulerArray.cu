@@ -831,7 +831,7 @@ int main( int argc, char *argv[] )
 
     for (int k=-2; k<3; k++) dimz.hts[k+2] = (tpb/2) + k; //Middle values in the node (masking values)
 
-    cout << "Euler --- #Blocks: " << bks << " | Length: " << lx << " | Precision: " << prec << " | dt/dx: " << dimz.dt_dx << endl;
+    cout << "Euler Array --- #Blocks: " << bks << " | Length: " << lx << " | Precision: " << prec << " | dt/dx: " << dimz.dt_dx << endl;
 
 	// Conditions for main input.
 	// dv and tpb must be powers of two.  dv must be larger than tpb and divisible by tpb.

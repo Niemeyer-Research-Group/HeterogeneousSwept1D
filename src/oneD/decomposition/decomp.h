@@ -22,7 +22,7 @@ MPI_Status stat[2];
 int lastproc, nprocs, ranks[3];
 
 struct Globalism {
-// Topology
+    // Topology
     int nGpu, nX;
     int xg, xcpu;
     int xStart;
@@ -30,13 +30,13 @@ struct Globalism {
     int hasGpu;
     double gpuA;
 
-// Geometry
+    // Geometry
 	int szState;
     int tpb, tpbp, base;
     int cBks, gBks;
     int ht, htm, htp;
 
-// Iterator
+    // Iterator
     double tf, freq, dt, dx, lx;
     bool bCond[2] = {true, true};
 };

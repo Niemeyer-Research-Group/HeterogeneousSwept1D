@@ -25,7 +25,6 @@
 #include <algorithm>
 
 #include "myVectorTypes.h"
-#include "json/json.h"\
 
 using namespace std;
 
@@ -33,7 +32,6 @@ using namespace std;
 #define REAL            double
 #define REALtwo         double2
 #define REALthree       double3
-#define MPI_R           MPI_DOUBLE
 #define ZERO            0.0
 #define QUARTER         0.25
 #define HALF            0.5
@@ -58,6 +56,32 @@ using namespace std;
 	============================================================
 */
 
+
+struct Globalism {
+    // Topology
+    int nGpu, nX;
+    int xg, xcpu;
+    int xStart;
+    int nWrite;
+    int hasGpu;
+    double gpuA;
+
+    // Geometry
+	int szState;
+    int tpb, tpbp, base;
+    int cBks, gBks;
+    int ht, htm, htp;
+
+    // Iterator
+    double tf, freq, dt, dx, lx;
+    bool bCond[2] = {true, true};
+};
+
+Globalism cGlob;
+
+const double GAMMA = 1.4;
+const double MGAMMA = 0.4;
+
 //---------------//
 struct eqConsts {
     REAL gamma; // Heat capacity ratio
@@ -80,37 +104,17 @@ std::string fspec = "Euler";
 	CUDA GLOBAL VARIABLES
 	============================================================
 */
-// The boundary points can't be on the device so there's no boundary device array.
 
 __constant__ eqConsts deqConsts;  //---------------//
-eqConsts heqConsts; //---------------//
-REALthree hBounds[2]; // Boundary Conditions
+eqConsts heqConsts;               //---------------//
+REALthree hBounds[2] = {{1.0, 0.0, 2.5}, {0.125, 0.0, 0.25}}; 
+__constant_ REALthree dBounds[2];
 states bound[2];
 
-/*
-	============================================================
-	EQUATION SPECIFIC FUNCTIONS
-	============================================================
-*/
+#define DIMS    deqConsts
+#define QNAN(x) isnan(x)
+#define QMIN(x, y) min(x, y)
 
-typedef Json::Value jsons;
-
-/**
-    Calculates the pressure at the current spatial point with the (x,y,z) rho, u * rho, e *rho state variables.
-
-    Calculates pressure from working array variables.  Pressure is not stored outside procedure to save memory.
-    @param current  The state variables at current node
-    @return Pressure at subject node
-*/
-#ifdef __CUDA_ARCH__
-    #define DIMS    deqConsts
-    #define QNAN(x) isnan(x)
-    #define QMIN(x, y) min(x, y)
-#else
-    #define DIMS    heqConsts
-    #define QNAN(x) std::isnan(x)
-    #define QMIN(x, y) std::min(x, y)
-#endif
 
 __host__ double indexer(double dx, int i, int x)
 {
@@ -166,23 +170,11 @@ __host__ inline states icond(double xs, double lx)
     return s;
 }
 
-__host__ void equationSpecificArgs(jsons inJs)
+__host__ void equationSpecificArgs()
 {
-    heqConsts.gamma = inJs["gamma"].asDouble();
-    heqConsts.mgamma = heqConsts.gamma - 1;
+    heqConsts.gamma = GAMMA;
+    heqConsts.mgamma = MGAMMA;
     double lx = inJs["lx"].asDouble();
-    REAL rhoL = inJs["rhoL"].asDouble();
-    REAL vL = inJs["vL"].asDouble();
-    REAL pL = inJs["pL"].asDouble();
-    REAL rhoR = inJs["rhoR"].asDouble();
-    REAL vR = inJs["vR"].asDouble();
-    REAL pR = inJs["pR"].asDouble();
-    hBounds[0].x = rhoL;
-    hBounds[0].y = vL*rhoL;
-    hBounds[0].z = pL/heqConsts.mgamma + HALF * rhoL * vL * vL;
-    hBounds[1].x = rhoR;
-    hBounds[1].y = vR*rhoR,
-    hBounds[1].z = pR/heqConsts.mgamma + HALF * rhoR * vR * vR;
     REAL dtx = inJs["dt"].asDouble();
     REAL dxx = inJs["dx"].asDouble();
     heqConsts.dt_dx = dtx/dxx;
@@ -206,9 +198,6 @@ __host__ void initialState(jsons inJs, states *inl, int idx, int xst)
 }
 
 
-/*
-    // MARK : Equation procedure
-*/
 __device__ __host__
 __forceinline__
 REAL pressureRoe(REALthree qH)
@@ -399,24 +388,8 @@ downTriangle(states *state, const int tstep, const int offset)
     state[gid] = sharedstate[tidx];
 }
 
-// __global__
-// void
-// printgpu(states *state, int n, int on)
-// {
-//     printf("%i\n", on);
-//     for (int k=0; k<n; k++) printf("%i %.2f\n", k, state[k].T[on]);
-// }
-
-/**
-    Builds an diamond using the swept rule after a left pass.
-
-    Unsplit diamond using the swept rule.  wholeDiamond must apply boundary conditions only at it's center.
-
-    @param state The working array of structures states.
-    @param tstep The count of the first timestep.
-*/
 __global__ void
-wholeDiamond(states *state, const int tstep, const int offset)
+wholeDiamond(states *state, const int tstep)
 {
 	extern __shared__ states sharedstate[];
 
@@ -455,7 +428,8 @@ wholeDiamond(states *state, const int tstep, const int offset)
     state[gid + 1] = sharedstate[tidx];
 }
 
-__global__ void splitDiamondCPU(states *state, int tnow)
+__global__ void 
+splitDiamond(states *state, const int tstep)
 {
     ssLeft[2] = bound[1];
     ssRight[0] = bound[0];
@@ -516,69 +490,54 @@ double classicWrapper(states **state, int *tstep)
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
 
-    states putSt[2];
-    states getSt[2];
-    int t0, t1;
+    cout << "Classic Decomposition GPU" << endl;
+    const int xc = cGlob.xcpu/2;
+    int xcp = xc+1;
+    const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
+    const int gpusize =  cGlob.szState * xgpp;
 
-    if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
+    states *dState;
+
+    cudaMalloc((void **)&dState, gpusize);
+    // Copy the initial conditions to the device array.
+    // This is ok, the whole array has been malloced.
+    cudaMemcpy(dState, state[1], gpusize, cudaMemcpyHostToDevice);
+
+    cout << "Entering Loop" << endl;
+
+    while (t_eq < cGlob.tf)
     {
-        cout << "Classic Decomposition GPU" << endl;
-        const int xc = cGlob.xcpu/2;
-        int xcp = xc+1;
-        const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
-        const int gpusize =  cGlob.szState * xgpp;
+        //TIMEIN;
+        classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
 
-        states *dState;
+        // Increment Counter and timestep
+        if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
+        tmine++;
 
-        cudaMalloc((void **)&dState, gpusize);
-        // Copy the initial conditions to the device array.
-        // This is ok, the whole array has been malloced.
-        cudaMemcpy(dState, state[1], gpusize, cudaMemcpyHostToDevice);
-
-        cout << "Entering Loop" << endl;
-
-        while (t_eq < cGlob.tf)
+        // OUTPUT
+        if (t_eq > twrite)
         {
-            //TIMEIN;
-            classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
-
-            // Increment Counter and timestep
-            if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
-            tmine++;
-
-            // OUTPUT
-            if (t_eq > twrite)
-            {
-                writeOut(state, t_eq);
-                twrite += cGlob.freq;
-            }
+            writeOut(state, t_eq);
+            twrite += cGlob.freq;
         }
-
-        cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
-
-        cudaFree(dState);
     }
 
+    cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+
+    cudaFree(dState);
 
     return t_eq;
 }
 
 double sweptWrapper(states **state,  int *tstep)
 {
-	if (!ranks[1]) cout << "SWEPT Decomposition " << cGlob.tpb << endl;
-	FILE *diagDump;
-	std::string fname = "edge/edgeWrite_" + std::to_string(ranks[1]) + ".csv";
-	diagDump = fopen(fname.c_str(), "w+");
+	cout << "SWEPT Decomposition " << cGlob.tpb << endl;
+
     const int bkL = cGlob.cBks - 1;
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
     int tmine = *tstep;
 
-    // Must be declared global in equation specific header.
-
-    int tou = 2000;
-
-    cout << ranks[1] << " hasGpu" << endl;
     const int xc = cGlob.xcpu/2, xcp=xc+1;
     const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
     const int cmid = cGlob.cBks/2;
@@ -591,75 +550,24 @@ double sweptWrapper(states **state,  int *tstep)
 
     int gpupts = gpusize/cGlob.szState;
 
-    cudaStream_t st1, st2;
-    cudaStreamCreate(&st1);
-    cudaStreamCreate(&st2);
-
     states *dState;
 
     cudaMalloc((void **)&dState, gpusize);
     cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
-
-    /* RULES
-    -- DOWN MUST FOLLOW A SPLIT 
-    -- UP CANNOT BE IN WHILE LOOP 
-    -||- ACTION: DO UP AND FIRST SPLIT OUTSIDE OF LOOP 
-    -||- THEN LOOP CAN BEGIN WITH WHOLE DIAMOND.
-    */
 
     // ------------ Step Forward ------------ //
     // ------------ UP ------------ //
 
     upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
 
-    for (int k=0; k<cGlob.cBks; k++)
-    {
-        bx = (k/cmid);
-        ix = 2*bx;
-        upTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-    }
-
-    // ------------ Pass Edges ------------ //
-    // -- FRONT TO BACK -- //
-
-    cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
-    cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
-
-    passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
-
     // ------------ Step Forward ------------ //
     // ------------ SPLIT ------------ //
 
     wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
-    for (int k=0; k<(cGlob.cBks); k++)
-    {
-        bx = (k/cmid);
-        ix = 2*bx;
-        if ((ranks[1] == lastproc) && (k == bkL))
-        {
-            splitDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-        }
-        else
-        {
-            wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-        }
-    }
-
-    // ------------ Pass Edges ------------ //
-    // -- BACK TO FRONT -- //
-
-    cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
-    cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-
-    passSwept(state[2] + xc, state[0], tmine+1, 1);
-
     // Increment Counter and timestep
     tmine += cGlob.ht;
     t_eq = cGlob.dt * (tmine/NSTEPS);
-
-    if (!ranks[1]) state[0][0] = bound[0];
-    if (ranks[1]==lastproc) state[2][xcp] = bound[1];
 
     while(t_eq < cGlob.tf)
     {
@@ -667,21 +575,6 @@ double sweptWrapper(states **state,  int *tstep)
         // ------------ WHOLE ------------ //
 
         wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
-
-        for (int k=0; k<cGlob.cBks; k++)
-        {
-            bx = (k/cmid);
-            ix = 2*(k/cmid);
-            wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-        }
-
-        // ------------ Pass Edges ------------ //
-
-        cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
-        cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
-
-        passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
-
 
         // Increment Counter and timestep
         tmine += cGlob.ht;
@@ -692,44 +585,15 @@ double sweptWrapper(states **state,  int *tstep)
 
         wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
-        for (int k=0; k<(cGlob.cBks); k++)
-        {
-            bx = (k/cmid);
-            ix = 2*bx;
-            if ((ranks[1] == lastproc) && (k == bkL))
-            {
-                splitDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-            }
-            else
-            {
-                wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-            }
-        }
-
-        // ------------ Pass Edges ------------ //
-        // -- BACK TO FRONT -- //
-        cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
-        cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-
-        passSwept(state[2] + xc, state[0], tmine, 1);
-
         // Increment Counter and timestep
         tmine += cGlob.ht;
         t_eq = cGlob.dt * (tmine/NSTEPS);
-
-        if (!ranks[1]) state[0][0] = bound[0];
-        if (ranks[1]==lastproc) state[2][xcp] = bound[1];
 
         if (t_eq > twrite)
         {
             downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
 
-            for (int k=0; k<cGlob.cBks; k++)
-            {
-                bx = (k/cmid);
-                ix = 2*bx;
-                downTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-            }
+
 
             // Increment Counter and timestep
             tmine += cGlob.ht;
@@ -741,62 +605,20 @@ double sweptWrapper(states **state,  int *tstep)
             
             upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
 
-            for (int k=0; k<cGlob.cBks; k++)
-            {
-                bx = (k/cmid);
-                ix = 2*bx;
-                upTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-            }
-
-            cudaMemcpy(state[0] + xcp, dState + 1, passsize, cudaMemcpyDeviceToHost);
-            cudaMemcpy(dState + xgp, state[2] + 1, passsize, cudaMemcpyHostToDevice);
-
-            passSwept(state[0] + 1, state[2] + xcp, tmine, 0);
-
 
             // ------------ Step Forward ------------ //
             // ------------ SPLIT ------------ //
 
             wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
 
-            for (int k=0; k<(cGlob.cBks); k++)
-            {
-                bx = (k/cmid);
-                ix = 2*bx;
-                if ((ranks[1] == lastproc) && (k ==bkL))
-                {
-                    splitDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-                }
-                else
-                {
-                    wholeDiamondCPU(state[ix] + (k - bx * cmid)*cGlob.tpb + cGlob.ht, tmine);
-                }
-            }
-
-            // ------------ Pass Edges ------------ //
-            // -- BACK TO FRONT -- //
-            cudaMemcpy(state[2], dState+cGlob.xg, passsize, cudaMemcpyDeviceToHost);
-            cudaMemcpy(dState, state[0] + xc, passsize, cudaMemcpyHostToDevice);
-
-            passSwept(state[2] + xc, state[0], tmine+1, 1);
-
             tmine += cGlob.ht;
             t_eq = cGlob.dt * (tmine/NSTEPS);
             twrite += cGlob.freq;
-            if (!ranks[1]) state[0][0] = bound[0];
-            if (ranks[1]==lastproc) state[2][xcp] = bound[1];
         }
 
     }
 
     downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
-
-    for (int k=0; k<cGlob.cBks; k++)
-    {
-        bx = (k/cmid);
-        ix = 2*bx;
-        downTriangleCPU(state[ix] + (k - bx * cmid)*cGlob.tpb, tmine);
-    }
 
     // Increment Counter and timestep
     tmine += cGlob.ht;
@@ -819,22 +641,37 @@ double sweptWrapper(states **state,  int *tstep)
 
 int main(int argc, char *argv[])
 {
+    if (argc < 8)
+	{
+		cout << "The Program takes 8 inputs, #Divisions, #Threads/block, deltat, finish time, output frequency..." << endl;
+        cout << "Algorithm type, Variable Output File, Timing Output File (optional)" << endl;
+		exit(-1);
+	}
+    cout.precision(10); 
+
+	// Choose the GPGPU.  This is device 0 in my machine which has 2 devices.
+	cudaSetDevice(GPUNUM);
+    if (sizeof(REAL)>6) cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+
+    const int dv = atoi(argv[1]); //Number of spatial points
+	const int tpb = atoi(argv[2]); //Threads per Block
+    const double dt = atof(argv[3]); //Timestep
+	const double tf = atof(argv[4]) - QUARTER*dt; //Finish time
+    const double freq = atof(argv[5]); //Frequency of output (i.e. every 20 s (simulation time))
+    const int scheme = atoi(argv[6]); //2 for Alternate, 1 for GPUShared, 0 for Classic
+    const int bks = dv/tpb; //The number of blocks
+    const double dx = lx/((REAL)dv-TWO); //Grid size.
+    char const *prec;
+    prec = (sizeof(REAL)<6) ? "Single": "Double";
 
     std::string i_ext = ".json";
     std::string t_ext = ".csv";
     std::string myrank = std::to_string(ranks[1]);
     std::string scheme = argv[1];
 
-    // Equation, grid, affinity data
-    std::ifstream injson(argv[2], std::ifstream::in);
-    injson >> inJ;
-    injson.close();
+    cout << "Euler Atomic --- #Blocks: " << bks << " | Length: " << lx << " | Precision: " << prec << " | dt/dx: " << dimz.dt_dx << endl;
 
-    parseArgs(argc, argv);
     initArgs();
-
-    int prevGpu=0; //Get the number of GPUs in front of the current process.
-    int gpuPlaces[nprocs]; //Array of 1 or 0 for number of GPUs assigned to process
 
     cGlob.xStart = cGlob.xcpu * ranks[1] + cGlob.xg * prevGpu;
     states **state;
@@ -845,7 +682,6 @@ int main(int argc, char *argv[])
     int xalloc = xc + exSpace;
 
     std::string pth = string(argv[3]);
-
 
     if (cGlob.hasGpu)
     {
@@ -864,9 +700,9 @@ int main(int argc, char *argv[])
             for (int k=0; k<(ii[i]+2); k++)  initialState(inJ, state[i], k, xi);
         }
 
-        cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
+    cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
+    cudaMemcpyToSymbol(dBounds, &hBounds, sizeof(REALthree));
 
-//        cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
     }
     else
     {

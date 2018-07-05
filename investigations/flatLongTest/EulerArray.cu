@@ -1,28 +1,10 @@
-/**
-    NOTE: This file is where the explanatory comments for this package appear. The other source files only have superficial comments.
 
-    This file evaluates the Euler equations applied to the 1D Sod Shock Tube problem.  It demonstrates the numerical solution to this problem in parallel using the GPU. The solution procedure uses a second order finite volume scheme with a minmod limiter parameterized by the Pressure ratio at cells on a three point stencil.  The solution also uses a second-order in time (RK2 or midpoint) scheme.
-
-    The boundary conditions are:
-    Q(t=0,x) = QL if x<L/2 else QR
-    Q(t,x=0,dx) = QL
-    Q(t,x=L,L-dx) = QR
-    Where Q is the vector of dependent variables.
-    
-    The problem may be evaluated in three ways: Classic, SharedGPU, and Hybrid.  Classic simply steps forward in time and calls the kernel once every timestep (predictor step or full step).  SharedGPU uses the GPU for all computation and applies the swept rule.  Hybrid applies the swept rule but computes the node on the boundary with the CPU.  
-*/
 /** 
-    Copyright (C) 2017 Kyle Niemeyer, niemeyek@oregonstate.edu AND
-    Daniel Magee, mageed@oregonstate.edu
-*/
-/*
-    This file is distribued under the MIT License.  See LICENSE at top level of directory or: <https://opensource.org/licenses/MIT>.
-*/
+    Flattening strategy for Euler - Atomic stages.
 
-// To compile this program alone from the command line:
-// nvcc -o ./bin/EulerOut Euler1D_SweptShared.cu -gencode arch=compute_35,code=sm_35 -lm -restrict -Xcompiler -fopenmp
-// Use whatever compute_xx, sm_xx applies to the GPU you are using.
-// Add -Xptxas=-v to the end of the compile line to inspect register usage.
+    COMPILE:
+    nvcc EulerArray.cu -o ./bin/EulerArray -gencode arch=compute_35,code=sm_35 -lm -restrict -Xptxas=-v 
+*/
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -44,26 +26,16 @@
     #define GPUNUM              0
 #endif
 
-#ifndef REAL
-    #define REAL            float
-    #define REALtwo         float2
-    #define REALthree       float3
-    #define SQUAREROOT(x)   sqrtf(x)
-
-    #define ZERO            0.0f
-    #define QUARTER         0.25f
-    #define HALF            0.5f
-    #define ONE             1.f
-    #define TWO             2.f
-#else
-
-    #define ZERO            0.0
-    #define QUARTER         0.25
-    #define HALF            0.5
-    #define ONE             1.0
-    #define TWO             2.0
-    #define SQUAREROOT(x)   sqrt(x)
-#endif
+// We're just going to assume doubles
+#define REAL            double
+#define REALtwo         double2
+#define REALthree       double3
+#define ZERO            0.0
+#define QUARTER         0.25
+#define HALF            0.5
+#define ONE             1.0
+#define TWO             2.0
+#define SQUAREROOT(x)   sqrt(x)
 
 // Hardwire in the length of the 
 const REAL lx = 1.0;
@@ -403,11 +375,11 @@ downTriangle(REALthree *IC, const REALthree *inRight, const REALthree *inLeft)
     //k starts at blockDim.x/2 and shrinks from there as the lane width grows.
     int k = dimens.hts[2]; 
 
-	readIn(temper, inRight, inLeft, threadIdx.x, gid);
-
     //Masks edges (whole domain edges not nodal edges) on last timestep. 
     //Stored in one register per thread.
     const char4 truth = {gid == 0, gid == 1, gid == dimens.idxend_1, gid == dimens.idxend};
+
+    readIn(temper, inRight, inLeft, threadIdx.x, gid);
 
     __syncthreads();
 
@@ -424,7 +396,6 @@ downTriangle(REALthree *IC, const REALthree *inRight, const REALthree *inLeft)
         if (!truth.x && !truth.w && tididx < (dimens.base-k) && tididx >= k)
         {
             temper[tididx] += eulerFinalStep(temper, tidxTop, truth.y, truth.z);
-
         }
 
 		k-=2;
@@ -436,7 +407,7 @@ downTriangle(REALthree *IC, const REALthree *inRight, const REALthree *inLeft)
 
 __global__
 void
-wholeDiamond(const REALthree *inRight, const REALthree *inLeft, REALthree *outRight, REALthree *outLeft, const bool split)
+wholeDiamond(const REALthree *inRight, const REALthree *inLeft, REALthree *outRight, REALthree *outLeft)
 {
 
     extern __shared__ REALthree temper[];
@@ -447,15 +418,6 @@ wholeDiamond(const REALthree *inRight, const REALthree *inLeft, REALthree *outRi
 
     //Masks edges in the same way as downTriangle
     char4 truth = {gid == 0, gid == 1, gid == dimens.idxend_1, gid == dimens.idxend};
-
-    //If this is a hybrid scheme and this kernel is run alongside a cpu function:
-    //Add a block size to the global id (to pick and place the correct values from the global array)
-    //And reset the truth values since this is not going to have any edges.
-    if (split)
-    {
-        gid += blockDim.x;
-        truth.x = false, truth.y = false, truth.z = false, truth.w = false;
-    }
 
     readIn(temper, inRight, inLeft, threadIdx.x, gid);
 
@@ -527,15 +489,8 @@ wholeDiamond(const REALthree *inRight, const REALthree *inLeft, REALthree *outRi
 		__syncthreads();
 	}
 
-    //Split is the hybrid version of splitDiamond so write out left.  Otherwise right.
-    if (split)
-    {
-        writeOutLeft(temper, outRight, outLeft, threadIdx.x, gid, blockDim.x);
-    }
-    else
-    {
-        writeOutRight(temper, outRight, outLeft, threadIdx.x, gid, blockDim.x);
-    }
+    writeOutRight(temper, outRight, outLeft, threadIdx.x, gid, blockDim.x);
+    
 }
 
 __global__
@@ -625,9 +580,7 @@ using namespace std;
 
 //Get energy out from conserved variables for plotting.
 __host__
-__forceinline__
-REAL
-energy(REALthree subj)
+REAL energy(REALthree subj)
 {
     REAL u = subj.y/subj.x;
     return subj.z/subj.x - HALF*u*u;
@@ -661,29 +614,6 @@ classicWrapper(const int bks, int tpb, const int dv, const double dt, const doub
         classicEuler <<< bks,tpb >>> (dEuler_out, dEuler_in, true);
         t_eq += dt;
 
-        //If multiple timesteps should be written out do so here with the file provided.
-        if (t_eq > twrite)
-        {
-            cudaMemcpy(T_f, dEuler_in, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
-
-            fwr << "Density " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << T_f[k].x << " ";
-            fwr << endl;
-
-            fwr << "Velocity " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << T_f[k].y/T_f[k].x << " ";
-            fwr << endl;
-
-            fwr << "Energy " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << energy(T_f[k]) << " ";
-            fwr << endl;
-
-            fwr << "Pressure " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << pressure(T_f[k]) << " ";
-            fwr << endl;
-
-            twrite += freq;
-        }
     }
 
     cudaMemcpy(T_f, dEuler_in, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
@@ -700,11 +630,6 @@ double
 sweptWrapper(const int bks, int tpb, const int dv, const double dt, const double t_end, REALthree *IC, REALthree *T_f, const double freq, ofstream &fwr)
 {
     const size_t smem = (2*dimz.base)*sizeof(REALthree); //Amt of shared memory to request
-    const int cpuLoc = dv-tpb; //Where to write the cpu values back to device memory to make swap if hybrid.
-
-    // CPU mask values for boundary.
-    int htcpu[5];
-    for (int k=0; k<5; k++) htcpu[k] = dimz.hts[k]+2;
 
 	REALthree *d_IC, *d0_right, *d0_left, *d2_right, *d2_left;
 
@@ -724,54 +649,19 @@ sweptWrapper(const int bks, int tpb, const int dv, const double dt, const double
     //Call up first out of loop with right and left 0
 	upTriangle <<<bks, tpb, smem>>> (d_IC, d0_right, d0_left);
 
-    double t_eq;
-    double twrite = freq - QUARTER*dt;
-
 	// Call the kernels until you reach the final time
 
-    cout << "Shared Swept --" << endl;
     splitDiamond <<<bks, tpb, smem>>> (d0_right, d0_left, d2_right, d2_left);
-    t_eq = t_fullstep;
+    
+    double t_eq = t_fullstep;
 
     while(t_eq < t_end)
     {
-
-        wholeDiamond <<<bks, tpb, smem>>> (d2_right, d2_left, d0_right, d0_left, false);
+        wholeDiamond <<<bks, tpb, smem>>> (d2_right, d2_left, d0_right, d0_left);
 
         splitDiamond <<<bks, tpb, smem>>> (d0_right, d0_left, d2_right, d2_left);
         //It always ends on a left pass since the down triangle is a right pass.
         t_eq += t_fullstep;
-
-        if (t_eq > twrite)
-        {
-            downTriangle <<<bks, tpb, smem>>> (d_IC, d2_right, d2_left);
-
-            cudaMemcpy(T_f, d_IC, sizeof(REALthree)*dv, cudaMemcpyDeviceToHost);
-
-            fwr << "Density " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << T_f[k].x << " ";
-            fwr << endl;
-
-            fwr << "Velocity " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << (T_f[k].y/T_f[k].x) << " ";
-            fwr << endl;
-
-            fwr << "Energy " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << energy(T_f[k]) << " ";
-            fwr << endl;
-
-            fwr << "Pressure " << t_eq << " ";
-            for (int k = 1; k<(dv-1); k++) fwr << pressure(T_f[k]) << " ";
-            fwr << endl;
-
-            upTriangle <<<bks, tpb, smem>>> (d_IC, d0_right, d0_left);
-
-            splitDiamond <<<bks, tpb, smem>>> (d0_right, d0_left, d2_right, d2_left);
-
-            t_eq += t_fullstep;
-
-            twrite += freq;
-        }
     }
     
     // The last call is down so call it and pass the relevant data to the host with memcpy.
@@ -789,19 +679,13 @@ sweptWrapper(const int bks, int tpb, const int dv, const double dt, const double
 
 int main( int argc, char *argv[] )
 {
-    // That is, there must be 8 or 9 arguments.
-    if (argc < 8)
-	{
-		cout << "The Program takes 8 inputs, #Divisions, #Threads/block, deltat, finish time, output frequency..." << endl;
-        cout << "Algorithm type, Variable Output File, Timing Output File (optional)" << endl;
-		exit(-1);
-	}
     cout.precision(10); 
-
+    
 	// Choose the GPGPU.  This is device 0 in my machine which has 2 devices.
 	cudaSetDevice(GPUNUM);
-    if (sizeof(REAL)>6) cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
-
+    cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+    
+	ofstream fwr;
     dimz.gam = 1.4;
     dimz.mgam = 0.4;
 
@@ -820,9 +704,10 @@ int main( int argc, char *argv[] )
     const int scheme = atoi(argv[6]); //2 for Alternate, 1 for GPUShared, 0 for Classic
     const int bks = dv/tpb; //The number of blocks
     const double dx = lx/((REAL)dv-TWO); //Grid size.
-    char const *prec;
-    prec = (sizeof(REAL)<6) ? "Single": "Double";
-
+    if (scheme) fwr.open("eulerResult/atomicS.dat", ios::trunc);
+    else fwr.open("eulerResult/atomicC.dat", ios::trunc);
+    fwr.precision(10);
+    
     //Declare the dimensions in constant memory.
     dimz.dt_dx = dt/dx; // dt/dx
     dimz.base = tpb+4; // Length of the base of a node.
@@ -831,23 +716,7 @@ int main( int argc, char *argv[] )
 
     for (int k=-2; k<3; k++) dimz.hts[k+2] = (tpb/2) + k; //Middle values in the node (masking values)
 
-    cout << "Euler Array --- #Blocks: " << bks << " | Length: " << lx << " | Precision: " << prec << " | dt/dx: " << dimz.dt_dx << endl;
-
-	// Conditions for main input.
-	// dv and tpb must be powers of two.  dv must be larger than tpb and divisible by tpb.
-
-	if ((dv & (tpb-1) !=0) || (tpb&31) != 0)
-    {
-        cout << "INVALID NUMERIC INPUT!! "<< endl;
-        cout << "2nd ARGUMENT MUST BE A POWER OF TWO >= 32 AND FIRST ARGUMENT MUST BE DIVISIBLE BY SECOND" << endl;
-        exit(-1);
-    }
-
-    if (dimz.dt_dx > .21)
-    {
-        cout << "The value of dt/dx (" << dimz.dt_dx << ") is too high.  In general it must be <=.21 for stability." << endl;
-        exit(-1);
-    }
+    cout << "Euler Array --- #Blocks: " << bks << " | dt/dx: " << dimz.dt_dx << endl;
 
 	// Initialize arrays.
     REALthree *IC, *T_final;
@@ -856,10 +725,7 @@ int main( int argc, char *argv[] )
 
 	for (int k = 0; k<dv; k++) IC[k] = (k<dv/2) ? bd[0] : bd[1]; // Populate initial conditions
 
-	// Call out the file before the loop and write out the initial condition.
-	ofstream fwr;
-	fwr.open(argv[7],ios::trunc);
-    fwr.precision(10);
+    
 
 	// Write out x length and then delta x and then delta t.
 	// First item of each line is variable second is timestamp.
@@ -890,17 +756,20 @@ int main( int argc, char *argv[] )
 	float timed;
 	cudaEventCreate( &start );
 	cudaEventCreate( &stop );
-	cudaEventRecord( start, 0);
+    cudaEventRecord( start, 0);
+    string tpath;
 
     // Call the correct function with the correct algorithm.
     cout << scheme << " " ;
     double tfm;
     if (scheme)
     {
+        tpath = "eulerResult/Array_Swept.csv";
         tfm = sweptWrapper(bks, tpb, dv, dt, tf, IC, T_final, freq, fwr);
     }
     else
     {
+        tpath = "eulerResult/Array_Classic.csv";
         tfm = classicWrapper(bks, tpb, dv, dt, tf, IC, T_final, freq, fwr);
     }
 
@@ -926,14 +795,13 @@ int main( int argc, char *argv[] )
     cout << n_timesteps << " timesteps" << endl;
 	cout << "Averaged " << per_ts << " microseconds (us) per timestep" << endl;
 
-    // Write out time per timestep to timing file.
-    if (argc>7)
-    {
-        ofstream ftime;
-        ftime.open(argv[8],ios::app);
-    	ftime << dv << "\t" << tpb << "\t" << per_ts << endl;
-    	ftime.close();
-    }
+    FILE *timeOut;
+    timeOut = fopen(tpath.c_str(), "a+");    
+    fseek(timeOut, 0, SEEK_END);
+    int ft = ftell(timeOut);
+    if (!ft) fprintf(timeOut, "tpb,nX,time\n");
+    fprintf(timeOut, "%d,%d,%.8f\n", tpb, dv, per_ts);
+    fclose(timeOut);
 
 	fwr << "Density " << tfm << " ";
 	for (int k = 1; k<(dv-1); k++) fwr << T_final[k].x << " ";

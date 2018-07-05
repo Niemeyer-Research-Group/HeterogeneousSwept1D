@@ -1,16 +1,14 @@
 /**
-    The equation specific functions.
-*/
-
-/**
-	The equations specific global variables and function prototypes.
+    Lenthening strategy for Euler - Atomic stages.
+    
+    COMPILE:
+    nvcc EulerAtomic.cu -o ./bin/EulerAtomic -gencode arch=compute_35,code=sm_35 -lm -restrict -Xptxas=-v 
 */
 
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 #include <device_functions.h>
-#include <mpi.h>
 
 #include <iostream>
 #include <fstream>
@@ -27,6 +25,10 @@
 #include "myVectorTypes.h"
 
 using namespace std;
+
+#ifndef GPUNUM
+    #define GPUNUM              0
+#endif
 
 // We're just going to assume doubles
 #define REAL            double
@@ -56,48 +58,37 @@ using namespace std;
 	============================================================
 */
 
-
-struct Globalism {
-    // Topology
-    int nGpu, nX;
-    int xg, xcpu;
-    int xStart;
-    int nWrite;
-    int hasGpu;
-    double gpuA;
-
-    // Geometry
-	int szState;
-    int tpb, tpbp, base;
-    int cBks, gBks;
-    int ht, htm, htp;
-
-    // Iterator
-    double tf, freq, dt, dx, lx;
-    bool bCond[2] = {true, true};
-};
-
-Globalism cGlob;
-
+// Hardwire in the length of the 
+const double lx = 1.0;
 const double GAMMA = 1.4;
 const double MGAMMA = 0.4;
+
+int nX, tpb, tpbp, base, ht, htm, htp, bks, scheme;
+size_t szState, gridmem;
+double tf, dt, dx, freq;
+
+__host__ __device__
+__forceinline__
+int mod(int a, int b) { return (a % b + b) % b; }
 
 //---------------//
 struct eqConsts {
     REAL gamma; // Heat capacity ratio
     REAL mgamma; // 1- Heat capacity ratio
     REAL dt_dx; // deltat/deltax
+    int nX, nXp;
+
+    __host__ __device__
+    int modo(int idx) {return mod(idx, nX); }
 };
 
 //---------------//
 struct states {
     REALthree Q[2]; // Full Step, Midpoint step state variables
     REAL Pr; // Pressure ratio
-    // size_t tstep; // Consider this for padding.  Unfortunately, requires much refactoring.
 };
 
-std::string outVars[NVARS] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; //---------------//
-std::string fspec = "Euler";
+std::string outVars[NVARS] = {"DENSITY", "VELOCITY", "ENERGY", "PRESSURE"}; 
 
 /*
 	============================================================
@@ -107,13 +98,20 @@ std::string fspec = "Euler";
 
 __constant__ eqConsts deqConsts;  //---------------//
 eqConsts heqConsts;               //---------------//
+
 REALthree hBounds[2] = {{1.0, 0.0, 2.5}, {0.125, 0.0, 0.25}}; 
-__constant_ REALthree dBounds[2];
+__constant__ REALthree dBounds[2];
 states bound[2];
 
-#define DIMS    deqConsts
-#define QNAN(x) isnan(x)
-#define QMIN(x, y) min(x, y)
+#ifdef __CUDA_ARCH__
+    #define DIMS    deqConsts
+    #define QNAN(x) isnan(x)
+    #define QMIN(x, y) min(x, y)
+#else
+    #define DIMS    heqConsts
+    #define QNAN(x) std::isnan(x)
+    #define QMIN(x, y) std::min(x, y)
+#endif
 
 
 __host__ double indexer(double dx, int i, int x)
@@ -139,106 +137,35 @@ __host__ REAL energy(REALthree subj)
     return subj.z/subj.x - HALF*u*u;
 }
 
-__device__ __host__
-__forceinline__
+__device__ __host__ __forceinline__
 REAL pressure(REALthree qH)
 {
     return DIMS.mgamma * (qH.z - (HALF * qH.y * qH.y/qH.x));
 }
 
-__host__ inline REAL printout(states *state, int i)
-{
-    REALthree subj = state->Q[0];
-    REAL ret;
 
-    if (i == 0) ret = density(subj);
-    if (i == 1) ret = velocity(subj);
-    if (i == 2) ret = energy(subj);
-    if (i == 3) ret = pressure(subj);
-
-    return ret;
-}
-
-
-__host__ inline states icond(double xs, double lx)
-{
-    states s;
-    int side = (xs > HALF*lx);
-    s.Q[0] = hBounds[side];
-    s.Q[1] = hBounds[side];
-    s.Pr = 0.0;
-    return s;
-}
-
-__host__ void equationSpecificArgs()
-{
-    heqConsts.gamma = GAMMA;
-    heqConsts.mgamma = MGAMMA;
-    double lx = inJs["lx"].asDouble();
-    REAL dtx = inJs["dt"].asDouble();
-    REAL dxx = inJs["dx"].asDouble();
-    heqConsts.dt_dx = dtx/dxx;
-    bound[0] = icond(0.0, lx);
-    bound[1] = icond(lx, lx);
-}
-
-// One of the main uses of global variables is the fact that you don't need to pass
-// anything so you don't need variable args.
-// lxh is half the domain length assuming starting at 0.
-__host__ void initialState(jsons inJs, states *inl, int idx, int xst)
-{
-    double dxx = inJs["dx"].asDouble();
-    double xss = indexer(dxx, idx, xst);
-    double lx = inJs["lx"].asDouble();
-    bool wh = inJs["IC"].asString() == "PARTITION";
-    if (wh)
-    {
-        inl[idx] = icond(xss, lx);
-    }
-}
-
-
-__device__ __host__
-__forceinline__
+__device__ __forceinline__
 REAL pressureRoe(REALthree qH)
 {
     return DIMS.mgamma * (qH.z - HALF * qH.y * qH.y);
 }
 
-/**
-    Ratio
-*/
-__device__ __host__
-__forceinline__
+
+__device__ __host__ __forceinline__
 void pressureRatio(states *state, const int idx, const int tstep)
 {
     state[idx].Pr = (pressure(state[idx+1].Q[tstep]) - pressure(state[idx].Q[tstep]))/(pressure(state[idx].Q[tstep]) - pressure(state[idx-1].Q[tstep]));
 }
 
-/**
-    Reconstructs the state variables if the pressure ratio is finite and positive.
 
-    @param cvCurrent  The state variables at the point in question.
-    @param cvOther  The neighboring spatial point state variables.
-    @param pRatio  The pressure ratio Pr-Pc/(Pc-Pl).
-    @return The reconstructed value at the current side of the interface.
-*/
-__device__ __host__
-__forceinline__
+__device__ __forceinline__
 REALthree limitor(REALthree qH, REALthree qN, REAL pRatio)
 {
     return (QNAN(pRatio) || (pRatio<1.0e-8)) ? qH : (qH + HALF * QMIN(pRatio, ONE) * (qN - qH));
 }
 
-/**
-    Uses the reconstructed interface values as inputs to flux function F(Q)
 
-    @param qL Reconstructed value at the left side of the interface.
-    @param qR  Reconstructed value at the left side of the interface.
-    @return  The combined flux from the function.
-*/
-__device__ __host__
-__forceinline__
+__device__ __forceinline__
 REALthree eulerFlux(const REALthree qL, const REALthree qR)
 {
     REAL uLeft = qL.y/qL.x;
@@ -255,15 +182,7 @@ REALthree eulerFlux(const REALthree qL, const REALthree qR)
     return flux;
 }
 
-/**
-    Finds the spectral radius and applies it to the interface.
-
-    @param qL Reconstructed value at the left side of the interface.
-    @param qR  Reconstructed value at the left side of the interface.
-    @return  The spectral radius multiplied by the difference of the reconstructed values
-*/
-__device__ __host__
-__forceinline__
+__device__ __forceinline__
 REALthree eulerSpectral(const REALthree qL, const REALthree qR)
 {
     REALthree halfState;
@@ -281,7 +200,7 @@ REALthree eulerSpectral(const REALthree qL, const REALthree qR)
     return (SQUAREROOT(pH * DIMS.gamma) + fabs(halfState.y)) * (qL - qR);
 }
 
-__device__ __host__
+__device__ 
 void eulerStep(states *state, const int idx, const int tstep)
 {
     REALthree tempStateLeft, tempStateRight;
@@ -300,7 +219,7 @@ void eulerStep(states *state, const int idx, const int tstep)
     state[idx].Q[tstep] = state[idx].Q[0] + ((QUARTER * (itx+1)) * DIMS.dt_dx * flux);
 }
 
-__device__ __host__
+__device__ 
 void stepUpdate(states *state, const int idx, const int tstep)
 {
    int ts = DIVMOD(tstep);
@@ -314,27 +233,23 @@ void stepUpdate(states *state, const int idx, const int tstep)
     }
 }
 
-__global__ void classicStep(states *state, const int ts)
+__global__ 
+void classicStep(states *state, const int ts)
 {
     int gid = blockDim.x * blockIdx.x + threadIdx.x + 1; //Global Thread ID (one extra)
-    stepUpdate(state, gid, ts);
+    if (gid<DIMS.nXp) stepUpdate(state, gid, ts);
 }
-typedef std::vector<int> ivec;
 
-states ssLeft[3];
-states ssRight[3];
-
-__global__ void upTriangle(states *state, const int tstep)
+__global__ 
+void upTriangle(states *state, const int tstep)
 {
 	extern __shared__ states sharedstate[];
 
 	int gid = blockDim.x * blockIdx.x + threadIdx.x; //Global Thread ID
 	int tidx = threadIdx.x; //Block Thread ID
     int mid = blockDim.x >> 1;
-
-    // Using tidx as tid is kind of confusing for reader but looks valid.
-
-	sharedstate[tidx] = state[gid + 1];
+    int tnow = tstep;
+	sharedstate[tidx] = state[gid];
 
     __syncthreads();
 
@@ -342,39 +257,33 @@ __global__ void upTriangle(states *state, const int tstep)
 	{
 		if (tidx < (blockDim.x-k) && tidx >= k)
 		{
-            stepUpdate(sharedstate, tidx, tstep + k);
-		}
+            stepUpdate(sharedstate, tidx, tnow);
+        }
+        tnow++;
 		__syncthreads();
 	}
-    state[gid + 1] = sharedstate[tidx];
+    state[gid] = sharedstate[tidx];
 }
 
-/**
-    Builds an inverted triangle using the swept rule.
-
-    Inverted triangle using the swept rule.  downTriangle is only called at the end when data is passed left.  It's never split.  Sides have already been passed between nodes, but will be swapped and parsed by readIn function.
-
-    @param IC Full solution at some timestep.
-    @param inRight Array of right edges seeding solution vector.
-*/
-__global__
-void
-downTriangle(states *state, const int tstep, const int offset)
+__global__ 
+void downTriangle(states *state, const int tstep)
 {
 	extern __shared__ states sharedstate[];
 
     int tid = threadIdx.x; // Thread index
     int mid = blockDim.x >> 1; // Half of block size
     int base = blockDim.x + 2;
-    int gid = blockDim.x * blockIdx.x + tid + offset;
+    int gid = blockDim.x * blockIdx.x + tid;
     int tidx = tid + 1;
 
     int tnow = tstep; // read tstep into register.
 
-    if (tid<2) sharedstate[tid] = state[gid];
+    if (tid<2 && gid>0) sharedstate[tid] = state[gid-1];
     __syncthreads();
-    sharedstate[tid+2] = state[gid+2];
+    if ((gid + 1) < DIMS.nX) sharedstate[tid+2] = state[gid+1];
     __syncthreads();
+
+    if (gid == 0 || gid == (DIMS.nXp)) return;
 
 	for (int k=mid; k>0; k--)
 	{
@@ -388,23 +297,26 @@ downTriangle(states *state, const int tstep, const int offset)
     state[gid] = sharedstate[tidx];
 }
 
-__global__ void
-wholeDiamond(states *state, const int tstep)
+__global__ 
+void wholeDiamond(states *state, const int tstep)
 {
 	extern __shared__ states sharedstate[];
 
-    int tidx = threadIdx.x + 1; // Thread index
-    int mid = (blockDim.x >> 1); // Half of block size
+    int k;
+    int tid = threadIdx.x; // Thread index
+    int mid = blockDim.x >> 1; // Half of block size
     int base = blockDim.x + 2;
-    int gid = blockDim.x * blockIdx.x + threadIdx.x + offset;
+    int gid = blockDim.x * blockIdx.x + tid;
+    int tidx = tid + 1;
 
-    int tnow = tstep;
-	int k;
-    if (threadIdx.x<2) sharedstate[threadIdx.x] = state[gid];
-    __syncthreads();
-    sharedstate[tidx+1] = state[gid + 2];
+    int tnow = tstep; // read tstep into register.
 
+    if (tid<2 && gid>0) sharedstate[tid] = state[gid-1];
     __syncthreads();
+    if ((gid + 1) < DIMS.nX) sharedstate[tid+2] = state[gid+1];
+    __syncthreads();
+
+    if (gid == 0 || gid == (DIMS.nXp)) return;
 
 	for (k=mid; k>0; k--)
 	{
@@ -425,206 +337,170 @@ wholeDiamond(states *state, const int tstep)
 		tnow++;
 		__syncthreads();
     }
-    state[gid + 1] = sharedstate[tidx];
+    state[gid] = sharedstate[tidx];
 }
 
-__global__ void 
-splitDiamond(states *state, const int tstep)
+__global__ 
+void splitDiamond(states *state, const int tstep)
 {
-    ssLeft[2] = bound[1];
-    ssRight[0] = bound[0];
-    for (int k=cGlob.ht; k>0; k--)
-    {
-        for (int n=k; n<(cGlob.base-k); n++)
-        {
-            if (n == cGlob.ht)
-            {
-                ssLeft[0] = state[n-1], ssLeft[1] = state[n];
-                stepUpdate(&ssLeft[0], 1, tnow);
-                state[n] = ssLeft[1];
-            }
-            else if (n == cGlob.htp)
-            {
-                ssRight[1] = state[n], ssRight[2] = state[n+1];
-                stepUpdate(&ssRight[0], 1, tnow);
-                state[n] = ssRight[1];
-            }
-            else
-            {
-                stepUpdate(state, n, tnow);
-            }
-        }
-        tnow++;
-    }
+	extern __shared__ states sharedstate[];
 
-    for (int k=2; k<cGlob.htp; k++)
-    {
-        for (int n=k; n<(cGlob.base-k); n++)
+    int k;
+    int tid = threadIdx.x; // Thread index
+    int mid = blockDim.x >> 1; // Half of block size
+    int base = blockDim.x + 2;
+    int gid = blockDim.x * blockIdx.x + tid + mid;
+    int tidx = tid + 1;
+    int gidx = DIMS.modo(gid);
+
+    int tnow = tstep; // read tstep into register;
+
+    if (tid<2) sharedstate[tid] = state[DIMS.modo(gid - 1)];
+    __syncthreads();
+    sharedstate[tid+2] = state[DIMS.modo(gid + 1)];
+    __syncthreads();
+    
+    if (gid == DIMS.nX || gid == DIMS.nXp) return;
+
+	for (k=mid; k>0; k--)
+	{
+		if (tidx < (base-k) && tidx >= k)
+		{
+        	stepUpdate(sharedstate, tidx, tnow);
+		}
+		tnow++;
+		__syncthreads();
+	}
+
+	for (k=2; k<=mid; k++)
+	{
+		if (tidx < (base-k) && tidx >= k)
+		{
+            stepUpdate(sharedstate, tidx, tnow);
+		}
+		tnow++;
+		__syncthreads();
+    }
+    state[gidx] = sharedstate[tidx];
+}
+
+__host__ inline 
+REAL printout(states *state, int i)
+{
+    REALthree subj = state->Q[0];
+    REAL ret;
+
+    if (i == 0) ret = density(subj);
+    if (i == 1) ret = velocity(subj);
+    if (i == 2) ret = energy(subj);
+    if (i == 3) ret = pressure(subj);
+
+    return ret;
+}
+
+ofstream fwr;
+
+void writeOut(states *outState, double tstamp)
+{
+    for (int i = 0; i<4; i++)
+    {   
+        fwr << outVars[i] << " " << tstamp << " ";
+        for (int k = 1; k<(nX-1); k++)
         {
-            if (n == cGlob.ht)
-            {
-                ssLeft[0] = state[n-1], ssLeft[1] = state[n];
-                stepUpdate(&ssLeft[0], 1, tnow);
-                state[n] = ssLeft[1];
-            }
-            else if (n == cGlob.htp)
-            {
-                ssRight[1] = state[n], ssRight[2] = state[n+1];
-                stepUpdate(&ssRight[0], 1, tnow);
-                state[n] = ssRight[1];
-            }
-            else
-            {
-                stepUpdate(state, n, tnow);
-            }
+            fwr << printout(outState + k, i) << " ";
         }
-	tnow++;
+        fwr << endl;
     }
 }
 
 // Classic Discretization wrapper.
-double classicWrapper(states **state, int *tstep)
+double classicWrapper(states *state, int *tstep)
 {
-    int tmine = *tstep;
-
+    int k, tmine = *tstep;
     double t_eq = 0.0;
-    double twrite = cGlob.freq - QUARTER*cGlob.dt;
 
-    cout << "Classic Decomposition GPU" << endl;
-    const int xc = cGlob.xcpu/2;
-    int xcp = xc+1;
-    const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
-    const int gpusize =  cGlob.szState * xgpp;
+    cout << "Classic Decomposition ---- " << tpb << " - " << nX << endl;
 
     states *dState;
+    cudaMalloc((void **)&dState, gridmem);
+    cudaMemcpy(dState, state, gridmem, cudaMemcpyHostToDevice);
 
-    cudaMalloc((void **)&dState, gpusize);
-    // Copy the initial conditions to the device array.
-    // This is ok, the whole array has been malloced.
-    cudaMemcpy(dState, state[1], gpusize, cudaMemcpyHostToDevice);
-
-    cout << "Entering Loop" << endl;
-
-    while (t_eq < cGlob.tf)
+    while (t_eq < tf)
     {
-        //TIMEIN;
-        classicStep<<<cGlob.gBks, cGlob.tpb>>> (dState, tmine);
+        #pragma unroll
+        for (k=0; k<NSTEPS; k++)
+        {
+            classicStep<<<bks, tpb>>> (dState, tmine + k);
+        }
 
         // Increment Counter and timestep
-        if (!(tmine % NSTEPS)) t_eq += cGlob.dt;
-        tmine++;
-
-        // OUTPUT
-        if (t_eq > twrite)
-        {
-            writeOut(state, t_eq);
-            twrite += cGlob.freq;
-        }
+        t_eq += dt;
+        tmine += NSTEPS;
     }
 
-    cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
+    cudaMemcpy(state, dState, gridmem, cudaMemcpyDeviceToHost);
 
     cudaFree(dState);
-
     return t_eq;
 }
 
-double sweptWrapper(states **state,  int *tstep)
+double sweptWrapper(states *state, int *tstep)
 {
-	cout << "SWEPT Decomposition " << cGlob.tpb << endl;
-
-    const int bkL = cGlob.cBks - 1;
+    int k, tmine = *tstep;
     double t_eq = 0.0;
-    double twrite = cGlob.freq - QUARTER*cGlob.dt;
-    int tmine = *tstep;
-
-    const int xc = cGlob.xcpu/2, xcp=xc+1;
-    const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
-    const int cmid = cGlob.cBks/2;
-    int bx, ix;
-
-    const size_t gpusize = cGlob.szState * (xgpp + cGlob.ht);
-    const size_t ptsize = cGlob.szState * xgpp;
-    const size_t passsize =  cGlob.szState * cGlob.htp;
-    const size_t smem = cGlob.szState * cGlob.base;
-
-    int gpupts = gpusize/cGlob.szState;
+	cout << "Swept Decomposition ---- " << tpb << " - " << nX << endl;
+    const size_t smem = (2+tpb) * szState; 
+    const double multiplier = dt/((double)NSTEPS); 
+    int rndme;
 
     states *dState;
 
-    cudaMalloc((void **)&dState, gpusize);
-    cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
+    cudaMalloc((void **)&dState, gridmem);
+    cudaMemcpy(dState, state, gridmem, cudaMemcpyHostToDevice);
 
     // ------------ Step Forward ------------ //
     // ------------ UP ------------ //
 
-    upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
-
+    upTriangle <<<bks, tpb, smem>>> (dState, tmine);
+    
     // ------------ Step Forward ------------ //
     // ------------ SPLIT ------------ //
 
-    wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
+    splitDiamond <<<bks, tpb, smem>>> (dState, tmine);
 
     // Increment Counter and timestep
-    tmine += cGlob.ht;
-    t_eq = cGlob.dt * (tmine/NSTEPS);
+    tmine += ht;
+    t_eq = tmine * multiplier;
 
-    while(t_eq < cGlob.tf)
+
+    while(t_eq < tf)
     {
         // ------------ Step Forward ------------ //
         // ------------ WHOLE ------------ //
 
-        wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
+        wholeDiamond <<<bks, tpb, smem>>> (dState, tmine);
+       
 
         // Increment Counter and timestep
-        tmine += cGlob.ht;
-        t_eq = cGlob.dt * (tmine/NSTEPS);
+        tmine += ht;
+        t_eq = tmine * multiplier;
 
         // ------------ Step Forward ------------ //
         // ------------ SPLIT ------------ //
 
-        wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
+        splitDiamond <<<bks, tpb, smem>>> (dState, tmine);
 
-        // Increment Counter and timestep
-        tmine += cGlob.ht;
-        t_eq = cGlob.dt * (tmine/NSTEPS);
-
-        if (t_eq > twrite)
-        {
-            downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
-
-
-
-            // Increment Counter and timestep
-            tmine += cGlob.ht;
-            t_eq = cGlob.dt * (tmine/NSTEPS);
-
-            cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
-
-            writeOut(state, t_eq);
-            
-            upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
-
-
-            // ------------ Step Forward ------------ //
-            // ------------ SPLIT ------------ //
-
-            wholeDiamond <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, cGlob.ht);
-
-            tmine += cGlob.ht;
-            t_eq = cGlob.dt * (tmine/NSTEPS);
-            twrite += cGlob.freq;
-        }
-
+        tmine += ht;
+        t_eq = tmine * multiplier;
     }
 
-    downTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine, 0);
+    downTriangle <<<bks, tpb, smem>>> (dState, tmine);
 
-    // Increment Counter and timestep
-    tmine += cGlob.ht;
-    t_eq = cGlob.dt * (tmine/NSTEPS);
+    tmine += ht;
+    rndme = tmine/NSTEPS;
+    t_eq = rndme * dt;
 
-    cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
+    cudaMemcpy(state, dState, gridmem, cudaMemcpyDeviceToHost);
 
     cudaFree(dState);
 
@@ -632,161 +508,118 @@ double sweptWrapper(states **state,  int *tstep)
     return t_eq;
 }
 
-
 /**
-----------------------
-    MAIN PART
-----------------------
+    ----------------------
+        MAIN PART
+    ----------------------
 */
-
 int main(int argc, char *argv[])
 {
-    if (argc < 8)
-	{
-		cout << "The Program takes 8 inputs, #Divisions, #Threads/block, deltat, finish time, output frequency..." << endl;
-        cout << "Algorithm type, Variable Output File, Timing Output File (optional)" << endl;
-		exit(-1);
-	}
+
     cout.precision(10); 
 
-	// Choose the GPGPU.  This is device 0 in my machine which has 2 devices.
 	cudaSetDevice(GPUNUM);
-    if (sizeof(REAL)>6) cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+    cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
 
-    const int dv = atoi(argv[1]); //Number of spatial points
-	const int tpb = atoi(argv[2]); //Threads per Block
-    const double dt = atof(argv[3]); //Timestep
-	const double tf = atof(argv[4]) - QUARTER*dt; //Finish time
-    const double freq = atof(argv[5]); //Frequency of output (i.e. every 20 s (simulation time))
-    const int scheme = atoi(argv[6]); //2 for Alternate, 1 for GPUShared, 0 for Classic
-    const int bks = dv/tpb; //The number of blocks
-    const double dx = lx/((REAL)dv-TWO); //Grid size.
-    char const *prec;
-    prec = (sizeof(REAL)<6) ? "Single": "Double";
+    nX = atoi(argv[1]); //Number of spatial points
+    tpb = atoi(argv[2]); //Threads per Block
+    szState = sizeof(states);
+    dt = atof(argv[3]); //Timestep
+	tf = atof(argv[4]) - QUARTER*dt; //Finish time
+    freq = atof(argv[5]); //Frequency of output (i.e. every 20 s (simulation time))
+    scheme = atoi(argv[6]); 
+    dx = lx/((REAL)nX-TWO); //Grid size.
+    bks = nX/tpb; //The number of blocks
+    gridmem = szState * nX;
+    ht = tpb/2;
 
-    std::string i_ext = ".json";
-    std::string t_ext = ".csv";
-    std::string myrank = std::to_string(ranks[1]);
-    std::string scheme = argv[1];
+    if (scheme) fwr.open("eulerResult/atomicS.dat", ios::trunc);
+    else fwr.open("eulerResult/atomicC.dat", ios::trunc);
+    fwr.precision(10);
 
-    cout << "Euler Atomic --- #Blocks: " << bks << " | Length: " << lx << " | Precision: " << prec << " | dt/dx: " << dimz.dt_dx << endl;
+    heqConsts.gamma = GAMMA;
+    heqConsts.mgamma = MGAMMA;
+    heqConsts.dt_dx = dt/dx;
+    heqConsts.nX = nX;
+    heqConsts.nXp = nX-1;
 
-    initArgs();
+    cout << "Euler Atomic --- #Blocks: " << bks << " | dt/dx: " << heqConsts.dt_dx << endl;
 
-    cGlob.xStart = cGlob.xcpu * ranks[1] + cGlob.xg * prevGpu;
-    states **state;
+    states *state;
+    cudaHostAlloc((void **) &state, gridmem, cudaHostAllocDefault);
+    REALthree filler;
 
-    int exSpace = ((int)!scheme.compare("S") * cGlob.ht) + 2;
-    int xc = (cGlob.hasGpu) ? cGlob.xcpu/2 : cGlob.xcpu;
-    int nrows = (cGlob.hasGpu) ? 3 : 1;
-    int xalloc = xc + exSpace;
-
-    std::string pth = string(argv[3]);
-
-    if (cGlob.hasGpu)
+    for (int k = 0; k<nX; k++) 
     {
-        state = new states* [3];
-        cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
-        cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
-        cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
-
-        cout << "Rank: " << ranks[1] << " has a GPU" << endl;
-        int ii[3] = {xc, cGlob.xg, xc};
-        int xi;
-        for (int i=0; i<3; i++)
-        {
-            xi = cGlob.xStart-1;
-            for (int n=0; n<i; n++) xi += ii[n];
-            for (int k=0; k<(ii[i]+2); k++)  initialState(inJ, state[i], k, xi);
-        }
+        filler = (k<nX/2) ? hBounds[0] : hBounds[1]; 
+        state[k].Q[0] = filler;
+        state[k].Q[1] = filler;
+        state[k].Pr = 0;
+    }
 
     cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
-    cudaMemcpyToSymbol(dBounds, &hBounds, sizeof(REALthree));
-
-    }
-    else
-    {
-        state = new states*[1];
-        state[0] = new states[xalloc * cGlob.szState];
-        for (int k=0; k<(xc+2); k++)  initialState(inJ, state[0], k, cGlob.xStart-1);
-    }
-
+    // cudaMemcpyToSymbol(dBounds, &hBounds, 2*szState);
     writeOut(state, 0.0);
 
+    int tstep = 1;
 
-    if (!scheme.compare("C"))
+    // Start the counter and start the clock.
+    cudaEvent_t start, stop;
+    float timed;
+    cudaEventCreate( &start );
+    cudaEventCreate( &stop );
+    cudaEventRecord( start, 0);
+
+    cout << scheme << " " ;
+    double tfm;
+    std::string tpath;
+
+    if (scheme)
     {
-        tfm = classicWrapper(state, &tstep);
-    }
-    else if  (!scheme.compare("S"))
-    {
+        tpath = "eulerResult/Atomic_Swept.csv";
         tfm = sweptWrapper(state, &tstep);
     }
     else
     {
-        std::cerr << "Incorrect or no scheme given" << std::endl;
+        tpath = "eulerResult/Atomic_Classic.csv";
+        tfm = classicWrapper(state, &tstep);
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    if (!ranks[1]) timed = (MPI_Wtime() - timed);
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&timed, start, stop);
 
-    if (cGlob.hasGpu)  
+    cudaError_t error = cudaGetLastError();
+    if(error != cudaSuccess)
     {
-        cudaError_t error = cudaGetLastError();
-        if(error != cudaSuccess)
-        {
-            // print the CUDA error message and exit
-            printf("CUDA error: %s\n", cudaGetErrorString(error));
-            exit(-1);
-        }
-        cudaDeviceSynchronize();
+        // print the CUDA error message and exit
+        printf("CUDA error: %s\n", cudaGetErrorString(error));
+        exit(-1);
     }
 
     writeOut(state, tfm);
+    fwr.close();
 
-    if (!ranks[1])
-    {
-        timed *= 1.e6;
+    timed *= 1.e3;
+    double n_timesteps = tfm/dt;
+    double per_ts = timed/n_timesteps;
 
-        double n_timesteps = tfm/cGlob.dt;
+    std::cout << n_timesteps << " timesteps" << std::endl;
+    std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
 
-        double per_ts = timed/n_timesteps;
+    FILE *timeOut;
+    timeOut = fopen(tpath.c_str(), "a+");
+    fseek(timeOut, 0, SEEK_END);
+    int ft = ftell(timeOut);
+    if (!ft) fprintf(timeOut, "tpb,nX,time\n");
+    fprintf(timeOut, "%d,%d,%.8f\n", tpb, nX, per_ts);
+    fclose(timeOut);
 
-        std::cout << n_timesteps << " timesteps" << std::endl;
-        std::cout << "Averaged " << per_ts << " microseconds (us) per timestep" << std::endl;
-
-        // Write out performance data as csv
-        std::string tpath = pth + "/t" + fspec + scheme + t_ext;
-        FILE * timeOut;
-        timeOut = fopen(tpath.c_str(), "a+");
-        fseek(timeOut, 0, SEEK_END);
-        int ft = ftell(timeOut);
-        if (!ft) fprintf(timeOut, "tpb,gpuA,nX,time\n");
-        fprintf(timeOut, "%d,%.4f,%d,%.8f\n", cGlob.tpb, cGlob.gpuA, cGlob.nX, per_ts);
-        fclose(timeOut);
-    }
-    
-        //WRITE OUT JSON solution to differential equation
-
-	#ifndef NOS
-        std::string spath = pth + "/s" + fspec + "_" + myrank + i_ext;
-        std::ofstream soljson(spath.c_str(), std::ofstream::trunc);
-        if (!ranks[1]) solution["meta"] = inJ;
-        soljson << solution;
-        soljson.close();
-	#endif
-
-    if (cGlob.hasGpu)
-    {
-        for (int k=0; k<3; k++) cudaFreeHost(state[k]);
-        cudaDeviceSynchronize();
-        cudaDeviceReset();
-    }
-    else
-    {
-        delete[] state[0];
-    }
-    delete[] state;
+    cudaDeviceSynchronize();
+    cudaEventDestroy( start );
+    cudaEventDestroy( stop );
+    cudaFreeHost(state);
+    cudaDeviceReset();
 
     return 0;
 }

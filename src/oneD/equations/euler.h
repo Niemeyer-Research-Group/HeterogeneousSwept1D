@@ -133,8 +133,7 @@ __host__ REAL energy(REALthree subj)
     return subj.z/subj.x - HALF*u*u;
 }
 
-__device__ __host__
-__forceinline__
+__device__ __host__ __forceinline__
 REAL pressure(REALthree qH)
 {
     return DIMS.mgamma * (qH.z - (HALF * qH.y * qH.y/qH.x));

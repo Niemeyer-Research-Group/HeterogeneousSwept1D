@@ -263,10 +263,11 @@ void passSwept(states *passer, states *getter, int tstep, int turn)
 // Now we need to put the last value in a bucket, and append that to the start of the next array.
 double sweptWrapper(states **state,  int *tstep)
 {
+	// FILE *diagDump;
+	// std::string fname = "edge/edgeWrite_" + std::to_string(ranks[1]) + ".csv";
+	// diagDump = fopen(fname.c_str(), "w+");
+    
 	if (!ranks[1]) cout << "SWEPT Decomposition " << cGlob.tpb << endl;
-	FILE *diagDump;
-	std::string fname = "edge/edgeWrite_" + std::to_string(ranks[1]) + ".csv";
-	diagDump = fopen(fname.c_str(), "w+");
     const int bkL = cGlob.cBks - 1;
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;

@@ -18,10 +18,13 @@ PROJECT_DIR = $(shell pwd)
 OUT_DIR := ./bin
 #$(PROJECT_DIR)
 
-default: $(OUT_DIR)/KSmain$(EXTO)
+default: $(OUT_DIR)/KSmain$(EXTO) $(OUT_DIR)/EulerAtomic $(OUT_DIR)/EulerArray
 
 $(OUT_DIR)/%$(EXTO): %.cu $(PROJECT_DIR)/*.hpp
 	nvcc $< -o $@ $(CUDAFLAGS) $(PLOTSS) $(PD)
+
+$(OUT_DIR)/Euler%: Euler%.cu
+	nvcc $< -o $@ $(CUDAFLAGS)
 
 clean:
 	rm bin/*

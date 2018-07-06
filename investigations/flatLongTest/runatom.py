@@ -41,7 +41,6 @@ def minkey(df, ky):
 	dfo = df.groupby(ky).min(axis=1).drop('tpb', axis=1)
 	return dfo
 
-
 def quickPlot(f):
 	idf = pd.read_csv(f, header=0)
 	idf.rename({"dv": "gridSize"}, axis=1)
@@ -69,7 +68,6 @@ def getPlotBest(f):
 	ax.set_xlabel("Number of Spatial Points")
 	savePlot(ax.figure, "Speedup" + f.split(".")[0][-6:])
 
-
 if __name__ == "__main__":
 
 	if len(sys.argv) > 1: 
@@ -77,7 +75,7 @@ if __name__ == "__main__":
 		sys.exit(-1)
 
 	tpb = [2**k for k in range(5,11)]
-	nx = [2**k for k in range(11,21)]
+	nx  = [2**k for k in range(11,21)]
 
 	ex = "./bin/KSmain "
 

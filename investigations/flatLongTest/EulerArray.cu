@@ -728,7 +728,8 @@ int main( int argc, char *argv[] )
     
 
 	// Write out x length and then delta x and then delta t.
-	// First item of each line is variable second is timestamp.
+    // First item of each line is variable second is timestamp.
+    #ifndef NOWRITE
 	fwr << lx << " " << (dv-2) << " " << dx << " " << endl;
 
     fwr << "Density " << 0 << " ";
@@ -746,6 +747,7 @@ int main( int argc, char *argv[] )
     fwr << "Pressure " << 0 << " ";
     for (int k = 1; k<(dv-1); k++) fwr << pressure(IC[k]) << " ";
     fwr << endl;
+    #endif
 
     // Transfer data to GPU in constant memory.
 	cudaMemcpyToSymbol(dimens,&dimz,sizeof(dimensions));
@@ -803,6 +805,8 @@ int main( int argc, char *argv[] )
     fprintf(timeOut, "%d,%d,%.8f\n", tpb, dv, per_ts);
     fclose(timeOut);
 
+    #ifndef NOWRITE
+
 	fwr << "Density " << tfm << " ";
 	for (int k = 1; k<(dv-1); k++) fwr << T_final[k].x << " ";
     fwr << endl;
@@ -818,6 +822,8 @@ int main( int argc, char *argv[] )
     fwr << "Pressure " << tfm << " ";
     for (int k = 1; k<(dv-1); k++) fwr << pressure(T_final[k]) << " ";
     fwr << endl;
+
+    #endif
 
 	fwr.close();
 

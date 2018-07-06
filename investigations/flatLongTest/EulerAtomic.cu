@@ -558,8 +558,11 @@ int main(int argc, char *argv[])
     }
 
     cudaMemcpyToSymbol(deqConsts, &heqConsts, sizeof(eqConsts));
-    // cudaMemcpyToSymbol(dBounds, &hBounds, 2*szState);
-    writeOut(state, 0.0);
+    //cudaMemcpyToSymbol(dBounds, &hBounds, 2*szState);
+
+    #ifndef NOWRITE
+        writeOut(state, 0.0);
+    #endif
 
     int tstep = 1;
 
@@ -597,7 +600,9 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    writeOut(state, tfm);
+    #ifndef NOWRITE
+        writeOut(state, tfm);
+    #endif
     fwr.close();
 
     timed *= 1.e3;

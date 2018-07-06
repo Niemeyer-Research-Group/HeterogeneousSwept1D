@@ -42,10 +42,18 @@ def minkey(df, ky):
 	return dfo
 
 def quickPlot(f):
-	idf = pd.read_csv(f, header=0)
-	idf.rename({"dv": "gridSize"}, axis=1)
+	if type(f) == str:
+		idf = pd.read_csv(f, header=0)
+		name = f.split(".")[0]
+	else:
+		idf = f.copy()
+		name = "AtomicArrayEuler"
+		
+
+	numx = "dv" if "dv" in idf.columns.values else "nX"
+	idf.rename({numx: "gridSize"}, axis=1)
 	icols = idf.columns.values
-	name = f.split(".")[0]
+	
 	plotdf(idf, [2,2], name+"Raw", kwarg={"loglog": True})
 	speedup = idf[icols[:2]]
 	speedup[icols[2][:5]] = idf[icols[3]] / idf[icols[2]]
@@ -67,6 +75,7 @@ def getPlotBest(f):
 	ax.set_ylabel("Speedup")
 	ax.set_xlabel("Number of Spatial Points")
 	savePlot(ax.figure, "Speedup" + f.split(".")[0][-6:])
+	return speedz
 
 if __name__ == "__main__":
 

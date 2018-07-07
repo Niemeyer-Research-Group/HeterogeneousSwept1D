@@ -6,15 +6,18 @@ import os.path as op
 import sys
 import pandas as pd
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import time
+
+plt.switch_backend("agg")
 
 thispath = op.abspath(op.dirname(__file__))
 impath = op.join(thispath, "images")
 
 ext = ".pdf"
-
 plt.style.use("swept.mplstyle")
+
 def savePlot(fh, name):
     plotfile = op.join(impath, name + ext)
     fh.savefig(plotfile, dpi=200, bbox_inches="tight")

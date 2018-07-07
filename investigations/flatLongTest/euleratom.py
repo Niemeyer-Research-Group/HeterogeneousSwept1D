@@ -21,7 +21,7 @@ def renameout(flist):
     for f in flist:
         ty.append([fa.split(".")[0] for fa in f.split("_")])
         dft.append(pd.read_csv(op.join(rsltfolder, f), header=0))
-    
+
     dfto = dft[0]
     titleo = parsename(ty[0])
     dfto.rename({"time": titleo}, axis=1)
@@ -31,11 +31,11 @@ def renameout(flist):
 
     return dfto
 
-if __name__ == "__main__":
+def runTest():
     root = "./bin/Euler"
     algo = ["Atomic", "Array"]
 
-    tpb = [32*k for k in range(2, 24, 2)]
+    tpb = [2**k for k in range(6, 10)]
     nx  = [2**k for k in range(11, 21)]
 
     times = " 1e-7 .001 20 "
@@ -46,16 +46,23 @@ if __name__ == "__main__":
             for tp in tpb:
                 for x in nx:
                     strnia = rt + " {:d} {:d}".format(x, tp) + times + str(ib)
-                    
+
                     print(strnia)
                     exstr = shlex.split(strnia)
                     proc = sp.Popen(exstr)
                     sp.Popen.wait(proc)
                     time.sleep(3)
 
+    return True
+
+
+if __name__ == "__main__":
+
+	# runTest()
+
     lst = [k for k in os.listdir(rsltfolder) if k.endswith('.csv')]
 
-    dfFinal = renameout()
+    dfFinal = renameout(lst)
     framers = quickPlot(dfFinal)
 
 

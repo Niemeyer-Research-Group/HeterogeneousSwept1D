@@ -8,7 +8,10 @@
 # import numpy as np
 # import matplotlib.pyplot as plt
 # import time
+import warnings
 from runatom import *
+
+warnings.filterwarnings("ignore")
 
 rsltfolder = op.join(thispath, "eulerResult")
 
@@ -19,15 +22,13 @@ def renameout(flist):
     dft = []
     ty = []
     for f in flist:
-        ty.append([fa.split(".")[0] for fa in f.split("_")])
+        ty.append(parsename([fa.split(".")[0] for fa in f.split("_")]))
         dft.append(pd.read_csv(op.join(rsltfolder, f), header=0))
 
     dfto = dft[0]
-    titleo = parsename(ty[0])
-    dfto.rename({"time": titleo}, axis=1)
+    dfto.rename({"time": ty[0]}, axis=1, inplace=True)
     for i in range(1, len(dft)):
-        ti = parsename(ty[i])
-        dfto[ti] = dft[i]["time"]
+        dfto[ty[i]] = dft[i]["time"]
 
     return dfto
 

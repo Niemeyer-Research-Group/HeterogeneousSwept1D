@@ -54,8 +54,9 @@ def quickPlot(f):
 		
 
 	numx = "dv" if "dv" in idf.columns.values else "nX"
-	idf.rename({numx: "gridSize"}, axis=1)
+	idf.rename({numx: "gridSize"}, axis=1, inplace=True)
 	icols = idf.columns.values
+	# print(icols)
 	
 	plotdf(idf, [2,2], name+"Raw", kwarg={"loglog": True})
 	speedup = idf[icols[:2]]

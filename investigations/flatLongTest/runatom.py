@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 import time
 
 plt.switch_backend("agg")
-
 thispath = op.abspath(op.dirname(__file__))
 impath = op.join(thispath, "images")
 
@@ -55,10 +54,11 @@ def quickPlot(f):
 
 	numx = "dv" if "dv" in idf.columns.values else "nX"
 	idf.rename({numx: "gridSize"}, axis=1, inplace=True)
-	icols = idf.columns.values
+	icols = list(idf.columns.values)
 	# print(icols)
 	
 	plotdf(idf, [2,2], name+"Raw", kwarg={"loglog": True})
+	icols[2:] = sorted(icols[2:])
 	speedup = idf[icols[:2]]
 	speedup[icols[2][:5]] = idf[icols[3]] / idf[icols[2]]
 	speedup[icols[4][:5]] = idf[icols[5]] / idf[icols[4]]
@@ -68,18 +68,46 @@ def quickPlot(f):
 	return idf, speedup
 
 def getPlotBest(f):
-	idf = pd.read_csv(f, header=0)
-	minz = idf.groupby('dv').min().drop('tpb', axis=1)
-	mcol = minz.columns.values
+	if type(f) == str:
+		idf = pd.read_csv(f, header=0)
+		name = f.split(".")[0][-6:]
+	else:
+		idf = f.copy()
+		name = "AtomicArrayEuler"
+
+	numx = "dv" if "dv" in idf.columns.values else "nX"
+	minz = idf.groupby(numx).min().drop('tpb', axis=1)
+	mcol = list(minz.columns.values)
+	mcol.sort()
+	minz = minz.loc[:, mcol]
 	speedz = pd.DataFrame()
-	print(minz)
-	speedz["Swept"] = minz[mcol[1]]/minz[mcol[0]]
-	speedz["Classic"] = minz[mcol[3]]/minz[mcol[2]]
+	speedo = pd.DataFrame()
+	print(minz.head())
+	
+	if "Classic" in mcol[0].title():
+		speedz["Swept"] = minz[mcol[3]]/minz[mcol[2]]
+		speedz["Classic"] = minz[mcol[1]]/minz[mcol[0]]
+		speedo["Atomic"] = minz[mcol[1]]/minz[mcol[3]]
+		speedo["Array"] = minz[mcol[0]]/minz[mcol[2]]
+		print("HI", mcol)
+	else:
+		speedz["Classic"] = minz[mcol[3]]/minz[mcol[2]]
+		speedz["Swept"] = minz[mcol[1]]/minz[mcol[0]]
+		speedo["Atomic"] = minz[mcol[3]]/minz[mcol[1]]
+		speedo["Array"] = minz[mcol[2]]/minz[mcol[0]]
+
 	ax = speedz.plot(logx=True)
 	ax.set_ylabel("Speedup")
 	ax.set_xlabel("Number of Spatial Points")
-	savePlot(ax.figure, "Speedup" + f.split(".")[0][-6:])
-	return speedz
+	savePlot(ax.figure, "Speedup" + name)
+	plt.close()
+
+	ax = speedo.plot(logx=True)
+	ax.set_ylabel("Speedup")
+	ax.set_xlabel("Number of Spatial Points")
+	savePlot(ax.figure, "SpeedupAlgo" + name)
+
+	return speedz, speedo
 
 if __name__ == "__main__":
 

@@ -17,6 +17,8 @@ impath = op.join(thispath, "images")
 ext = ".pdf"
 plt.style.use("swept.mplstyle")
 
+xlbl = "Grid Size"
+
 def savePlot(fh, name):
     plotfile = op.join(impath, name + ext)
     fh.savefig(plotfile, dpi=200, bbox_inches="tight")
@@ -87,27 +89,34 @@ def getPlotBest(f):
 	if "Classic" in mcol[0].title():
 		speedz["Swept"] = minz[mcol[3]]/minz[mcol[2]]
 		speedz["Classic"] = minz[mcol[1]]/minz[mcol[0]]
-		speedo["Atomic"] = minz[mcol[1]]/minz[mcol[3]]
-		speedo["Array"] = minz[mcol[0]]/minz[mcol[2]]
+		speedo["Lengthening"] = minz[mcol[1]]/minz[mcol[3]]
+		speedo["Flattening"] = minz[mcol[0]]/minz[mcol[2]]
 		print("HI", mcol)
 	else:
 		speedz["Classic"] = minz[mcol[3]]/minz[mcol[2]]
 		speedz["Swept"] = minz[mcol[1]]/minz[mcol[0]]
-		speedo["Atomic"] = minz[mcol[3]]/minz[mcol[1]]
-		speedo["Array"] = minz[mcol[2]]/minz[mcol[0]]
+		speedo["Lengthening"] = minz[mcol[3]]/minz[mcol[1]]
+		speedo["Flattening"] = minz[mcol[2]]/minz[mcol[0]]
 
 	ax = speedz.plot(logx=True)
 	ax.set_ylabel("Speedup")
-	ax.set_xlabel("Number of Spatial Points")
+	ax.set_xlabel(xlbl)
 	savePlot(ax.figure, "Speedup" + name)
 	plt.close()
 
 	ax = speedo.plot(logx=True)
 	ax.set_ylabel("Speedup")
-	ax.set_xlabel("Number of Spatial Points")
+	ax.set_xlabel(xlbl)
 	savePlot(ax.figure, "SpeedupAlgo" + name)
+	plt.close()
 
-	return speedz, speedo
+	ax = minz.plot(loglog=True)
+	ax.set_ylabel("Time per timestep (us)")
+	ax.set_xlabel(xlbl)
+	savePlot(ax.figure, "RawFlatLong" + name)
+
+
+	return minz
 
 if __name__ == "__main__":
 

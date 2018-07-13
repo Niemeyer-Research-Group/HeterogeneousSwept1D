@@ -64,7 +64,8 @@ if __name__ == "__main__":
     lst = [k for k in os.listdir(rsltfolder) if k.endswith('.csv')]
 
     dfFinal = renameout(lst)
-    ispeed, aspeed = getPlotBest(dfFinal)
-    fulldf, framers = quickPlot(dfFinal)
+    bestRuns = getPlotBest(dfFinal)
+    ispeed, aspeed = quickPlot(dfFinal)
+    
 
 

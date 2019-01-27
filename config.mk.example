@@ -1,0 +1,24 @@
+# Create a config.mk file in src with the necessary information for your machine.
+# Use this example as a template.
+
+PREFIX          :=$(MSCRATCH)/hSweep
+NVCC            :=$(CUDAPATH)/bin/nvcc
+MPICXX          :=$(MPIPATH)/bin/mpicxx
+SOURCEPATH      :=$(PREFIX)/src
+CC_ICUDAPATH    :=$(CUDAPATH)/include
+CC_IMPIPATH     :=$(MPIPATH)/include
+GPU_CC		:=35 # Compute Capability
+CC_LMPIPATH     :=
+CC_LCUDAPATH    :=
+CUDAFLAGS       :=-gencode arch=compute_$GPU_CC,code=sm_$GPUCC
+CUDAFLAGS	:=$(CUDAFLAGS) -restrict  --ptxas-options=-v -Wno-deprecated-gpu-targets
+CFLAGS          :=-O3 --std=c++11 -w
+LIBMPI          :=-lmpich -lopa -lmpl -lrt -lpthread
+LIBCUDA         :=-lcudart -lcuda
+
+# Additional PATHS
+IPATH           :=
+LPATH           :=$(MPIPATH)/lib $(INTELLIB) $(CUDAPATH)/lib64
+
+# Additional Libs
+LIBS            :=-lm 

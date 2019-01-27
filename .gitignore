@@ -9,10 +9,12 @@
 *.cmake
 *.pyc
 *.asv
+*.DS_Store
 bin/
 cubin/
 /misc/
 .vscode/
+.idea/
 temp*
 *.pdf
 src/*/trslt/*.json

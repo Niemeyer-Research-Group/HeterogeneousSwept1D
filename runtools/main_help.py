@@ -92,7 +92,6 @@ def saveplot(f, cat, rundetail, titler):
         plotname = op.join(plotpath, titler + ".pdf")
         f.savefig(plotname, bbox_inches='tight')
 
-
 #Divisions and threads per block need to be lists (even singletons) at least.
 def runMPICUDA(exece, nproc, scheme, eqfile, mpiopt="", outdir=" rslts ", eqopt=""):
 

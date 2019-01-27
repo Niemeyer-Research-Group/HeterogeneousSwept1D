@@ -106,16 +106,23 @@ def plotRaws(iobj, subax, respvar, nstep):
 
     return figC
 
-def plotmins(df, axi, sidx, stacker=['nX', 'gpuA']):
+# minmax is either min or max.  (Best run is min time and max efficiency)
+# or none if skip it.
+def plotmins(df, axi, sidx, stacker=['nX', 'gpuA'], minmax="min"):
+    if not minmax:
+        return None
+    
     dff = df.stack(stacker[0])
     dfff = dff.unstack(stacker[1])
-    mnplace = dfff.idxmin(axis=1)
+    mnplace = dfff.idxmax(axis=1) if minmax=="max" else dfff.idxmin(axis=1)
+    
     for a, si in zip(axi, sidx):
         a.plot(mnplace[si][0], mnplace[si][1], 'r.', markersize=20)
         
     return mnplace
 
-def contourRaw(df, typs, tytle=None, vals='time', getfig=False):
+#Returns extemis values and locations in mns.  Returns figure handle if getFig is true.
+def contourRaw(df, typs, tytle=None, vals='time', getfig=False, minmax="min"):
     anno = {'ti':'10000' , 'yl': 'GPU Affinity', 'xl': 'threads per block'}
     dfCont = pd.pivot_table(df, values=vals, index='gpuA', columns=['nX', 'tpb'])
     fCont, axCont = plt.subplots(2, 2, figsize=boxfigsize)
@@ -131,11 +138,11 @@ def contourRaw(df, typs, tytle=None, vals='time', getfig=False):
 
     if tytle: fCont.suptitle(tytle + " -- " + meas[vals]) 
     
-    if getfig:
-        return dfCont, fCont, axc
-    
-    mns = plotmins(dfCont, axc, subidx)
+    mns = plotmins(dfCont, axc, subidx, minmax=minmax)
     formatSubplot(fCont)
+
+    if getfig:
+        return fCont, mns
 
     saveplot(fCont, "Performance", plotDir, "RawContour"+typs+vals)
     plt.close(fCont)
@@ -208,8 +215,6 @@ if __name__ == "__main__":
     if titles: fio.suptitle("Best interpolated run vs observation")
     perfPath = op.join(resultpath,"Performance")
 
-    mnCoords = pd.DataFrame()
-
     axdct = dict(zip(eqs, axio.ravel()))
 
     for ke, ie in collInst.items():
@@ -225,7 +230,7 @@ if __name__ == "__main__":
             ists = iss.iFrame.set_index('nX')
             iss.efficient()
 
-            mnCoords[typ] = contourRaw(iss.iFrame, typ, tytles)
+            contourRaw(iss.iFrame, typ, tytles)
 
             fRawS = plotRaws(iss, 'tpb', ['time', 'efficiency'], 2)
             for rsub, it in fRawS.items():

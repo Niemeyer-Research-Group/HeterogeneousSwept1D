@@ -93,3 +93,9 @@ Maybe in the wiki.
 - Update conf and makefile.
 - Compart to Extend. protoype 
 - Complete this README, push and version.
+
+## License
+
+This software package is released openly under the MIT License; see the [LICENSE](https://github.com/Niemeyer-Research-Group/hSweep/blob/master/LICENSE) file for details.
+
+Results data and figures shared in this repository are released openly under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/) (CC BY 4.0).

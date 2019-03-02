@@ -26,7 +26,6 @@ ext = ".json"
 
 eq = ["heat", "euler"]
 
-
 #%%
 nproc = 8
 mpiarg = "" #"--bind-to socket

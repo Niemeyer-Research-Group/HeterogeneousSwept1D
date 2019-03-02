@@ -12,7 +12,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <mpi.h>
-
+#include <unistd.h>
 
 int getHost(hvec &ids, hname *newHost)
 {
@@ -34,11 +34,11 @@ int getHost(hvec &ids, hname *newHost)
     return ids.size();
 }
 
-int detector(const int ranko, const int sz, const int startpos)
+bool detector(const int ranko, const int sz, const int startpos)
 {
     hvec ledger;
     int machineID;
-    int hasG = 0;
+    int hasG = false;
 
 	hname hBuf;
     MPI_Datatype atype;
@@ -117,8 +117,9 @@ int detector(const int ranko, const int sz, const int startpos)
             if (!props.kernelExecTimeoutEnabled)
             {
                 cudaSetDevice(dev);
-                hasG = 1;
-                std::cout << std::dec << "Process " << ranko << " Machine " << machineID << " Has GPU -- " << dev << " of " << nGo << "/" << nset << ": " << props.name << std::endl;
+                hasG = true;
+                std::cout << std::dec << "Process ID " << getpid() << " - Rank " << ranko << " - Machine " << machineID << " Has GPU -- " ;
+                std::cout << dev << " of " << nGo << "/" << nset << ": " << props.name << std::endl;
             }
             nset++;
 		}

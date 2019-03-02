@@ -15,16 +15,6 @@
     @param finalstep Flag for whether this is the final (True) or predictor (False) step
 */
 
-#ifdef GTIME
-#define TIMEIN  timeit.tinit()
-#define TIMEOUT timeit.tfinal()
-#define WATOM atomicWrite(timeit.typ, timeit.times)
-#else
-#define TIMEIN  
-#define TIMEOUT 
-#define WATOM
-#endif
-
 using namespace std;
 
 __global__ void classicStep(states *state, const int ts)
@@ -62,10 +52,11 @@ void classicPass(states *putSt, states *getSt, int tstep)
 // Classic Discretization wrapper.
 double classicWrapper(states **state, int *tstep)
 {
-    int tmine = *tstep;
+    if (!ranks[1]) cout << "CLASSIC Decomposition " << cGlob.tpb << endl;
 
     double t_eq = 0.0;
     double twrite = cGlob.freq - QUARTER*cGlob.dt;
+    int tmine = *tstep;
 
     states putSt[2];
     states getSt[2];
@@ -73,7 +64,6 @@ double classicWrapper(states **state, int *tstep)
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
-        cout << "Classic Decomposition GPU" << endl;
         cudaTime timeit;
         const int xc = cGlob.xcpu/2;
         int xcp = xc+1;
@@ -93,8 +83,6 @@ double classicWrapper(states **state, int *tstep)
         cudaStreamCreate(&st2);
         cudaStreamCreate(&st3);
         cudaStreamCreate(&st4);
-
-        cout << "Entering Loop" << endl;
 
         while (t_eq < cGlob.tf)
         {
@@ -129,8 +117,6 @@ double classicWrapper(states **state, int *tstep)
         }
 
         cudaMemcpy(state[1], dState, gpusize, cudaMemcpyDeviceToHost);
-        // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
-        //WATOM;
 
         cudaStreamDestroy(st1);
         cudaStreamDestroy(st2);
@@ -142,7 +128,6 @@ double classicWrapper(states **state, int *tstep)
     else
     {
         int xcp = cGlob.xcpu + 1;
-        mpiTime timeit;
         while (t_eq < cGlob.tf)
         {
             //TIMEIN;
@@ -166,11 +151,8 @@ double classicWrapper(states **state, int *tstep)
                 twrite += cGlob.freq;
             }
         }
-        // cout << ranks[1] << " ----- " << timeit.avgt() << endl;
-        //WATOM;
     }
     *tstep = tmine;
-	std::cout << ranks[1] << " " << printout(state[0], 0) << std::endl;
 
     return t_eq;
 }

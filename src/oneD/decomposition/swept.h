@@ -265,8 +265,8 @@ double sweptWrapper(states **state,  int *tstep)
 {
 	// FILE *diagDump;
 	// std::string fname = "edge/edgeWrite_" + std::to_string(ranks[1]) + ".csv";
-	// diagDump = fopen(fname.c_str(), "w+");
-    
+	// diagDump = fopen(fname.c_str(), "w+")
+
 	if (!ranks[1]) cout << "SWEPT Decomposition " << cGlob.tpb << endl;
     const int bkL = cGlob.cBks - 1;
     double t_eq = 0.0;
@@ -279,7 +279,6 @@ double sweptWrapper(states **state,  int *tstep)
 
     if (cGlob.hasGpu) // If there's no gpu assigned to the process this is 0.
     {
-        cout << ranks[1] << " hasGpu" << endl;
         const int xc = cGlob.xcpu/2, xcp=xc+1;
         const int xgp = cGlob.xg+1, xgpp = cGlob.xg+2;
         const int cmid = cGlob.cBks/2;

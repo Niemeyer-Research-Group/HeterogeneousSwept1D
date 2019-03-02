@@ -3,14 +3,14 @@
 # run make DEF="-DNOS"
 
 
-MAKEPATH:=$(SOURCEPATH)/oneD/
+MAKEPATH:=$(SOURCEPATH)oneD
 
 # LPATH+=
 
-BINPATH		:=$(MAKEPATH)bin
-EQPATH		:=$(MAKEPATH)equations
-DECOMPPATH	:=$(MAKEPATH)decomposition
-UTILPATH	:=$(MAKEPATH)utilities
+BINPATH		:=$(MAKEPATH)/bin
+EQPATH		:=$(MAKEPATH)/equations
+DECOMPPATH	:=$(MAKEPATH)/decomposition
+UTILPATH	:=$(MAKEPATH)/utilities
 
 IFLAGS		+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
 
@@ -18,9 +18,9 @@ XL			:=$(foreach lp, $(LPATH), -Xlinker=-rpath,$(lp))
 
 LPATHS		:=$(addprefix -L, $(LPATH))
 
-DH			:= $(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
+DH			:=$(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
 
-CPREQ		:=$(MAKEPATH)sMain.cu
+CPREQ		:=$(MAKEPATH)/sMain.cu
 
 EQINIT		:=$(wildcard $(EQPATH)/*.h)
 
@@ -29,8 +29,6 @@ EQS			:=$(filter-out $(DH), $(EQINIT))
 EQI			:=$(foreach eq, $(EQS), $(basename $(notdir $(eq))))
 
 EQOBJ		:=$(addsuffix .o, $(EQI))
-
-.PHONY: ech
 
 default: $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
 

@@ -20,16 +20,17 @@ int main(int argc, char *argv[])
 {
     makeMPI(argc, argv);
 
-    if (!ranks[1]) cudaRunCheck();
+    // if (!ranks[1]) cudaRunCheck();
 
     #ifdef NOS
-        if (!ranks[1]) std::cout << "No Solution Version." << std::endl;
+    if (!ranks[1]) std::cout << "No Solution Version." << std::endl;
     #endif
 
     std::string i_ext = ".json";
     std::string t_ext = ".csv";
     std::string myrank = std::to_string(ranks[1]);
     std::string scheme = argv[1];
+    int whichGPU;
 
     // Equation, grid, affinity data
     std::ifstream injson(argv[2], std::ifstream::in);
@@ -59,15 +60,13 @@ int main(int argc, char *argv[])
 
     std::string pth = string(argv[3]);
 
-
     if (cGlob.hasGpu)
     {
         state = new states* [3];
         cudaHostAlloc((void **) &state[0], xalloc * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[1], (cGlob.xg + exSpace) * cGlob.szState, cudaHostAllocDefault);
         cudaHostAlloc((void **) &state[2], xalloc * cGlob.szState, cudaHostAllocDefault);
-
-        cout << "Rank: " << ranks[1] << " has a GPU" << endl;
+        
         int ii[3] = {xc, cGlob.xg, xc};
         int xi;
         for (int i=0; i<3; i++)
@@ -99,8 +98,9 @@ int main(int argc, char *argv[])
 
 		if (!ranks[1])
 		{
+            printf ("SOLVING: %s - with %d processes.\n", fspec.c_str(), nprocs);
             printf ("Scheme: %s - Grid Size: %d - Affinity: %.2f\n", scheme.c_str(), cGlob.nX, cGlob.gpuA);
-            printf ("threads/blk: %d - timesteps: %.2f\n", cGlob.tpb, cGlob.tf/cGlob.dt);
+            printf ("threads/blk: %d - timesteps: %.2f - end time: %.3e\n", cGlob.tpb, cGlob.tf/cGlob.dt, cGlob.tf);
 		}
 
         MPI_Barrier(MPI_COMM_WORLD);
@@ -122,17 +122,7 @@ int main(int argc, char *argv[])
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = (MPI_Wtime() - timed);
 
-        if (cGlob.hasGpu)  
-		{
-			cudaError_t error = cudaGetLastError();
-        	if(error != cudaSuccess)
-        	{
-            	// print the CUDA error message and exit
-            	printf("CUDA error: %s\n", cudaGetErrorString(error));
-            	exit(-1);
-        	}
-			cudaDeviceSynchronize();
-		}
+        cudaKernelCheck(cGlob.hasGpu);
 
         writeOut(state, tfm);
 

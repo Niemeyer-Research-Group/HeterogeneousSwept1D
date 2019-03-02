@@ -9,8 +9,6 @@
 #$ -o ../../.runOut/hSweptTest.out
 #$ -l h='compute-e-[1-2]
 
-## Need to fix the strange duplicate of runs.
-
 export JID=$JOB_ID
 
 echo $JOB_ID
@@ -24,12 +22,16 @@ rm rslts/* || true
 ls rslts
 
 tfile="trslt/otime.dat"
+opath="../../rslts"
 
 rm $tfile || true
 
 eqs=(euler heat)
 tfs=(0.06 1.2)
 nxStart=100000
+
+mkdir -p $opath
+mkdir -p $(dirname $tfile)
 
 for ix in $(seq 2)
 do
@@ -61,8 +63,10 @@ do
 							nx=$(($nxo + 0.5*$dvx*$nxo))
 							lx=$(($nxo/10000 + 1))
 							S0=$SECONDS
-							$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines ../bin/$eq $sc ../tests/"$eq"Test.json ../rslts tpb $tpb gpuA $g nX $nx lx $lx tf $tf
-							echo len, eq, sch, tpb, gpuA, nX
+
+							$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines $bindir/$eq $sc $testdir/"$eq"Test.json $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf
+							
+                            echo len, eq, sch, tpb, gpuA, nX
 							s1=$(($SECONDS-$S0))
 							echo $lx, $eq, $sc, $tpb, $g, $nx took $s1
 							echo -------- END ------------

@@ -1,17 +1,20 @@
+# config.mk 
+
+#COMPILE with -DNOS to not output jsons
 
 include config.mk
 
 CODES		:=oneD #twoD
-CODE_DIR	:=$(addprefix $(SOURCEPATH)/, $(CODES))
-BIN_DIR		:=$(SOURCEPATH)/bin
-UTIL_DIR	:=$(SOURCEPATH)/utilities
+CODE_DIR	:=$(addprefix $(SOURCEPATH), $(CODES))
+BIN_DIR		:=$(SOURCEPATH)bin
+UTIL_DIR	:=$(SOURCEPATH)utilities
 UTIL_BIN	:=$(BIN_DIR)/util
 EQ_BIN		:=$(BIN_DIR)/eqobj
 BINS		:=$(UTIL_BIN) $(EQ_BIN)
 IFLAGS		:=$(addprefix -I, $(IPATH))
 IFLAGS		+= -I$(CC_ICUDAPATH) -I$(CC_IMPIPATH)
 
-DEF=
+DEF			=
 
 UTILC		:= $(wildcard $(UTIL_DIR)/*.c*)
 TARG		:= $(notdir $(UTILC))

@@ -47,7 +47,7 @@ struct Globalism
     double tf, freq, dt, dx, dy, lx, ly;
 
 } cGlob;
-// sudo sysctl -w kernel.core_pattern=/tmp/core-%e.%p.%h.%t
+// Get core files for debugging: sudo sysctl -w kernel.core_pattern=/tmp/core-%e.%p.%h.%t
 struct Address
 {
     int owner, gpu, localIdx, globalx, globaly;
@@ -319,19 +319,19 @@ void makeMPI(int argc, char** argv)
     lastproc = nprocs-1;
 }
 
-// I think this needs a try except for string inputs.
+
 void parseArgs(int argc, char *argv[])
 {
-    if (argc>4)
+    if (argc>4) // 4 is somewhat arbitrary.  It's the number of mandatory arguments for this case.
     {
         std::string inarg;
         for (int k=4; k<argc; k+=2)
         {
             inarg = argv[k];
-            try{
+            try{ // if it's a number make it a float
 			    inJ[inarg] = atof(argv[k+1]);
             }
-            catch(...){
+            catch(...){ // if it's a string copy it over
                 inJ[inarg] = argv[k+1];
             }
         }

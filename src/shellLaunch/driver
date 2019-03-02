@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+
+import os 
+import os.path as op
+import sys
+import subprocess as sp
+import shlex
+import time
+
+helpstr = '''
+USAGE: ./driver [RUNTYPE] <OPTIONS>
+
+RUNTYPE: "affinity (screening run) or sweep (full experiment)
+
+OPTIONS: 
+    FORMAT: var value
+
+    eq (equation)   - euler, heat or other equation
+    sch (scheme)    - S, C for swept or classic respectively
+
+'''
+
+rundict = {"affinity": {"heat": 2.0, "euler": 0.08},
+            "sweep": {"heat": 1.2, "euler": 0.06} }
+
+def inputError(strer):
+    print("\n"+strer+"\n")
+    print(helpstr)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    tpath=op.abspath(op.dirname(__file__))
+    print("MAKE SURE TO CLEAR THE PATHS IF THAT'S NECESSARY")
+
+    args=sys.argv
+    runtype=args[1]
+    runscript=op.join(op.join(tpath, "LANL_kodiak"), "h"+runtype.title()+".sh")
+    rundetails=rundict[runtype]
+    eq=rundetails.keys()
+    sch=["S", "C"]
+    if len(args) > 2:
+        if len(args) % 2:
+            inputError("ODD NUMBER OF INPUTS, DOENST WORK")
+
+        for a, b in zip(args[2::2],args[3::2]):
+            if a=="sch":
+                if b not in sch: inputError(b+" IS NOT A VALID SCHEME")
+                sch=[b]
+            elif a=="eq":
+                if b not in eq: inputError(b+" IS NOT AN AVAILABLE EQUATION")
+                eq=[b]
+            else:
+                inputError("a - " + a + ", is not a valid option")
+        
+    tfirst=time.time()
+    for e in eq:
+        te=time.time()
+        for s in sch:
+            tbf=time.time()
+            runcmd=[runscript, e, rundetails[e], s]
+            runcmd=[str(r) for r in runcmd]
+            print(runcmd)
+            sp.call(runcmd)
+            taf=time.time()
+            print(runtype, e, s, " Completed in ", taf-tbf)
+        print(runtype, e, sch, " ALL Completed in ", taf-te)
+    print(runtype, eq, sch, " ALL combos Completed in ", taf-tfirst)

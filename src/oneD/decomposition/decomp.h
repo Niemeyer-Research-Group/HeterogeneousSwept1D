@@ -27,7 +27,7 @@ struct Globalism {
     int xg, xcpu;
     int xStart;
     int nWrite;
-    int hasGpu;
+    bool hasGpu;
     double gpuA;
 
     // Geometry
@@ -59,22 +59,23 @@ void makeMPI(int argc, char** argv)
     ranks[2] = (ranks[1]+1) % nprocs;
 }
 
-// I think this needs a try except for string inputs.
 void parseArgs(int argc, char *argv[])
 {
-    if (argc>4)
+    if (argc>4) // 4 is somewhat arbitrary.  It's the number of mandatory arguments for this case.
     {
         std::string inarg;
         for (int k=4; k<argc; k+=2)
         {
-			// if (!ranks[1]) std::cout << "CL Arg " << ranks[1] << " " << argv[k] << " " << argv[k+1] << std::endl;
             inarg = argv[k];
-			inJ[inarg] = atof(argv[k+1]);
+            try{ // if it's a number make it a float
+			    inJ[inarg] = atof(argv[k+1]);
+            }
+            catch(...){ // if it's a string copy it over
+                inJ[inarg] = argv[k+1];
+            }
         }
     }
 }
-
-// gpuA = gBks/cBks
 
 void initArgs()
 {

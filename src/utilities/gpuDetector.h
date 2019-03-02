@@ -14,6 +14,6 @@ typedef std::vector<hname> hvec;
 
 int getHost(hvec &ids, hname *newHost);
 
-int detector(const int ranko, const int sz, const int startpos);
+bool detector(const int ranko, const int sz, const int startpos);
 
 #endif

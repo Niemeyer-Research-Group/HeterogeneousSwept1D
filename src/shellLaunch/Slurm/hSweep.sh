@@ -19,10 +19,6 @@ npr=$(( $SLURM_NNODES*$nprocs ))
 rm -f $tfile 
 rm -rf $opath
 
-eqs=(euler heat)
-tfs=(0.06 1.2)
-nxStart=100000
-
 for ix in $(seq 2)
 do
 	eq=$eqs[$ix]

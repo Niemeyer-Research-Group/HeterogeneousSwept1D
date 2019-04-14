@@ -6,11 +6,13 @@ import sys
 import subprocess as sp
 import shlex
 import time
+import multiprocessing as mp
 
 helpstr = '''
 USAGE: ./driver [RUNTYPE] <OPTIONS>
 
-RUNTYPE: "affinity (screening run) or sweep (full experiment)
+RUNTYPE: "affinity (screening run) 
+          sweep (full experiment)
 
 OPTIONS: 
     FORMAT: var value
@@ -20,8 +22,46 @@ OPTIONS:
 
 '''
 
+'''
+    RUNTYPE: Affinity or sweep
+    RUNSCRIPT: Realpath to shell runner
+    RUNDETAILS: t_Final for heat and euler by type
+    NPER: Number of nodes per experiment.  If>0 parallel
+'''
+
 rundict = {"affinity": {"heat": 2.0, "euler": 0.08},
             "sweep": {"heat": 1.2, "euler": 0.06} }
+
+NPER = 2
+
+def run_sweep(rs, rt, rd, e, s, r=0):
+    runcmd=[rs, rt, e, rundetails[e], s, r]
+    if NPER: runcmd.append(NPER)
+    runcmd=[str(r) for r in runcmd]
+    sp.call(runcmd)
+
+def sweep_serial(rs, rd, rt, eq, sch):
+    NPER = False
+    tfirst=time.time()
+    for e in eq:
+        te=time.time()
+        for s in sch:
+            tbf=time.time()
+            run_sweep(rs, rt, rd, e, s)
+            taf=time.time()
+            print(rt, e, s, "A Completed in ", taf-tbf)
+        print(rd, e, sch, " AA Completed in ", taf-te)
+    print(rd, eq, sch, " AAA combos Completed in ", taf-tfirst)
+
+# Can run in parallel with multiprocess 
+# nper is nodes per eq, scheme combo 
+def sweep_parallel(rs, rd, rt, eq, sch):
+    combs = [(e, s) for e in eq for s in sch]
+    ncomb = len(combs)
+    args = [(rs, rt, rd, combs[k][0], combs[k][1], k*NPER) for k in range(ncomb)]
+
+    p = mp.Pool(ncomb)
+    p.map(run_sweep, **args)
 
 def inputError(strer):
     print("\n"+strer+"\n")
@@ -34,7 +74,7 @@ if __name__ == "__main__":
 
     args=sys.argv
     runtype=args[1]
-    runscript=op.join(op.join(tpath, "LANL_kodiak"), "h"+runtype.title()+".sh")
+    runscript=op.join(op.join(tpath, "Slurm"), "hPerfTest.sh")
     rundetails=rundict[runtype]
     eq=rundetails.keys()
     sch=["S", "C"]
@@ -52,16 +92,5 @@ if __name__ == "__main__":
             else:
                 inputError("a - " + a + ", is not a valid option")
         
-    tfirst=time.time()
-    for e in eq:
-        te=time.time()
-        for s in sch:
-            tbf=time.time()
-            runcmd=[runscript, e, rundetails[e], s]
-            runcmd=[str(r) for r in runcmd]
-            print(runcmd)
-            sp.call(runcmd)
-            taf=time.time()
-            print(runtype, e, s, " Completed in ", taf-tbf)
-        print(runtype, e, sch, " ALL Completed in ", taf-te)
-    print(runtype, eq, sch, " ALL combos Completed in ", taf-tfirst)
+    sweep_serial(runscript, runtype, rundetails, eq, sch)
+    sweep_parallel(runscript, runtype, rundetails, eq, sch)

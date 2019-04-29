@@ -6,13 +6,16 @@
 
 #include <cstring>
 #include <iostream>
-#include <sstream>
 #include <string>
 
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <mpi.h>
 #include <unistd.h>
+
+// There's a memory leak in cudaGetDeviceByPciBusID so avoid it and assign simply
+// unitl it's fixed. This makes most of the code here useless.
+#define PCIBUS_BUG 1
 
 int getHost(hvec &ids, hname *newHost)
 {
@@ -102,16 +105,19 @@ bool detector(const int ranko, const int sz, const int startpos)
 	int nset = 0;
     int dev;
 	std::string pcistr;
-	std::stringstream bufs;
+	char bufs[20];
 
     for (int i = startpos; i<machineSize; i++)
     {
         if ((nGo - nset) == 0)  break;
         if (i == machineRank)
         {
-            bufs << std::hex << pcivec[3*nset] << ":" <<  pcivec[3*nset+1] << ":" <<  pcivec[3*nset+2];
-            
-            cudaDeviceGetByPCIBusId(&dev, bufs.str().c_str());
+#ifndef PCIBUS_BUG
+            sprintf(bufs, "%x:%x:%x", pcivec[3*nset],pcivec[3*nset+1],pcivec[3*nset+2]);
+            cudaDeviceGetByPCIBusId(&dev, bufs);
+#else
+            dev=i-1;
+#endif
             cudaGetDeviceProperties(&props, dev);
 
             if (!props.kernelExecTimeoutEnabled)

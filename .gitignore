@@ -15,10 +15,11 @@ cubin/
 /misc/
 .vscode/
 .idea/
+*/*log/
 temp*
 *.pdf
-src/*/trslt/*.json
-src/*/rslts/*.json
+src/trslt/
+src/rslts/
 src/*/tests/testResult/
 src/*/utilities/js*
 src/config.mk

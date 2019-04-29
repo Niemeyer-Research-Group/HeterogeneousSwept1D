@@ -38,9 +38,10 @@ def run_sweep(rs, rt, rd, e, s, r=0):
     runcmd=[rs, rt, e, rundetails[e], s, r]
     if NPER: runcmd.append(NPER)
     runcmd=[str(r) for r in runcmd]
+    print(runcmd)
     sp.call(runcmd)
 
-def sweep_serial(rs, rd, rt, eq, sch):
+def sweep_serial(rs, rt, rd, eq, sch):
     NPER = False
     tfirst=time.time()
     for e in eq:
@@ -55,7 +56,7 @@ def sweep_serial(rs, rd, rt, eq, sch):
 
 # Can run in parallel with multiprocess 
 # nper is nodes per eq, scheme combo 
-def sweep_parallel(rs, rd, rt, eq, sch):
+def sweep_parallel(rs, rt, rd, eq, sch):
     combs = [(e, s) for e in eq for s in sch]
     ncomb = len(combs)
     args = [(rs, rt, rd, combs[k][0], combs[k][1], k*NPER) for k in range(ncomb)]
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     print("MAKE SURE TO CLEAR THE PATHS IF THAT'S NECESSARY")
 
     args=sys.argv
-    runtype=args[1]
+    runtype=args[1].lower()
     runscript=op.join(op.join(tpath, "Slurm"), "hPerfTest.sh")
     rundetails=rundict[runtype]
     eq=rundetails.keys()
@@ -93,4 +94,4 @@ if __name__ == "__main__":
                 inputError("a - " + a + ", is not a valid option")
         
     sweep_serial(runscript, runtype, rundetails, eq, sch)
-    sweep_parallel(runscript, runtype, rundetails, eq, sch)
+#    sweep_parallel(runscript, runtype, rundetails, eq, sch)

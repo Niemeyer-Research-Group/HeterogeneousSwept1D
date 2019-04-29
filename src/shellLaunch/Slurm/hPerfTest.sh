@@ -16,17 +16,18 @@ affinity()
 sweep() {
     ni=""
     a=0
+    nb=$(printf "%.f" "1e6")
     for i in $(seq 10); do
-        a=$(( $a+1e7 + 1e6*($i-1) )) 
-        ni+=" "
+        a=$(( $nb*(9+$i)+$a ))
+        ni+="$a "
         echo $a
     done
-    export nxs=ni
+    export nxs=$ni
     export tpbs=$(seq 128 128 1024)
     gStart=100
     gStep=5
-    gEnd=$(( 10*$gStep+$gStart )) 
-    export gpuas=$(seq $gStart $gStep $gEnd) 
+    gEnd=$(( 10*$gStep+$gStart ))
+    export gpuas=$(seq $gStart $gStep $gEnd)
 }
 
 ## SLURM NOT GRID
@@ -40,7 +41,7 @@ LOGPATH="${SRCPATH}/rsltlog"
 tfile="${LOGPATH}/otime.dat"
 opath="${SRCPATH}/rslts"
 nprocs=$(( $(nproc)/2 ))
-nper=${5-:$SLURM_NNODES}
+nper=${6-:$SLURM_NNODES}
 npr=$(( $nper*$nprocs ))
 
 gStep=20
@@ -48,7 +49,7 @@ gEnd=$(( 10*$gStep ))
 bindir=${SRCPATH}/bin
 testdir=${SRCPATH}/oneD/tests
 
-affinity
+$1
 
 mkdir -p $opath
 mkdir -p $LOGPATH
@@ -58,29 +59,33 @@ if [[ $# -lt 3 ]]; then
     return 0
 fi
 
-eq=$1
-tf=$2
-sc=$3
-rnode=${4-:0}
+eq=$2
+tf=$3
+sc=$4
+rnode=${5-:0}
 hname=$(hostname)
+hnm=${hname%%.*}
 
 confile="${testdir}/${eq}Test.json"
 execfile="${bindir}/${eq}"
-logf="${LOGPATH}/${eq}_${sc}_AFF_${hname}.log"
+logf="${LOGPATH}/${eq}_${sc}_AFF_${hnm}.log"
+rm -f $logf
 touch $logf
+
+echo $tpbs $nxs $gpuas $logf 
 
 for tpb in $tpbs
 do
-    for nxi in $nxs
+    for nx in $nxs
     do
         snx0=$SECONDS
-        printf -v nx "%.f" "$nxi"
-        for g in $(seq 0 $gStep $gEnd) 
+        for g in $gpuas
         do
             echo -------- START ------------ | tee -a $logf
             lx=$(( $nx/10000 + 1 ))
             S0=$SECONDS
-            
+
+            echo "srun -N $SLURM_NNODES -n $npr -r $rnode $execfile $sc $confile $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf"
             srun -N $SLURM_NNODES -n $npr -r $rnode $execfile $sc $confile $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf 2>&1 | tee -a $logf
 
             echo --------------------------- | tee -a $logf
@@ -92,6 +97,6 @@ do
         snx1=$(( $SECONDS-$snx0 ))
         echo All together $snx1 secs | tee -a $logf
         snxout=$(( $snx1/60 ))
-        echo $eq "|" $sc "|" $tpb "|" $nxi :: $snxout >> $tfile 
+        echo $eq "|" $sc "|" $tpb "|" $nx :: $snxout >> $tfile 
     done
 done

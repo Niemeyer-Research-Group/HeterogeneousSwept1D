@@ -112,8 +112,8 @@ bool detector(const int ranko, const int sz, const int startpos)
         if ((nGo - nset) == 0)  break;
         if (i == machineRank)
         {
-#ifndef PCIBUS_BUG
             sprintf(bufs, "%x:%x:%x", pcivec[3*nset],pcivec[3*nset+1],pcivec[3*nset+2]);
+#ifndef PCIBUS_BUG
             cudaDeviceGetByPCIBusId(&dev, bufs);
 #else
             dev=i-1;
@@ -125,7 +125,7 @@ bool detector(const int ranko, const int sz, const int startpos)
                 cudaSetDevice(dev);
                 hasG = true;
                 std::cout << std::dec << "Process ID " << getpid() << " - Rank " << ranko << " - Machine " << machineID << " Has GPU -- " ;
-                std::cout << dev << " of " << nGo << "/" << nset << ": " << props.name << std::endl;
+                std::cout << dev << " of " << nGo << "/" << nset << ": " << props.name << " on PCI- " << bufs << std::endl;
             }
             nset++;
 		}

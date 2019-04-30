@@ -1,5 +1,7 @@
 #!/bin/bash
 
+
+
 nxs=
 tpbs=
 gpuas=
@@ -9,7 +11,7 @@ affinity()
     export nxs="5e6 2e7 4e7 6e7"
     export tpbs="64 128 256 512 768 1024"
     gStep=20
-    gEnd=$(( 10*$gStep ))
+    gEnd=$(( 10*gStep ))
     export gpuas=$(seq 0 $gStep $gEnd) 
 }
 
@@ -20,13 +22,12 @@ sweep() {
     for i in $(seq 10); do
         a=$(( $nb*(9+$i)+$a ))
         ni+="$a "
-        echo $a
     done
     export nxs=$ni
     export tpbs=$(seq 128 128 1024)
     gStart=100
     gStep=5
-    gEnd=$(( 10*$gStep+$gStart ))
+    gEnd=$(( 10*gStep+gStart ))
     export gpuas=$(seq $gStart $gStep $gEnd)
 }
 
@@ -42,10 +43,8 @@ tfile="${LOGPATH}/otime.dat"
 opath="${SRCPATH}/rslts"
 nprocs=$(( $(nproc)/2 ))
 nper=${6-:$SLURM_NNODES}
-npr=$(( $nper*$nprocs ))
+npr=$(( nper*nprocs ))
 
-gStep=20
-gEnd=$(( 10*$gStep ))
 bindir=${SRCPATH}/bin
 testdir=${SRCPATH}/oneD/tests
 
@@ -66,23 +65,57 @@ rnode=${5-:0}
 hname=$(hostname)
 hnm=${hname%%.*}
 
+
+fout="${opath}/t${eq}${sc}.csv"
 confile="${testdir}/${eq}Test.json"
 execfile="${bindir}/${eq}"
-logf="${LOGPATH}/${eq}_${sc}_AFF_${hnm}.log"
+logf="${LOGPATH}/${eq}_${sc}_${1}_${hnm}.log"
 rm -f $logf
 touch $logf
 
-echo $tpbs $nxs $gpuas $logf 
+echo -e "TPBS: $tpbs \nNXS: $nxs \nGPUA: $gpuas \nLOGF: $logf "
+
+nnx=$(echo $nxs | wc -w | tr -d " ")
+ngpuas=$(echo $gpuas | wc -w | tr -d " ")
+ngt=$(( $nnx*$ngpuas ))
+
+restarter(){ echo 0; }
+
+continuer(){
+    echo $(grep -cE "^$1" $fout)
+}
+
+CFUN=continuer
+
+if [[ ! -f $fout ]]; then
+    CFUN=restarter
+fi
 
 for tpb in $tpbs
 do
-    for nx in $nxs
+    unito=$($CFUN "$tpb,")
+    if [[ $unito -ge $ngt  ]]; then
+        continue
+    fi
+
+    for g in $gpuas
     do
+        unito=$($CFUN "${tpb},${g}")
+        if [[ $unito -ge $nnx  ]]; then
+            continue
+        fi
+        doafter=0
+        
         snx0=$SECONDS
-        for g in $gpuas
+        for nx in $nxs
         do
+            if [[ $doafter -lt $unito ]]; then
+                (( doafter++ ))
+                continue
+            fi
+
             echo -------- START ------------ | tee -a $logf
-            lx=$(( $nx/10000 + 1 ))
+            lx=$(( nx/10000 + 1 ))
             S0=$SECONDS
 
             echo "srun -N $SLURM_NNODES -n $npr -r $rnode $execfile $sc $confile $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf"
@@ -96,7 +129,7 @@ do
         done
         snx1=$(( $SECONDS-$snx0 ))
         echo All together $snx1 secs | tee -a $logf
-        snxout=$(( $snx1/60 ))
-        echo $eq "|" $sc "|" $tpb "|" $nx :: $snxout >> $tfile 
+        snxout=$(( ${snx1}/60 ))
+        echo $eq "|" $sc "|" $tpb "|" $g :: $snxout >> $tfile 
     done
 done

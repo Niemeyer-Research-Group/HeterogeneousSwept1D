@@ -30,7 +30,6 @@ int main(int argc, char *argv[])
     std::string t_ext = ".csv";
     std::string myrank = std::to_string(ranks[1]);
     std::string scheme = argv[1];
-    int whichGPU;
 
     // Equation, grid, affinity data
     std::ifstream injson(argv[2], std::ifstream::in);
@@ -101,6 +100,7 @@ int main(int argc, char *argv[])
             printf ("SOLVING: %s - with %d processes.\n", fspec.c_str(), nprocs);
             printf ("Scheme: %s - Grid Size: %d - Affinity: %.2f\n", scheme.c_str(), cGlob.nX, cGlob.gpuA);
             printf ("threads/blk: %d - timesteps: %.2f - end time: %.3e\n", cGlob.tpb, cGlob.tf/cGlob.dt, cGlob.tf);
+            fflush(stdout);
 		}
 
         MPI_Barrier(MPI_COMM_WORLD);
@@ -129,6 +129,7 @@ int main(int argc, char *argv[])
         if (!ranks[1])
         {
             timed *= 1.e6;
+            int gpuAi = (int)cGlob.gpuA;
 
             double n_timesteps = tfm/cGlob.dt;
 
@@ -144,7 +145,7 @@ int main(int argc, char *argv[])
             fseek(timeOut, 0, SEEK_END);
             int ft = ftell(timeOut);
             if (!ft) fprintf(timeOut, "tpb,gpuA,nX,time\n");
-            fprintf(timeOut, "%d,%.4f,%d,%.8f\n", cGlob.tpb, cGlob.gpuA, cGlob.nX, per_ts);
+            fprintf(timeOut, "%d,%.d,%d,%.8f\n", cGlob.tpb, gpuAi, cGlob.nX, per_ts);
             fclose(timeOut);
         }
     }

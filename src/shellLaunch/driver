@@ -17,6 +17,7 @@ RUNTYPE: "affinity (screening run)
 OPTIONS: 
     FORMAT: var value
 
+    platform - slurm or other
     eq (equation)   - euler, heat or other equation
     sch (scheme)    - S, C for swept or classic respectively
 

@@ -66,7 +66,7 @@ hname=$(hostname)
 hnm=${hname%%.*}
 
 
-fout="${opath}/t${eq}${sc}.csv"
+fout="${opath}/t${eq^}${sc}.csv"
 confile="${testdir}/${eq}Test.json"
 execfile="${bindir}/${eq}"
 logf="${LOGPATH}/${eq}_${sc}_${1}_${hnm}.log"

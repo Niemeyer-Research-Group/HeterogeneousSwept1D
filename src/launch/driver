@@ -17,6 +17,7 @@ RUNTYPE: "affinity (screening run)
 OPTIONS: 
     FORMAT: var value
 
+    platform - slurm or other
     eq (equation)   - euler, heat or other equation
     sch (scheme)    - S, C for swept or classic respectively
 
@@ -35,7 +36,8 @@ rundict = {"affinity": {"heat": 2.0, "euler": 0.08},
 NPER = 2
 
 def run_sweep(rs, rt, rd, e, s, r=0):
-    runcmd=[rs, rt, e, rundetails[e], s, r]
+    r=r+1
+    runcmd=[rs, rt, e, rd[e], s, r]
     if NPER: runcmd.append(NPER)
     runcmd=[str(r) for r in runcmd]
     print(runcmd)
@@ -51,18 +53,18 @@ def sweep_serial(rs, rt, rd, eq, sch):
             run_sweep(rs, rt, rd, e, s)
             taf=time.time()
             print(rt, e, s, "A Completed in ", taf-tbf)
-        print(rd, e, sch, " AA Completed in ", taf-te)
-    print(rd, eq, sch, " AAA combos Completed in ", taf-tfirst)
+        print(rt, e, sch, " AA Completed in ", taf-te)
+    print(rt, eq, sch, " AAA combos Completed in {0:.2f} m".format((taf-tfirst)/60))
 
 # Can run in parallel with multiprocess 
 # nper is nodes per eq, scheme combo 
 def sweep_parallel(rs, rt, rd, eq, sch):
     combs = [(e, s) for e in eq for s in sch]
     ncomb = len(combs)
-    args = [(rs, rt, rd, combs[k][0], combs[k][1], k*NPER) for k in range(ncomb)]
+    p_args = [(rs, rt, rd, combs[k][0], combs[k][1], k*NPER+1) for k in range(ncomb)]
 
     p = mp.Pool(ncomb)
-    p.map(run_sweep, **args)
+    p.starmap(run_sweep, p_args)
 
 def inputError(strer):
     print("\n"+strer+"\n")
@@ -92,6 +94,7 @@ if __name__ == "__main__":
                 eq=[b]
             else:
                 inputError("a - " + a + ", is not a valid option")
-        
+
+
     sweep_serial(runscript, runtype, rundetails, eq, sch)
-#    sweep_parallel(runscript, runtype, rundetails, eq, sch)
+#   sweep_parallel(runscript, runtype, rundetails, eq, sch)

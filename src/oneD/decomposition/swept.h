@@ -8,6 +8,8 @@
 using namespace std;
 
 typedef std::vector<int> ivec;
+#include "cudaUtils.h"
+
 
 states ssLeft[3];
 states ssRight[3];
@@ -297,13 +299,13 @@ double sweptWrapper(states **state,  int *tstep)
 
         states *dState;
 
-        cudaMalloc((void **)&dState, gpusize);
+        cudaMalloc((void **) &dState, gpusize);
         cudaMemcpy(dState, state[1], ptsize, cudaMemcpyHostToDevice);
 
         /* RULES
-        -- DOWN MUST FOLLOW A SPLIT 
-        -- UP CANNOT BE IN WHILE LOOP 
-        -||- ACTION: DO UP AND FIRST SPLIT OUTSIDE OF LOOP 
+        -- DOWN MUST FOLLOW A SPLIT
+        -- UP CANNOT BE IN WHILE LOOP
+        -||- ACTION: DO UP AND FIRST SPLIT OUTSIDE OF LOOP
         -||- THEN LOOP CAN BEGIN WITH WHOLE DIAMOND.
         */
 
@@ -311,6 +313,7 @@ double sweptWrapper(states **state,  int *tstep)
         // ------------ UP ------------ //
 
         upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
+        int bchk=cudaKernelCheck(1, ranks[1]);
 
         for (int k=0; k<cGlob.cBks; k++)
         {
@@ -360,7 +363,7 @@ double sweptWrapper(states **state,  int *tstep)
 
         if (!ranks[1]) state[0][0] = bound[0];
         if (ranks[1]==lastproc) state[2][xcp] = bound[1];
- 
+
         while(t_eq < cGlob.tf)
         {
             // ------------ Step Forward ------------ //
@@ -438,7 +441,7 @@ double sweptWrapper(states **state,  int *tstep)
                 cudaMemcpy(state[1], dState, ptsize, cudaMemcpyDeviceToHost);
 
                 writeOut(state, t_eq);
-                
+
                 upTriangle <<<cGlob.gBks, cGlob.tpb, smem>>> (dState, tmine);
 
                 for (int k=0; k<cGlob.cBks; k++)
@@ -636,7 +639,7 @@ double sweptWrapper(states **state,  int *tstep)
         tmine += cGlob.ht;
         t_eq = cGlob.dt * (tmine/NSTEPS);
     }
-	
+
 	// if (!ranks[1]){
 	// 	FILE *metaFile;
 	// 	metaFile = fopen("edge/RunDetails.txt", "w+");

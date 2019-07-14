@@ -105,15 +105,18 @@ bool detector(const int ranko, const int sz, const int startpos)
 	int nset = 0;
     int dev;
 	std::string pcistr;
-	char bufs[20];
+    int rb = 30;
+	char bufs[rb];
+    char mnamei[rb];
+    char *mname;
 
     for (int i = startpos; i<machineSize; i++)
     {
         if ((nGo - nset) == 0)  break;
         if (i == machineRank)
         {
-#ifndef PCIBUS_BUG
             sprintf(bufs, "%x:%x:%x", pcivec[3*nset],pcivec[3*nset+1],pcivec[3*nset+2]);
+#ifndef PCIBUS_BUG
             cudaDeviceGetByPCIBusId(&dev, bufs);
 #else
             dev=i-1;
@@ -123,9 +126,13 @@ bool detector(const int ranko, const int sz, const int startpos)
             if (!props.kernelExecTimeoutEnabled)
             {
                 cudaSetDevice(dev);
+           	    MPI_Get_processor_name(&mnamei[0],  &rb);
+                mname=strtok(mnamei, ".");
+
                 hasG = true;
-                std::cout << std::dec << "Process ID " << getpid() << " - Rank " << ranko << " - Machine " << machineID << " Has GPU -- " ;
-                std::cout << dev << " of " << nGo << "/" << nset << ": " << props.name << std::endl;
+                std::cout << "PID: " << getpid() << " - Rank: " << ranko;
+                std::cout << " - Machine: " << machineID << "- " << mname << " - Has GPU: ";
+                std::cout << dev << " of " << nGo << "/" << nset << " on PCI: " << bufs << std::endl;
             }
             nset++;
 		}

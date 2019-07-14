@@ -30,7 +30,6 @@ int main(int argc, char *argv[])
     std::string t_ext = ".csv";
     std::string myrank = std::to_string(ranks[1]);
     std::string scheme = argv[1];
-    int whichGPU;
 
     // Equation, grid, affinity data
     std::ifstream injson(argv[2], std::ifstream::in);
@@ -101,6 +100,7 @@ int main(int argc, char *argv[])
             printf ("SOLVING: %s - with %d processes.\n", fspec.c_str(), nprocs);
             printf ("Scheme: %s - Grid Size: %d - Affinity: %.2f\n", scheme.c_str(), cGlob.nX, cGlob.gpuA);
             printf ("threads/blk: %d - timesteps: %.2f - end time: %.3e\n", cGlob.tpb, cGlob.tf/cGlob.dt, cGlob.tf);
+            fflush(stdout);
 		}
 
         MPI_Barrier(MPI_COMM_WORLD);
@@ -121,14 +121,26 @@ int main(int argc, char *argv[])
 
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = (MPI_Wtime() - timed);
-
-        cudaKernelCheck(cGlob.hasGpu);
-
+        
+        // Check for Kernel errors, Reduce the results from all processes and if it's not zero at least one process
+        // had an error in a kernel.  The results are invalid, so end MPI without writing results or times and 
+        // send a failure exit code.
+        int erchk, ersum;
+        erchk=cudaKernelCheck(cGlob.hasGpu, ranks[1]);
+        MPI_Allreduce(&erchk, &ersum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);        
+        if (ersum > 0) {
+            endMPI();            
+            exit(EXIT_FAILURE);
+        }
+        
+        // Write out simulation results.  Then use the master process to gather timing info and write out
+        // relevant settings and time to csv record and stdout.
         writeOut(state, tfm);
 
         if (!ranks[1])
         {
             timed *= 1.e6;
+            int gpuAi = (int)cGlob.gpuA;
 
             double n_timesteps = tfm/cGlob.dt;
 
@@ -144,7 +156,7 @@ int main(int argc, char *argv[])
             fseek(timeOut, 0, SEEK_END);
             int ft = ftell(timeOut);
             if (!ft) fprintf(timeOut, "tpb,gpuA,nX,time\n");
-            fprintf(timeOut, "%d,%.4f,%d,%.8f\n", cGlob.tpb, cGlob.gpuA, cGlob.nX, per_ts);
+            fprintf(timeOut, "%d,%.d,%d,%.8f\n", cGlob.tpb, gpuAi, cGlob.nX, per_ts);
             fclose(timeOut);
         }
     }
@@ -174,11 +186,3 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-//inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false)
-//{
-//   if (code != cudaSuccess)
-//   {
-//      fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
-//      if (abort) exit(code);
-//   }
-//}

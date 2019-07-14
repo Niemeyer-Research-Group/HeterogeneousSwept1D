@@ -16,8 +16,6 @@ IFLAGS		+= -I$(EQPATH) -I$(DECOMPPATH) -I$(UTIL_DIR)
 
 XL			:=$(foreach lp, $(LPATH), -Xlinker=-rpath,$(lp))
 
-LPATHS		:=$(addprefix -L, $(LPATH))
-
 DH			:=$(wildcard $(DECOMPPATH)/*.h) $(EQPATH)/heads.h
 
 CPREQ		:=$(MAKEPATH)/sMain.cu
@@ -33,9 +31,9 @@ EQOBJ		:=$(addsuffix .o, $(EQI))
 default: $(addprefix $(EQ_BIN)/, $(EQOBJ)) $(addprefix $(BIN_DIR)/, $(EQI))
 
 $(BIN_DIR)/%: $(EQ_BIN)/%.o $(UTIL_BIN)/*.o
-	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI) $(CFLAGS) $(CUDAFLAGS)
+	$(NVCC) $^ -o $@ $(XL) $(LPATHS) $(LIBS) $(LIBMPI) $(CUDAFLAGS) $(CFLAGS)
 
 $(EQ_BIN)/%.o: $(EQPATH)/%.h $(CPREQ) $(DH)
 	$(eval IFL:=$(shell echo $(basename $(@F)) | tr '[:lower:]' '[:upper:]'))
-	$(NVCC) -c $(CPREQ) -o $@ $(IFLAGS) -D$(IFL) $(DEF) $(CFLAGS) $(CUDAFLAGS)
+	$(NVCC) -c $(CPREQ) -o $@ $(IFLAGS) -D$(IFL) $(DEF) $(CUDAFLAGS) $(CFLAGS)
 

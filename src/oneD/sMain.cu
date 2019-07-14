@@ -121,9 +121,20 @@ int main(int argc, char *argv[])
 
         MPI_Barrier(MPI_COMM_WORLD);
         if (!ranks[1]) timed = (MPI_Wtime() - timed);
-
-        cudaKernelCheck(cGlob.hasGpu);
-
+        
+        // Check for Kernel errors, Reduce the results from all processes and if it's not zero at least one process
+        // had an error in a kernel.  The results are invalid, so end MPI without writing results or times and 
+        // send a failure exit code.
+        int erchk, ersum;
+        erchk=cudaKernelCheck(cGlob.hasGpu, ranks[1]);
+        MPI_Allreduce(&erchk, &ersum, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);        
+        if (ersum > 0) {
+            endMPI();            
+            exit(EXIT_FAILURE);
+        }
+        
+        // Write out simulation results.  Then use the master process to gather timing info and write out
+        // relevant settings and time to csv record and stdout.
         writeOut(state, tfm);
 
         if (!ranks[1])
@@ -175,11 +186,3 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-//inline void cudaCheck(cudaError_t code, const char *file, int line, bool abort=false)
-//{
-//   if (code != cudaSuccess)
-//   {
-//      fprintf(stderr,"CUDA error: %s %s %d\n", cudaGetErrorString(code), file, line);
-//      if (abort) exit(code);
-//   }
-//}

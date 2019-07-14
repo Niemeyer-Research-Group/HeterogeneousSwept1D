@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+
+import os 
+import os.path as op
+import sys
+import subprocess as sp
+import shlex
+import time
+import multiprocessing as mp
+
+helpstr = '''
+USAGE: ./driver [RUNTYPE] <OPTIONS>
+
+RUNTYPE: "affinity (screening run) 
+          sweep (full experiment)
+
+OPTIONS: 
+    FORMAT: var value
+
+    platform - slurm or other
+    eq (equation)   - euler, heat or other equation
+    sch (scheme)    - S, C for swept or classic respectively
+
+'''
+
+'''
+    RUNTYPE: Affinity or sweep
+    RUNSCRIPT: Realpath to shell runner
+    RUNDETAILS: t_Final for heat and euler by type
+    NPER: Number of nodes per experiment.  If>0 parallel
+'''
+
+rundict = {"affinity": {"heat": 2.0, "euler": 0.08},
+            "sweep": {"heat": 1.2, "euler": 0.06} }
+
+NPER = 2
+
+def run_sweep(rs, rt, rd, e, s, r=0):
+    r=r+1
+    runcmd=[rs, rt, e, rd[e], s, r]
+    if NPER: runcmd.append(NPER)
+    runcmd=[str(r) for r in runcmd]
+    print(runcmd)
+    sp.call(runcmd)
+
+def sweep_serial(rs, rt, rd, eq, sch):
+    NPER = False
+    tfirst=time.time()
+    for e in eq:
+        te=time.time()
+        for s in sch:
+            tbf=time.time()
+            run_sweep(rs, rt, rd, e, s)
+            taf=time.time()
+            print(rt, e, s, "A Completed in ", taf-tbf)
+        print(rt, e, sch, " AA Completed in ", taf-te)
+    print(rt, eq, sch, " AAA combos Completed in ", taf-tfirst)
+
+# Can run in parallel with multiprocess 
+# nper is nodes per eq, scheme combo 
+def sweep_parallel(rs, rt, rd, eq, sch):
+    combs = [(e, s) for e in eq for s in sch]
+    ncomb = len(combs)
+    p_args = [(rs, rt, rd, combs[k][0], combs[k][1], k*NPER+1) for k in range(ncomb)]
+
+    p = mp.Pool(ncomb)
+    p.starmap(run_sweep, p_args)
+
+def inputError(strer):
+    print("\n"+strer+"\n")
+    print(helpstr)
+    sys.exit(0)
+
+if __name__ == "__main__":
+    tpath=op.abspath(op.dirname(__file__))
+    print("MAKE SURE TO CLEAR THE PATHS IF THAT'S NECESSARY")
+
+    args=sys.argv
+    runtype=args[1].lower()
+    runscript=op.join(op.join(tpath, "Slurm"), "hPerfTest.sh")
+    rundetails=rundict[runtype]
+    eq=rundetails.keys()
+    sch=["S", "C"]
+    if len(args) > 2:
+        if len(args) % 2:
+            inputError("ODD NUMBER OF INPUTS, DOENST WORK")
+
+        for a, b in zip(args[2::2],args[3::2]):
+            if a=="sch":
+                if b not in sch: inputError(b+" IS NOT A VALID SCHEME")
+                sch=[b]
+            elif a=="eq":
+                if b not in eq: inputError(b+" IS NOT AN AVAILABLE EQUATION")
+                eq=[b]
+            else:
+                inputError("a - " + a + ", is not a valid option")
+
+
+    sweep_serial(runscript, runtype, rundetails, eq, sch)
+   # sweep_parallel(runscript, runtype, rundetails, eq, sch)

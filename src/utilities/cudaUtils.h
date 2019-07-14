@@ -31,19 +31,22 @@
 
 // #define checkCudaErrors(val)           check ( (val), #val, __FILE__, __LINE__ )
 
-void cudaKernelCheck(bool gpuq)
+int cudaKernelCheck(bool gpuq, int rank)
 {
-    if (gpuq)  
+    int er=0;
+    if (gpuq)
     {
         cudaError_t error = cudaGetLastError();
         if(error != cudaSuccess)
         {
             // print the CUDA error message and exit
-            printf("CUDA error: %s\n", cudaGetErrorString(error));
-            exit(-1);
+            printf("CUDA error: Rank %d Type: %s \n", rank, cudaGetErrorString(error));
+            er=1;
+            fflush(stdout);
         }
         cudaDeviceSynchronize();
     }
+    return er;
 }
 
 // From cppOverload in CUDASamples.

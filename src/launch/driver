@@ -54,7 +54,7 @@ def sweep_serial(rs, rt, rd, eq, sch):
             taf=time.time()
             print(rt, e, s, "A Completed in ", taf-tbf)
         print(rt, e, sch, " AA Completed in ", taf-te)
-    print(rt, eq, sch, " AAA combos Completed in ", taf-tfirst)
+    print(rt, eq, sch, " AAA combos Completed in {0:.2f} m".format((taf-tfirst)/60))
 
 # Can run in parallel with multiprocess 
 # nper is nodes per eq, scheme combo 
@@ -97,4 +97,4 @@ if __name__ == "__main__":
 
 
     sweep_serial(runscript, runtype, rundetails, eq, sch)
-   # sweep_parallel(runscript, runtype, rundetails, eq, sch)
+#   sweep_parallel(runscript, runtype, rundetails, eq, sch)

@@ -13,7 +13,7 @@ getnodes() {
 affinity()
 {
     noxs="5e6 2e7 4e7 6e7"
-    export tpbs="128 256 512 768"
+    export tpbs="512"
     nxs=""
     for n in $noxs; do
         nox=$(printf "%.0f" "$n")
@@ -90,7 +90,9 @@ logf="${LOGPATH}/${eq}_${sc}_${1}_${hnm}.log"
 rm -f $logf
 touch $logf
 
-echo -e "TPBS: $tpbs \nNXS: $nxs \nGPUA: $gpuas \nLOGF: $logf "
+echo -e "TPBS: $tpbs \nNXS: $nxs"
+echo -e "GPUA: $gpuas" | tr "\n" " "
+echo -e "LOGF: $logf "
 
 nnx=$(echo $nxs | wc -w | tr -d " ")
 ngpuas=$(echo $gpuas | wc -w | tr -d " ")
@@ -139,7 +141,7 @@ do
             S0=$SECONDS
 
             echo "srun -N $nper -n $npr -w $usenodes $execfile $sc $confile $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf"
-            srun -N $nper -n $npr -w $usenodes $execfile $sc $confile $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf 2>&1 | tee -a $logf
+            srun -W 50000 -N $nper -n $npr -w $usenodes $execfile $sc $confile $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf 2>&1 | tee -a $logf
             echo "DONE $?"
             if [ $? -eq 1 ]; then exit 1; fi
             echo --------------------------- | tee -a $logf

@@ -19,4 +19,3 @@ __testall__ - Runs each variation once using middling execution parameters to ma
 
 __testit__ - Runs ONCE and takes 2 or 3 arguments with the final argument in quotes: testit.sh [Equation (Euler)] [Scheme (Swept)] '[Additional Args] (tpb 128 
 gpuA 10.0 nX 55555555)' 
-

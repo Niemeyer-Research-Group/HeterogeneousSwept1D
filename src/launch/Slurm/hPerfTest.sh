@@ -2,6 +2,17 @@
 
 set -eo pipefail
 
+## POSITIONAL ARGUMENTS
+## 1: AFFINITY OR SWEEP - which function to call to set up the experimental loop 
+##                        arrays of grid size (nx), gpu affinity, and tpb
+## 2: EQUATION          - Euler or heat
+## 3: T_FINAL           - Simulation time to end run
+## 4: ALGORITHM         - swept or classic
+## 5: RELATIVE NODE     - Relative node to start simulation 
+##                        example: if allocation has 5 nodes and $5=1 and $6=2 then  
+##                        the processes will launch on node 1 across nodes 1 and 2 (node ids 0-4)
+## 6: N NODES           - Number of nodes per launch
+
 nxs=
 tpbs=
 gpuas=
@@ -13,7 +24,7 @@ getnodes() {
 affinity()
 {
     noxs="5e6 2e7 4e7 6e7"
-    export tpbs="512"
+    export tpbs="128 256 512 768"
     nxs=""
     for n in $noxs; do
         nox=$(printf "%.0f" "$n")

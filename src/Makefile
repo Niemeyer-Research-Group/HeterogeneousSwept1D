@@ -44,7 +44,7 @@ swepts: Makefile
 clean:
 	rm -rf $(BIN_DIR)/*
 
-$(TESTDIR)/%Test: $(TESTDIR)/%Test.o  swepts
+$(TESTDIR)/%Test: $(TESTDIR)/%Test.o swepts
 	$(NVCC) $(UTIL_BIN)/gpuDetector.o $< -o $@ $(LPATHS) $(LIBMPI)
 
 runtests: 

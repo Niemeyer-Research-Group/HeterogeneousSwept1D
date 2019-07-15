@@ -54,7 +54,7 @@ sweep() {
     export gpuas=$(seq $gStart $gStep $gEnd)
 }
 
-## SLURM NOT GRID
+## GET RELEVANT PATHS TO BASEDIR, RESULSDIR, LOGFILES, EXECUTABLES 
 RPATH=$(python3 -c "import os; print(os.path.realpath('$0'))")
 THISPATH=$(dirname $RPATH)
 cd $THISPATH
@@ -71,8 +71,10 @@ npr=$(( nper*nprocs ))
 bindir=${SRCPATH}/bin
 testdir=${SRCPATH}/oneD/tests
 
+# GET LOOP VARIABLES
 $1
 
+# MAKE PATHS IF NEEDBE
 mkdir -p $opath
 mkdir -p $LOGPATH
 
@@ -101,10 +103,12 @@ logf="${LOGPATH}/${eq}_${sc}_${1}_${hnm}.log"
 rm -f $logf
 touch $logf
 
+# SANITY CHECKOUTPUT
 echo -e "TPBS: $tpbs \nNXS: $nxs"
 echo -e "GPUA: $gpuas" | tr "\n" " "
 echo -e "LOGF: $logf "
 
+# BEGINNING OF RESTARTING LOGIC
 nnx=$(echo $nxs | wc -w | tr -d " ")
 ngpuas=$(echo $gpuas | wc -w | tr -d " ")
 ngt=$(( nnx*ngpuas ))

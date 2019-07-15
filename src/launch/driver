@@ -66,7 +66,7 @@ def sweep_serial(rs, rt, rd, eq, alg):
 # Can run in parallel with multiprocess 
 # nper is nodes per eq, scheme combo 
 def sweep_parallel(rs, rt, rd, eq, alg):
-    combs = [(e, s) for e in eq for a in alg]
+    combs = [(e, a) for e in eq for a in alg]
     ncomb = len(combs)
     p_args = [(rs, rt, rd, combs[k][0], combs[k][1], k*NPER+1) for k in range(ncomb)]
 

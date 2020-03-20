@@ -143,7 +143,7 @@ def contourRaw(df, typs, tytle=None, vals='time', getfig=False):
     return mns
 
 def getFitRs(dfp):
-    dfp.astype(float, inplace=True)
+    dfp.astype(float, copy=False)
     dfc = dfp.columns
     dfa = np.log(dfp)
     dfa.index = np.log(dfa.index.values)

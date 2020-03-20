@@ -21,14 +21,15 @@ coll = dict()
 annodict = {}
 pltpth = op.join(op.dirname(datapath), "AffinityPlots")
 
-#idx = pd.MultiIndex(levels=[[],[]], labels=[[],[]], names=["Types", "Metric"])
+#idx = pd.MultiIndex(levels=[[],[]], codes=[[],[]], names=["Types", "Metric"])
 bestCollect = pd.DataFrame(columns=list(timeFrame.keys()))
 for kType, iFrame in timeFrame.items():
     thisdf = ta.RawInterp(iFrame, kType)
     
     keepdf = thisdf.interpit()
     dfT, figt, axT = ta.contourRaw(keepdf, kType, getfig=True)
-    mnT = ta.plotmins(dfT, axT)
+    subidx = dfT.columns.get_level_values('nX').unique()
+    mnT = ta.plotmins(dfT, axT, subidx)
     figt = th.formatSubplot(figt)
     
     keepEfficiency = thisdf.efficient(keepdf)

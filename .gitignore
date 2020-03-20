@@ -16,6 +16,9 @@ cubin/
 temp*
 *.pdf
 src/*/trslt/*.json
+src/rslts
+src/trslt
+src/rsltlog
 src/*/rslts/*.json
 src/*/tests/testResult/
 src/*/utilities/js*

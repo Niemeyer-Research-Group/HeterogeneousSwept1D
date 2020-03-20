@@ -1,0 +1,20 @@
+#!/bin/bash
+
+if [[ $# -ne 1 ]]; then
+	echo "ERROR: need 1 argument, the type of plots to make:"
+	echo "affinity or full"
+	exit 1
+fi
+
+case $1 in
+	aff*)
+		python results/Affinity/AffinityRun.py
+	;;
+	full*)
+		python runtools/timing_analysis.py
+	;;
+	*)
+		echo "ERROR INVALID ENTRY"
+		exit 1
+	;;
+esac

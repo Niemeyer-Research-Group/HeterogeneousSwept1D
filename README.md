@@ -45,6 +45,12 @@ mpirun -np [NumProcs] [Executable] [Algorithm] [Config File] [Output Path] [Addi
 
 Python performance and accuracy analysis.
 
+### Plot performance
+
+Use the convenience script make_plots in the top folder to plot past results.
+
+It takes 1 mandatory argument, affinity or full for type of experiment to plot.
+
 ## Extend
 
 Write your own equations and run them.

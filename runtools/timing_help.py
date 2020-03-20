@@ -175,7 +175,7 @@ class Perform(object):
         f = fc[respvar]
         ifx = 'idx'+f
         legax = self.xo[1] if subax==self.xo[0] else self.xo[0] 
-        blankidx = pd.MultiIndex(levels=[[],[]], labels=[[],[]], names=['metric', subax])
+        blankidx = pd.MultiIndex(levels=[[],[]], codes=[[],[]], names=['metric', subax])
         fCollect = pd.DataFrame(columns=blankidx)
 
         if df.empty:

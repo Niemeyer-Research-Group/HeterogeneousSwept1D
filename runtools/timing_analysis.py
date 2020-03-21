@@ -356,3 +356,4 @@ if __name__ == "__main__":
 
     bestGpuTotal.fillna(0, inplace=True)
     bestTpbTotal.fillna(0, inplace=True)
+    os.symlink(op.join(perfPath, plotDir), op.join(toppath,"plots"))

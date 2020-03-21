@@ -45,5 +45,5 @@ for kType, iFrame in timeFrame.items():
     
     # plt.show()
 
-    
+os.symlink(pltpth, op.join(toppath, "plots"))
 

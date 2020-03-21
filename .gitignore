@@ -15,6 +15,7 @@ cubin/
 .vscode/
 temp*
 *.pdf
+plots
 src/*/trslt/*.json
 src/rslts
 src/trslt

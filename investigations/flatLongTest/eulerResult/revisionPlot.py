@@ -3,7 +3,7 @@
 # @Email:  walkanth@oregonstate.edu
 # @Filename: revisionPlot.py
 # @Last modified by:   sokato
-# @Last modified time: 2020-04-20T14:23:16-07:00
+# @Last modified time: 2020-04-20T15:51:38-07:00
 
 
 import os
@@ -14,6 +14,9 @@ curr_path = os.path.abspath(os.path.dirname(__file__))
 save_path = os.path.join(curr_path,"figs")
 
 def bestRunsSpeedUp(speedup=True):
+    """
+    bestRuns.csv: nX,classicFlat,classicLength,sweptFlat,sweptLength
+    """
     curr_file = os.path.join(curr_path,'bestRuns.csv')
     with open(curr_file,'r') as f:
         line = f.readline()
@@ -104,7 +107,73 @@ def blockSizeSpeedUp(normIdx=0,speedup=True):
     average /= nb #taking average
     generateFigure(grids,average,"average",speedup)
 
+def bestRunsComparison():
+    """
+    bestRuns.csv: nX,classicFlat,classicLength,sweptFlat,sweptLength
+    """
+    curr_file = os.path.join(curr_path,'bestRuns.csv')
+    with open(curr_file,'r') as f:
+        line = f.readline()
+        line = f.readline()
+        data = []
+        while line:
+            data.append([float(item) for item in line.split(',')])
+            line = f.readline()
+        f.close()
+    #Normalizing data
+    norm_index = 0
+    data = list(zip(*data))
+    data = np.asarray(data)
+    size = data[0,:]
+    #This data
+    data = data[1:,:]
+    SVC(data,size)
+    FVL(data,size)
+
+def SVC(data,size):
+    """This function takes the swept vs classic for a given strategies (e.g. lengthening)
+    and produces S = t_len_swept/t_len_classic
+    """
+    lengthening = data[1,:]/data[3,:]
+    flattening = data[0,:]/data[2,:]
+    #plotting
+    fig = plt.figure()
+    # plt.set_title()
+    plt.grid(b=True)
+    plt.ylim(0,2)
+    plt.xlabel("Grid Size",fontsize=14)
+    plt.ylabel("Speedup",fontsize=14)
+    plt.semilogx(size,lengthening,color="orange",linestyle="dashed",linewidth=3)
+    plt.semilogx(size,flattening,color="steelblue",linestyle="dotted",linewidth=3)
+    idx = int(len(size)/2.75)
+    plt.text(size[idx],  np.mean(lengthening)+0.2, "Lengthening", fontsize=14) #, $S_{swept}=\\frac{t_{len,swept}}{t_{len,classic}}$
+    plt.text(size[idx],  np.mean(flattening)+0.05, "Flattening", fontsize=14) #, $S_{swept}=\\frac{t_{flat,swept}}{t_{flat,classic}}$
+    plt.savefig(os.path.join(save_path,"svc.pdf"))
+    # plt.show()
+
+def FVL(data,size):
+    """This function takes the compares strategies for a given scheme (e.g. swept)
+    and produces S = t_len_swept/t_flat_swept
+    """
+    classic = data[1,:]/data[0,:]
+    swept = data[3,:]/data[2,:]
+    #plotting
+    fig = plt.figure()
+    # plt.set_title()
+    plt.grid(b=True)
+    plt.ylim(0,4)
+    plt.xlabel("Grid Size",fontsize=14)
+    plt.ylabel("Speedup",fontsize=14)
+    plt.semilogx(size,classic,color="blueviolet",linestyle="dashdot",linewidth=3)
+    plt.semilogx(size,swept,color="deepskyblue",linestyle="solid",linewidth=3)
+    idx = int(len(size)/2)
+    plt.text(size[idx], np.mean(classic)+0.6, "Classic", fontsize=14) #, $S_{flat}=\\frac{t_{len,classic}}{t_{flat,classic}}$
+    plt.text(size[idx], np.mean(swept)+0.2, "Swept", fontsize=14) #, $S_{flat}=\\frac{t_{len,swept}}{t_{flat,swept}}$
+    plt.savefig(os.path.join(save_path,"fvl.pdf"))
+    # plt.show()
+
 if __name__ == "__main__":
     speedup=True
-    bestRunsSpeedUp(speedup=speedup)
-    blockSizeSpeedUp(speedup=speedup)
+    bestRunsComparison()
+    # bestRunsSpeedUp(speedup=speedup)
+    # blockSizeSpeedUp(speedup=speedup)

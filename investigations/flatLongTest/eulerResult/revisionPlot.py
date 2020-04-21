@@ -3,7 +3,7 @@
 # @Email:  walkanth@oregonstate.edu
 # @Filename: revisionPlot.py
 # @Last modified by:   sokato
-# @Last modified time: 2020-04-20T15:51:38-07:00
+# @Last modified time: 2020-04-20T17:15:58-07:00
 
 
 import os
@@ -129,6 +129,25 @@ def bestRunsComparison():
     data = data[1:,:]
     SVC(data,size)
     FVL(data,size)
+    SLCF(data,size)
+
+def SLCF(data,size):
+    """Cross combinations - just a check"""
+    lengthening = data[0,:]/data[3,:]
+    flattening = data[1,:]/data[2,:]
+    #plotting
+    fig = plt.figure()
+    # plt.set_title()
+    plt.grid(b=True)
+    plt.ylim(0,3)
+    plt.xlabel("Grid Size",fontsize=14)
+    plt.ylabel("Speedup",fontsize=14)
+    plt.semilogx(size,lengthening,color="orange",linestyle="dashed",linewidth=3)
+    plt.semilogx(size,flattening,color="steelblue",linestyle="dotted",linewidth=3)
+    # idx = int(len(size)/2.75)
+    # plt.text(size[idx],  np.mean(lengthening)+0.2, "Lengthening", fontsize=14) #, $S_{swept}=\\frac{t_{len,swept}}{t_{len,classic}}$
+    # plt.text(size[idx],  np.mean(flattening)+0.05, "Flattening", fontsize=14) #, $S_{swept}=\\frac{t_{flat,swept}}{t_{flat,classic}}$
+    plt.savefig(os.path.join(save_path,"slcf.pdf"))
 
 def SVC(data,size):
     """This function takes the swept vs classic for a given strategies (e.g. lengthening)

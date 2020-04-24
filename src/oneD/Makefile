@@ -3,7 +3,7 @@
 # run make DEF="-DNOS"
 
 
-MAKEPATH:=$(SOURCEPATH)oneD
+MAKEPATH:=$(SOURCEPATH)/oneD
 
 # LPATH+=
 

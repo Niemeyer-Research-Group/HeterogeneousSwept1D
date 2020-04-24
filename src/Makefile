@@ -4,10 +4,10 @@
 
 include config.mk
 
-CODES		:=oneD #twoD
+CODES		:=/oneD #twoD
 CODE_DIR	:=$(addprefix $(SOURCEPATH), $(CODES))
-BIN_DIR		:=$(SOURCEPATH)bin
-UTIL_DIR	:=$(SOURCEPATH)utilities
+BIN_DIR		:=$(SOURCEPATH)/bin
+UTIL_DIR	:=$(SOURCEPATH)/utilities
 UTIL_BIN	:=$(BIN_DIR)/util
 TESTDIR     :=$(UTIL_BIN)/tests
 EQ_BIN		:=$(BIN_DIR)/eqobj

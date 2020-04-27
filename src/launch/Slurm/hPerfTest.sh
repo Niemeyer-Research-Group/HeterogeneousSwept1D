@@ -104,9 +104,9 @@ rm -f $logf
 touch $logf
 
 # SANITY CHECKOUTPUT
-echo -e "TPBS: $tpbs \nNXS: $nxs"
-echo -e "GPUA: $gpuas" | tr "\n" " "
-echo -e "LOGF: $logf "
+echo -e "TPBS   : $tpbs \nNXS: $nxs"
+echo -e "GPUA   : $gpuas" | tr "\n" " "
+echo -e "LOGFILE: $logf "
 
 # BEGINNING OF RESTARTING LOGIC
 nnx=$(echo $nxs | wc -w | tr -d " ")

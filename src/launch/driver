@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+
+import os 
+import os.path as op
+import sys
+import subprocess as sp
+import shlex
+import time
+import multiprocessing as mp
+import argparse 
+
+'''
+    RUNTYPE: Affinity or sweep
+    RUNSCRIPT: Realpath to shell runner
+    RUNDETAILS: t_Final for heat and euler by type
+    NPER: Number of nodes per experiment.  If>0 parallel
+'''
+
+rundict = {"affinity": {"heat": 2.0, "euler": 0.08},
+            "sweep": {"heat": 1.2, "euler": 0.06} }
+
+NPER = 2
+DRY = False
+
+def parse():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("experiment", type=str, default='affinity',
+    help="affinity: screening run, sweep: full experiment")
+    parser.add_argument("-dry", dest="dry", default=False,  
+    action="store_true", help="Print without running (DRY RUN) [default false]")
+    parser.add_argument("-d", type=str, dest="scheduler", default="slurm",
+    help="slurm or other scheduler - corresponds to folders in launch [default slurm]")
+    parser.add_argument("-e", type=str, dest="equation", default="a",
+    help="Equation to run test on: (name of equation, a for all [default all])")
+    parser.add_argument("-a", type=str, dest="algorithm", default="a", 
+    help="Algorithm to run test on: (s for sweep, c for classic, a for all [default all]")
+    parser.add_argument("-p", dest="parallel", default=False,  
+    action="store_true", help="Parallel if set [default serial]")
+    parser.add_argument("-n", dest="nnodes", type=int, default=2, 
+    help="Number of nodes per test | Only applicable if parallel [default 2]")
+
+    return parser
+
+def run_sweep(rs, rt, rd, e, s, r=0):
+    r=r+1
+    runcmd=[rs, rt, e, rd[e], s, r]
+    if NPER: runcmd.append(NPER)
+    runcmd=[str(r) for r in runcmd]
+    print(" ".join(runcmd))
+    if not DRY:
+        sp.call(runcmd)
+
+def sweep_serial(rs, rt, rd, eq, alg):
+    NPER = False
+    tfirst=time.time()
+    for e in eq:
+        te=time.time()
+        for a in alg:
+            tbf=time.time()
+            run_sweep(rs, rt, rd, e, a.upper())
+            taf=time.time()
+            print(rt, e, a, "A Completed in {0:.2f} s", taf-tbf)
+        print(rt, e, alg, " AA Completed in {0:.2f} s", taf-te)
+    print(rt, eq, alg, " AAA combos Completed in {0:.2f} m".format((taf-tfirst)/60))
+
+# Can run in parallel with multiprocess 
+# nper is nodes per eq, scheme combo 
+def sweep_parallel(rs, rt, rd, eq, alg):
+    combs = [(e, a) for e in eq for a in alg]
+    ncomb = len(combs)
+    p_args = [(rs, rt, rd, combs[k][0], combs[k][1], k*NPER+1) for k in range(ncomb)]
+
+    p = mp.Pool(ncomb)
+    p.starmap(run_sweep, p_args)
+
+if __name__ == "__main__":
+    tpath=op.abspath(op.dirname(__file__))
+    print("MAKE SURE TO CLEAR THE PATHS IF THAT'S NECESSARY")
+    args = parse().parse_args()
+    print(args)
+    DRY=args.dry
+
+# Collect Paths and define experiment runs
+    runtype=args.experiment.lower()
+    run_src_dir = op.join(tpath, args.scheduler.lower())
+    runscript=op.join(run_src_dir, "hPerfTest.sh")
+    rundetails=rundict[runtype]
+
+# Collect arguments to define which options to experiment on
+    eqin  = args.equation.lower() 
+    algin = args.algorithm.lower()
+    eq    = rundetails.keys()
+    alg   = ["s", "c"]
+
+    if eqin != "a":
+        eq = list(eqin) 
+    if algin != "a":
+        alg = list(algin)
+
+    if args.parallel:
+        NPER = args.nnodes
+        sweep_parallel(runscript, runtype, rundetails, eq, alg)
+    else:
+        sweep_serial(runscript, runtype, rundetails, eq, alg)

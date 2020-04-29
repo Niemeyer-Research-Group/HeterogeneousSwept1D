@@ -112,15 +112,15 @@ def rawMain(maxVList,fList,arraySize=[5e5,1e6,5e6,1e7]):
         tick_locator = ticker.MaxNLocator(nbins=len(cbs))
         cbar.locator = tick_locator
         cbar.update_ticks()
-        cbar_ax.set_title('Time [$\\mu s$]')
+        cbar_ax.set_title('Time [$\\mu s$]',y=1.01)
         #Make plots
         for i in range(len(arraySize)):
             performancePlot(axes[i],B,S,Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True,ccm=cm.inferno_r,mbc=('k','w'))
         plt.savefig(os.path.join("./figs",f.split(".")[0]+".pdf"))
 
 def eulerMain(arraySize=[5e5,1e6,5e6,1e7]):
-    keys,eStructS,uGrids,uBlocks,uShares = createMainStruct('tEulerS.csv')
-    eStructC = createMainStruct('tEulerC.csv',RG=False)
+    keys,eStructS,uGrids,uBlocks,uShares = createMainStruct('./rawdata/tEulerS.csv')
+    eStructC = createMainStruct('./rawdata/tEulerC.csv',RG=False)
     #Plots - figure and axes
     fig, axes = plt.subplots(ncols=2,nrows=2)
     fig.subplots_adjust(wspace=0.3,hspace=0.4,right=0.8)
@@ -148,7 +148,7 @@ def eulerMain(arraySize=[5e5,1e6,5e6,1e7]):
     tick_locator = ticker.MaxNLocator(nbins=len(cbs))
     cbar.locator = tick_locator
     cbar.update_ticks()
-    cbar_ax.set_title('Speed up')
+    cbar_ax.set_title('Speed up',y=1.01)
     #Make plots
     for i in range(len(arraySize)):
         performancePlot(axes[i],B[i],S[i],Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True)
@@ -184,7 +184,7 @@ def heatMain(arraySize=[5e5,1e6,5e6,1e7]):
     tick_locator = ticker.MaxNLocator(nbins=len(cbs))
     cbar.locator = tick_locator
     cbar.update_ticks()
-    cbar_ax.set_title('Speed up')
+    cbar_ax.set_title('Speed up',y=1.01)
     #Make plots
     for i in range(len(arraySize)):
         performancePlot(axes[i],B[i],S[i],Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True)

@@ -70,7 +70,7 @@ def getPerformanceData(aIdx,struct1,struct2,uBlocks,uShares):
             Z[i,j] = struct1[key][aIdx]/struct2[key][aIdx]
     return B,S,Z
 
-def performancePlot(ax,B,S,Z,minV,maxV,uBlocks,uShares,ArrSize,ccm = cm.inferno,markbest=False,markworst=False,mbc=('w','k')):
+def performancePlot(ax,B,S,Z,minV,maxV,uBlocks,uShares,ArrSize,ccm = cm.inferno,markbest=False,markworst=False,mbc=('w','k'),model=None):
     ax.contourf(B,S,Z,cmap=ccm)#,vmin=minV,vmax=maxV)
     nstr = '{:0.0f}'.format(ArrSize)
     ax.set_title('Grid Size: ${}\\times10^{}$'.format(nstr[0],len(nstr)-1))
@@ -84,9 +84,17 @@ def performancePlot(ax,B,S,Z,minV,maxV,uBlocks,uShares,ArrSize,ccm = cm.inferno,
     if markbest:
         x,y = np.where(Z==np.amax(Z))
         ax.plot(uBlocks[x],uShares[y],linestyle=None,marker='o',markerfacecolor=mbc[0],markeredgecolor=mbc[1],markersize=6)
+
     if markworst:
         x,y = np.where(Z==np.amin(Z))
         ax.plot(uBlocks[x],uShares[y],linestyle=None,marker='o',markerfacecolor=mbc[1],markeredgecolor=mbc[0],markersize=6)
+
+    if model is not None:
+        bestTime = np.amin(Z)
+        x,y = np.where(Z==bestTime)
+        with open('bestConfigs.csv','a') as f:
+            f.write("{},{:0.0f},{:0.0f},{:0.0f},{:0.4f}\n".format(model,uBlocks[x][0],uShares[y][0],ArrSize,bestTime))
+        f.close()
 
 def rawMain(maxVList,fList,arraySize=[5e5,1e6,5e6,1e7]):
     #Find appropriate index
@@ -115,7 +123,7 @@ def rawMain(maxVList,fList,arraySize=[5e5,1e6,5e6,1e7]):
         cbar_ax.set_title('Time [$\\mu s$]',y=1.01)
         #Make plots
         for i in range(len(arraySize)):
-            performancePlot(axes[i],B,S,Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True,ccm=cm.inferno_r,mbc=('k','w'))
+            performancePlot(axes[i],B,S,Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True,ccm=cm.inferno_r,mbc=('k','w'),model=f)
         plt.savefig(os.path.join("./figs",f.split(".")[0]+".pdf"))
 
 def eulerMain(arraySize=[5e5,1e6,5e6,1e7]):
@@ -209,9 +217,58 @@ def checkMaxTimes():
             maxTimes.append(round(np.amax(data),-(l-2)))
     return maxTimes,fList
 
+def createBestConfigs():
+    with open('bestConfigs.csv','w') as f:
+        f.write("model, tpb, share, nx, tavg\n")
+    f.close()
+
+def manageAbsolutBest():
+    with open('bestConfigs.csv','r') as f:
+        reader = csv.reader(f)
+        cline = next(reader)
+        maxes = []
+        for i in range(4):
+            tList = []
+            lines = []
+            for j in range(4):
+                cline = next(reader)
+                tList.append(float(cline[-1]))
+                lines.append(cline)
+            maxes.append(lines[np.where(tList==np.amax(tList))[0][0]])
+    f.close()
+
+    with open('bestConfigs.csv','w') as f:
+        f.write("model, tpb, share, S\n")
+        for m in maxes:
+            f.write(",".join(m)+"\n")
+    f.close()
+
+def plotBestConfigs(flist):
+    data = {file:[] for file in flist}
+    with open('bestConfigs.csv','r') as f:
+        reader = csv.reader(f)
+        cline = next(reader)
+        for item in reader:
+            data[item[0]].append((float(item[-2]),float(item[-1])))
+    plt.close('all') #close other plots
+    fig, axes = plt.subplots(ncols=2,nrows=2)
+    fig.subplots_adjust(wspace=0.3,hspace=0.4,right=0.8)
+    axes = np.reshape(axes,(4,))
+    for i,file in enumerate(flist):
+        x,y = zip(*data[file])
+        axes[i].set_title(file)
+        axes[i].set_xlim([1e5,1e7])
+        axes[i].semilogx(x,y)
+        axes[i].grid()
+    # plt.show()
+    plt.savefig("best.pdf")
+
 if __name__ == "__main__":
     pth = "./rawdata"
+    createBestConfigs()
     eulerMain()
     heatMain()
     maxTimes,fList = checkMaxTimes()
     rawMain(maxTimes,fList)
+    # manageAbsolutBest()
+    plotBestConfigs(fList)

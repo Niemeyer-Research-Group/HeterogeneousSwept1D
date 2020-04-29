@@ -59,10 +59,8 @@ do
 					for nx in  10000 50000 100000 500000 1000000 2000000 5000000 8000000 10000000
 					do
 							echo -------- START ------------
-							# nx=$($nxStart * 2**$x)
 							lx=$(($nx / 10000))
 							S0=$SECONDS
-							sleep 1
 							/scratch/a1/mpich3i/bin/mpirun -n 40 --hostfile ./nrg-nodes ./bin/$eq $sc ./oneD/tests/"$eq"Test.json $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf
 							echo len, eq, sch, tpb, gpuA, nX, tf \n
 							s1=$(($SECONDS-$S0))

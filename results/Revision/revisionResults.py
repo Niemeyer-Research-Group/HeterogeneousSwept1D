@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib import ticker
 import numpy as np
-import itertools
-import os,csv
+import os, csv, operator, itertools
+import scipy.stats
+import scipy.optimize
 
 def createMainStruct(fname,RG=True):
     f = open(fname,'r')
@@ -70,7 +71,7 @@ def getPerformanceData(aIdx,struct1,struct2,uBlocks,uShares):
             Z[i,j] = struct1[key][aIdx]/struct2[key][aIdx]
     return B,S,Z
 
-def performancePlot(ax,B,S,Z,minV,maxV,uBlocks,uShares,ArrSize,ccm = cm.inferno,markbest=False,markworst=False,mbc=('w','k'),model=None):
+def performancePlot(ax,B,S,Z,minV,maxV,uBlocks,uShares,ArrSize,ccm = cm.inferno,markbest=False,markworst=False,mbc=('w','k')):
     ax.contourf(B,S,Z,cmap=ccm)#,vmin=minV,vmax=maxV)
     nstr = '{:0.0f}'.format(ArrSize)
     ax.set_title('Grid Size: ${}\\times10^{}$'.format(nstr[0],len(nstr)-1))
@@ -89,17 +90,10 @@ def performancePlot(ax,B,S,Z,minV,maxV,uBlocks,uShares,ArrSize,ccm = cm.inferno,
         x,y = np.where(Z==np.amin(Z))
         ax.plot(uBlocks[x],uShares[y],linestyle=None,marker='o',markerfacecolor=mbc[1],markeredgecolor=mbc[0],markersize=6)
 
-    if model is not None:
-        bestTime = np.amin(Z)
-        x,y = np.where(Z==bestTime)
-        with open('bestConfigs.csv','a') as f:
-            f.write("{},{:0.0f},{:0.0f},{:0.0f},{:0.4f}\n".format(model,uBlocks[x][0],uShares[y][0],ArrSize,bestTime))
-        f.close()
-
 def rawMain(maxVList,fList,arraySize=[5e5,1e6,5e6,1e7]):
     #Find appropriate index
     for ctr,f in enumerate(fList):
-        keys,mStruct,uGrids,uBlocks,uShares = createMainStruct(os.path.join("./rawdata",f))
+        keys,mStruct,uGrids,uBlocks,uShares = createMainStruct(os.path.join("./splice-data",f))
         S,B = np.meshgrid(uShares,uBlocks)
         #Plots - figure and axes
         fig, axes = plt.subplots(ncols=2,nrows=2)
@@ -108,7 +102,8 @@ def rawMain(maxVList,fList,arraySize=[5e5,1e6,5e6,1e7]):
         maxsMins = list()
         Z = list()
         for i,size in enumerate(arraySize):
-            arrayIdx = i
+            arrIdxs = [1,2,4,6]
+            arrayIdx = arrIdxs[i]
             Z.append(getRawData(arrayIdx,mStruct,uBlocks,uShares))
         maxV = maxVList[ctr]
         minV = 0
@@ -123,12 +118,12 @@ def rawMain(maxVList,fList,arraySize=[5e5,1e6,5e6,1e7]):
         cbar_ax.set_title('Time [$\\mu s$]',y=1.01)
         #Make plots
         for i in range(len(arraySize)):
-            performancePlot(axes[i],B,S,Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True,ccm=cm.inferno_r,mbc=('k','w'),model=f)
+            performancePlot(axes[i],B,S,Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True,ccm=cm.inferno_r,mbc=('k','w'))
         plt.savefig(os.path.join("./figs",f.split(".")[0]+".pdf"))
 
 def eulerMain(arraySize=[5e5,1e6,5e6,1e7]):
-    keys,eStructS,uGrids,uBlocks,uShares = createMainStruct('./rawdata/tEulerS.csv')
-    eStructC = createMainStruct('./rawdata/tEulerC.csv',RG=False)
+    keys,eStructS,uGrids,uBlocks,uShares = createMainStruct('./splice-data/tEulerS-full.csv')
+    eStructC = createMainStruct('./splice-data/tEulerC-full.csv',RG=False)
     #Plots - figure and axes
     fig, axes = plt.subplots(ncols=2,nrows=2)
     fig.subplots_adjust(wspace=0.3,hspace=0.4,right=0.8)
@@ -139,7 +134,8 @@ def eulerMain(arraySize=[5e5,1e6,5e6,1e7]):
     Z = list()
     maxsMins = list()
     for i,size in enumerate(arraySize):
-        arrayIdx = i
+        arrIdxs = [1,2,4,6]
+        arrayIdx = arrIdxs[i]
         pData = getPerformanceData(arrayIdx,eStructC,eStructS,uBlocks,uShares)
         B.append(pData[0])
         S.append(pData[1])
@@ -163,8 +159,8 @@ def eulerMain(arraySize=[5e5,1e6,5e6,1e7]):
     plt.savefig(os.path.join("./figs","eulerPerformance.pdf"))
 
 def heatMain(arraySize=[5e5,1e6,5e6,1e7]):
-    keys,eStructS,uGrids,uBlocks,uShares = createMainStruct('./rawdata/tHeatS.csv')
-    eStructC = createMainStruct('./rawdata/tHeatC.csv',RG=False)
+    keys,eStructS,uGrids,uBlocks,uShares = createMainStruct('./splice-data/tHeatS-full.csv')
+    eStructC = createMainStruct('./splice-data/tHeatC-full.csv',RG=False)
     #Plots - figure and axes
     fig, axes = plt.subplots(ncols=2,nrows=2)
     fig.subplots_adjust(wspace=0.3,hspace=0.4,right=0.8)
@@ -175,7 +171,8 @@ def heatMain(arraySize=[5e5,1e6,5e6,1e7]):
     Z = list()
     maxsMins = list()
     for i,size in enumerate(arraySize):
-        arrayIdx = i
+        arrIdxs = [1,2,4,6]
+        arrayIdx = arrIdxs[i]
         pData = getPerformanceData(arrayIdx,eStructC,eStructS,uBlocks,uShares)
         B.append(pData[0])
         S.append(pData[1])
@@ -199,7 +196,7 @@ def heatMain(arraySize=[5e5,1e6,5e6,1e7]):
     plt.savefig(os.path.join("./figs","heatPerformance.pdf"))
 
 def checkMaxTimes():
-    pth = "./rawdata"
+    pth = "./splice-data"
     maxTimes = []
     fList = os.listdir(pth)
     for f in fList:
@@ -217,58 +214,113 @@ def checkMaxTimes():
             maxTimes.append(round(np.amax(data),-(l-2)))
     return maxTimes,fList
 
-def createBestConfigs():
-    with open('bestConfigs.csv','w') as f:
-        f.write("model, tpb, share, nx, tavg\n")
-    f.close()
+def createBestConfigs(fList):
+    """This creates best config files"""
+    main = {}
+    best = {}
+    for f in fList:
+        with open(os.path.join("./splice-data",f),"r") as file:
+            reader = csv.reader(file)
+            cline = next(reader)
+            main[f] = [[float(item) for item in cline] for cline in reader]
+        file.close()
+    #Getting best configs
+    with open('best-configs.csv','w') as cfile:
+        cfile.write("model, tpb, share, grid, time\n")
+        for f in fList:
+            clist = main[f]
+            clist.sort(key=operator.itemgetter(2,3))
+            # print(f+", "+", ".join([str(curr) for curr in clist[0]])+"\\n")
+            best[f] = [(clist[0][2],clist[0][3]),]
+            cfile.write(f+", "+", ".join([str(curr) for curr in clist[0]])+"\n")
+            for i in range(1,len(clist)):
+                if clist[i][2] != clist[i-1][2]:
+                    cfile.write(f+", "+", ".join([str(curr) for curr in clist[i]])+"\n")
+                    best[f].append((clist[i][2],clist[i][3]))
 
-def manageAbsolutBest():
-    with open('bestConfigs.csv','r') as f:
-        reader = csv.reader(f)
-        cline = next(reader)
-        maxes = []
-        for i in range(4):
-            tList = []
-            lines = []
-            for j in range(4):
-                cline = next(reader)
-                tList.append(float(cline[-1]))
-                lines.append(cline)
-            maxes.append(lines[np.where(tList==np.amax(tList))[0][0]])
-    f.close()
+    x1,y1 = zip(*best[fList[0]])
+    x2,y2 = zip(*best[fList[1]])
+    plotConfig("./figs/heat-best.pdf",x1,y1,x2,y2)
+    ys = np.asarray(y1)/np.asarray(y2)
+    speedUpPlot("./figs/speed-heat-best.pdf",x1,ys)
+    results1 = scipy.stats.linregress(np.log(x2),np.log(y2))
+    params1,covariance1 = scipy.optimize.curve_fit(powerlaw,x2,y2)
+    x3,y3 = zip(*best[fList[2]])
+    x4,y4 = zip(*best[fList[3]])
+    plotConfig("./figs/euler-best.pdf",x3,y3,x4,y4)
+    ys = np.asarray(y3)/np.asarray(y4)
+    speedUpPlot("./figs/speed-euler-best.pdf",x3,ys)
+    results2 = scipy.stats.linregress(np.log(x4),np.log(y4))
+    params2,covariance2 = scipy.optimize.curve_fit(powerlaw,x4,y4)
+    eqns = ["Heat","Euler"]
+    for i,result in enumerate([results1,results2]):
+        print("{}: R^2:{:f}, slope:{:f},intercept:{:f}".format(eqns[i],result.rvalue,result.slope,np.exp(result.intercept)))
+    for i,param in enumerate([params1,params2]):
+        print("{}: slope:{:f},intercept:{:f}".format(eqns[i],param[1],param[0]))
+def powerlaw(x, a, b):
+    return a * x**b
 
-    with open('bestConfigs.csv','w') as f:
-        f.write("model, tpb, share, S\n")
-        for m in maxes:
-            f.write(",".join(m)+"\n")
-    f.close()
-
-def plotBestConfigs(flist):
-    data = {file:[] for file in flist}
-    with open('bestConfigs.csv','r') as f:
-        reader = csv.reader(f)
-        cline = next(reader)
-        for item in reader:
-            data[item[0]].append((float(item[-2]),float(item[-1])))
+def plotConfig(save,x1,y1,x2=None,y2=None,labels=None):
     plt.close('all') #close other plots
-    fig, axes = plt.subplots(ncols=2,nrows=2)
-    fig.subplots_adjust(wspace=0.3,hspace=0.4,right=0.8)
-    axes = np.reshape(axes,(4,))
-    for i,file in enumerate(flist):
-        x,y = zip(*data[file])
-        axes[i].set_title(file)
-        axes[i].set_xlim([1e5,1e7])
-        axes[i].semilogx(x,y)
-        axes[i].grid()
-    # plt.show()
-    plt.savefig("best.pdf")
+    fig, ax = plt.subplots(ncols=1,nrows=1)
+    ax.set_xlim([8e4,1e7])
+    line1 = ax.loglog(x1,y1,marker='o',linestyle="--",color='#d95f02')
+    ax.set_ylabel('time per timestep $[\\mu s]$')
+    ax.set_xlabel('grid size')
+    ax.grid()
+    if x2 is not None:
+        line2 = ax.loglog(x2,y2,marker='o',linestyle="solid",color='#7570b3')
+        ax.legend(["Classic","Swept"],loc='upper left')
+    plt.savefig(save)
+
+def speedUpPlot(save,x,y):
+    """Use this function to make speed up plots"""
+    plt.close('all') #close other plots
+    fig, ax = plt.subplots(ncols=1,nrows=1)
+    ax.set_xlim([8e4,1e7])
+    line1 = ax.semilogx(x,y,marker='o',linestyle="solid",color='#d95f02')
+    ax.set_ylabel('speedup')
+    ax.set_xlabel('grid size')
+    ax.grid()
+    plt.savefig(save)
+
+def fileSplice(f1, f2):
+    """Use this function to splice data files together."""
+    with open(f1,'r') as fileOne:
+        readFileOne = csv.reader(fileOne)
+        listOne = [item for item in readFileOne]
+        fileOne.close()
+    tempList = []
+    for i in range(3,len(listOne),5):
+        tempList+=listOne[i:i+3]
+    listOne=tempList
+    with open(f2,'r') as fileTwo:
+        readFileTwo = csv.reader(fileTwo)
+        listTwo = [item for item in readFileTwo]
+        fileTwo.close()
+    header = listTwo[0]
+    totalList = listOne+listTwo[1:]
+    for ctr,item in enumerate(totalList):
+        if '' in item:
+            totalList[ctr]=[int(item[0]),0,float(item[2]),float(item[3])]
+        else:
+            totalList[ctr]=[int(item[0]),int(item[1]),float(item[2]),float(item[3])]
+    totalList.sort(key=operator.itemgetter(0,1,2))
+    name = f2.split("/")[-1]
+    name = name.split(".")[0]
+    with open("./splice-data/{}-full.csv".format(name),'w') as file:
+        file.write(",".join(header)+"\n")
+        for item in totalList:
+            file.write(",".join([str(n) for n in item])+"\n")
+        file.close()
 
 if __name__ == "__main__":
-    pth = "./rawdata"
-    createBestConfigs()
+    fileSplice("./rawdata/tHeatC-fill.csv","./rawdata/tHeatC.csv")
+    fileSplice("./rawdata/tHeatS-fill.csv","./rawdata/tHeatS.csv")
+    fileSplice("./rawdata/tEulerS-fill.csv","./rawdata/tEulerS.csv")
+    fileSplice("./rawdata/tEulerC-fill.csv","./rawdata/tEulerC.csv")
     eulerMain()
     heatMain()
     maxTimes,fList = checkMaxTimes()
     rawMain(maxTimes,fList)
-    # manageAbsolutBest()
-    plotBestConfigs(fList)
+    createBestConfigs(fList)

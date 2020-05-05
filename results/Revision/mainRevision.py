@@ -75,13 +75,10 @@ def performancePlot(ax,B,S,Z,minV,maxV,uBlocks,uShares,ArrSize,ccm = cm.inferno,
     ax.contourf(B,S,Z,cmap=ccm)#,vmin=minV,vmax=maxV)
     nstr = '{:0.0f}'.format(ArrSize)
     ax.set_title('Grid Size: ${}\\times10^{}$'.format(nstr[0],len(nstr)-1))
-    ax.set_ylabel('GPU share')
-    ax.set_xlabel('threads-per-block')
-    ax.set_xticks([64, 256, 512, 768, 1024])
-    ax.set_yticks(np.linspace(0,100,5))
     # ax.grid(color='k', linewidth=1)
     ax.yaxis.labelpad = 0.5
     ax.xaxis.labelpad = 0.5
+
     if markbest:
         x,y = np.where(Z==np.amax(Z))
         ax.plot(uBlocks[x],uShares[y],linestyle=None,marker='o',markerfacecolor=mbc[0],markeredgecolor=mbc[1],markersize=6)
@@ -90,6 +87,25 @@ def performancePlot(ax,B,S,Z,minV,maxV,uBlocks,uShares,ArrSize,ccm = cm.inferno,
         x,y = np.where(Z==np.amin(Z))
         ax.plot(uBlocks[x],uShares[y],linestyle=None,marker='o',markerfacecolor=mbc[1],markeredgecolor=mbc[0],markersize=6)
 
+def outsideLabels(axes,fig):
+    """Use this function to plot labels appropriately."""
+    fig.subplots_adjust(wspace=0.2,hspace=0.3,right=0.8)
+    labelBools = [(0,1),(0,0,),(1,1),(1,0)]
+    for i,ax in enumerate(axes):
+        if labelBools[i][1]:
+            ax.set_ylabel('GPU Work Factor')
+        #     ax.set_yticks(np.linspace(0,100,5))
+        # else:
+        #     ax.set_yticks([])
+        if labelBools[i][0]:
+            ax.set_xlabel('threads-per-block')
+        #     ax.set_xticks([64, 256, 512, 768, 1024])
+        # else:
+        #     ax.set_xticks([])
+
+        ax.set_yticks(np.linspace(0,100,5))
+        ax.set_xticks([64, 256, 512, 768, 1024])
+
 def rawMain(maxVList,fList,arraySize=[5e5,1e6,5e6,1e7]):
     #Find appropriate index
     for ctr,f in enumerate(fList):
@@ -97,7 +113,6 @@ def rawMain(maxVList,fList,arraySize=[5e5,1e6,5e6,1e7]):
         S,B = np.meshgrid(uShares,uBlocks)
         #Plots - figure and axes
         fig, axes = plt.subplots(ncols=2,nrows=2)
-        fig.subplots_adjust(wspace=0.3,hspace=0.4,right=0.8)
         axes = np.reshape(axes,(4,))
         maxsMins = list()
         Z = list()
@@ -117,6 +132,7 @@ def rawMain(maxVList,fList,arraySize=[5e5,1e6,5e6,1e7]):
         cbar.update_ticks()
         cbar_ax.set_title('Time [$\\mu s$]',y=1.01)
         #Make plots
+        outsideLabels(axes,fig)
         for i in range(len(arraySize)):
             performancePlot(axes[i],B,S,Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True,ccm=cm.inferno_r,mbc=('k','w'))
         plt.savefig(os.path.join("./figs",f.split(".")[0]+".pdf"))
@@ -126,7 +142,6 @@ def eulerMain(arraySize=[5e5,1e6,5e6,1e7]):
     eStructC = createMainStruct('./splice-data/tEulerC-full.csv',RG=False)
     #Plots - figure and axes
     fig, axes = plt.subplots(ncols=2,nrows=2)
-    fig.subplots_adjust(wspace=0.3,hspace=0.4,right=0.8)
     axes = np.reshape(axes,(4,))
     #Find appropriate index
     B = list()
@@ -157,6 +172,7 @@ def eulerMain(arraySize=[5e5,1e6,5e6,1e7]):
     cbar.update_ticks()
     cbar_ax.set_title('Speed up',y=1.01)
     #Make plots
+    outsideLabels(axes,fig)
     for i in range(len(arraySize)):
         performancePlot(axes[i],B[i],S[i],Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True)
     plt.savefig(os.path.join("./figs","eulerPerformance.pdf"))
@@ -166,7 +182,6 @@ def heatMain(arraySize=[5e5,1e6,5e6,1e7]):
     eStructC = createMainStruct('./splice-data/tHeatC-full.csv',RG=False)
     #Plots - figure and axes
     fig, axes = plt.subplots(ncols=2,nrows=2)
-    fig.subplots_adjust(wspace=0.3,hspace=0.4,right=0.8)
     axes = np.reshape(axes,(4,))
     #Find appropriate index
     B = list()
@@ -197,6 +212,7 @@ def heatMain(arraySize=[5e5,1e6,5e6,1e7]):
     cbar.update_ticks()
     cbar_ax.set_title('Speed up',y=1.01)
     #Make plots
+    outsideLabels(axes,fig)
     for i in range(len(arraySize)):
         performancePlot(axes[i],B[i],S[i],Z[i],minV,maxV,uBlocks,uShares,arraySize[i],markbest=True,markworst=True)
     plt.savefig(os.path.join("./figs","heatPerformance.pdf"))
@@ -326,13 +342,28 @@ def fileSplice(f1, f2):
             file.write(",".join([str(n) for n in item])+"\n")
         file.close()
 
+def convertToShare(fList):
+    """Use this function to convert data to share vs work factor."""
+    squad = lambda b,c: (-b+np.sqrt(b*b-4*c))/2
+    for f in fList:
+        with open(os.path.join("./splice-data",f),"r") as file:
+            reader = csv.reader(file)
+            cline = next(reader)
+            data = [[float(subitem) for subitem in item] for item in reader]
+        data = list(zip(*data))
+        Wt = -1*np.asarray(data[2])
+        G = np.asarray(data[1])
+        S = G/(1+G)
+        for i,j in zip(S,G):
+            print(i,j)
+
 if __name__ == "__main__":
-    # fileSplice("./rawdata/tHeatC-fill.csv","./rawdata/tHeatC.csv")
-    # fileSplice("./rawdata/tHeatS-fill.csv","./rawdata/tHeatS.csv")
-    # fileSplice("./rawdata/tEulerS-fill.csv","./rawdata/tEulerS.csv")
-    # fileSplice("./rawdata/tEulerC-fill.csv","./rawdata/tEulerC.csv")
+    maxTimes,fList = checkMaxTimes()
+    fileSplice("./rawdata/tHeatC-fill.csv","./rawdata/tHeatC.csv")
+    fileSplice("./rawdata/tHeatS-fill.csv","./rawdata/tHeatS.csv")
+    fileSplice("./rawdata/tEulerS-fill.csv","./rawdata/tEulerS.csv")
+    fileSplice("./rawdata/tEulerC-fill.csv","./rawdata/tEulerC.csv")
     eulerMain()
     heatMain()
-    maxTimes,fList = checkMaxTimes()
     rawMain(maxTimes,fList)
     createBestConfigs(fList)

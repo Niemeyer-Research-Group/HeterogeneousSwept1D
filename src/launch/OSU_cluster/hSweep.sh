@@ -22,8 +22,8 @@ rm rslts/* || true
 ls rslts
 
 tfile="trslt/otime.dat"
-opath="../../rslts"
-
+opath="$MSCRATCH/rslts"
+testdir=$HSWEEPDIR/src/oneD/tests
 rm $tfile || true
 
 eqs=(euler heat)
@@ -39,13 +39,13 @@ do
 	tf=$tfs[$ix]
 	for sc in S C
 	do
-		for t in $(seq 6 9)
+		for t in $(seq 6 10)
 		do
 			for dvt in $(seq 0 1)
 			do
 				tpbz=$((2**$t))
 				tpb=$(($tpbz + 0.5*$dvt*$tpbz))
-				for g in $(seq 0 2 20)
+				for g in $(seq 0 10 100)
 				do
 					snx0=$SECONDS
 					for x in $(seq 0 7)
@@ -64,7 +64,7 @@ do
 							lx=$(($nxo/10000 + 1))
 							S0=$SECONDS
 
-							$MPIPATH/bin/mpirun -np $NSLOTS -machinefile $TMPDIR/machines $bindir/$eq $sc $testdir/"$eq"Test.json $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf
+							$MPIPATH/bin/mpirun -np 40 -machinefile $HSWEEPDIR/src/nrg-nodes $HSWEEPDIR/src/bin/$eq $sc $testdir/"$eq"Test.json $opath tpb $tpb gpuA $g nX $nx lx $lx tf $tf
 							
                             echo len, eq, sch, tpb, gpuA, nX
 							s1=$(($SECONDS-$S0))
